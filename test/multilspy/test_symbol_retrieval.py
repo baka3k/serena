@@ -8,31 +8,8 @@ These tests focus on the following methods:
 
 from pathlib import Path
 
-import pytest
-
 from multilspy.language_server import SyncLanguageServer
-from multilspy.multilspy_config import Language, MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
-
-
-@pytest.fixture(scope="session")
-def language_server(repo_path: Path):
-    """Create a SyncLanguageServer instance configured to use the test repository."""
-    config = MultilspyConfig(code_language=Language.PYTHON)
-    logger = MultilspyLogger()
-
-    # Create a language server instance
-    server = SyncLanguageServer.create(config, logger, str(repo_path))
-
-    # Start the server
-    server.start()
-
-    try:
-        yield server
-    finally:
-        # Ensure server is shut down
-        server.stop()
 
 
 class TestLanguageServerSymbols:

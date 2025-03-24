@@ -11,12 +11,13 @@ import dataclasses
 import hashlib
 import json
 import pickle
-import time
 import logging
 import os
 import pathlib
 import threading
 from contextlib import asynccontextmanager, contextmanager
+
+from serena.text_utils import MatchedConsecutiveLines, LineType, TextLine
 from .lsp_protocol_handler.lsp_constants import LSPConstants
 from  .lsp_protocol_handler import lsp_types as LSPTypes
 
@@ -32,6 +33,15 @@ from .multilspy_utils import PathUtils, FileUtils, TextUtils
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Iterator, List, Dict, Optional, Union, Tuple
 from .type_helpers import ensure_all_methods_implemented
+
+
+# Serena dependencies
+# We will need to watch out for circular imports, but it's probably better to not
+# move all generic util code from serena into multilspy.
+# It does however make sense to integrate many text-related utils into the language server
+# since it caches (in-memory) file contents, so we can avoid reading from disk.
+# Moreover, the way we want to use the language server (for retrieving actual content),
+# it makes sense to have more content-related utils directly in it.
 
 
 @dataclasses.dataclass
@@ -514,7 +524,45 @@ class LanguageServer:
             ret.append(multilspy_types.Location(**new_item))
 
         return ret
+    
+    def retrieve_full_file_content(self, relative_file_path: str) -> str:
+        """
+        Retrieve the full content of the given file.
+        """
+        with self.open_file(relative_file_path) as file_data:
+            return file_data.contents
+    
+    def retrieve_content_around_line(self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0) -> MatchedConsecutiveLines:
+        """
+        Retrieve the content of the given file around the given line.
+        
+        :param relative_file_path: The relative path of the file to retrieve the content from
+        :param line: The line number to retrieve the content around
+        :param context_lines_before: The number of lines to retrieve before the given line
+        :param context_lines_after: The number of lines to retrieve after the given line
 
+        :return MatchedConsecutiveLines: A container with the desired lines.
+        """
+        with self.open_file(relative_file_path) as file_data:
+            file_contents = file_data.contents
+        
+        line_contents = file_contents.split("\n")
+        start_lineno = max(0, line - context_lines_before)
+        end_lineno = min(len(line_contents) - 1, line + context_lines_after)
+        # instantiate TextLines with the write LineType
+        text_lines: list[TextLine] = []
+        # before the line
+        for lineno in range(start_lineno, line):
+            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.BEFORE_MATCH))
+        # the line
+        text_lines.append(TextLine(line_number=line, line_content=line_contents[line], match_type=LineType.MATCH))
+        # after the line
+        for lineno in range(line + 1, end_lineno + 1):
+            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.AFTER_MATCH))
+        
+        return MatchedConsecutiveLines(lines=text_lines, source_file_path=relative_file_path)
+        
+        
     async def request_completions(
         self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
     ) -> List[multilspy_types.CompletionItem]:
@@ -1295,6 +1343,24 @@ class SyncLanguageServer:
             self.language_server.request_defining_symbol(relative_file_path, line, column), self.loop
         ).result()
         return result
+    
+    def retrieve_full_file_content(self, relative_file_path: str) -> str:
+        """
+        Retrieve the full content of the given file.
+        """
+        return self.language_server.retrieve_full_file_content(relative_file_path)
+    
+    def retrieve_content_around_line(self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0) -> MatchedConsecutiveLines:
+        """
+        Retrieve the content of the given file around the given line.
+        
+        :param relative_file_path: The relative path of the file to retrieve the content from
+        :param line: The line number to retrieve the content around
+        :param context_lines_before: The number of lines to retrieve before the given line
+        :param context_lines_after: The number of lines to retrieve after the given line
+        :return MatchedConsecutiveLines: A container with the desired lines.
+        """
+        return self.language_server.retrieve_content_around_line(relative_file_path, line, context_lines_before, context_lines_after)
     
     def start(self) -> "SyncLanguageServer":
         """
