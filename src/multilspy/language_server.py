@@ -357,28 +357,6 @@ class LanguageServer:
         )
         return deleted_text
 
-    def get_open_file_text(self, relative_file_path: str) -> str:
-        """
-        Get the contents of the given opened file as per the Language Server.
-
-        :param relative_file_path: The relative path of the file to open.
-        """
-        if not self.server_started:
-            self.logger.log(
-                "get_open_file_text called before Language Server started",
-                logging.ERROR,
-            )
-            raise MultilspyException("Language Server not started")
-
-        absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
-        uri = pathlib.Path(absolute_file_path).as_uri()
-
-        # Ensure the file is open
-        assert uri in self.open_file_buffers
-
-        file_buffer = self.open_file_buffers[uri]
-        return file_buffer.contents
-
     async def request_definition(
         self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
@@ -1128,14 +1106,6 @@ class SyncLanguageServer:
         Delete text between the given start and end positions in the given file and return the deleted text.
         """
         return self.language_server.delete_text_between_positions(relative_file_path, start, end)
-
-    def get_open_file_text(self, relative_file_path: str) -> str:
-        """
-        Get the contents of the given opened file as per the Language Server.
-
-        :param relative_file_path: The relative path of the file to open.
-        """
-        return self.language_server.get_open_file_text(relative_file_path)
    
     @contextmanager
     def start_server(self) -> Iterator["SyncLanguageServer"]:
