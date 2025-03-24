@@ -17,13 +17,13 @@ notebooks. Just run `poe` to see the available commands.
 
 ### Python (uv) setup
 
-You can install the dependencies with
+You can install a virtual environment with the required as follows
 
-```shell
-uv venv
-uv pip install -e ".[dev]"
-source .venv/bin/activate
-```
+1. Create a new virtual environment: `uv venv`
+2. Activate the environment:
+    * On Unix or MacOS: `source .venv/bin/activate`
+    * On Windows: `.venv\Scripts\activate.bat`
+3. Install the required packages: `uv pip install -e ".[dev]"`
 
 ### Docker setup
 
@@ -45,10 +45,42 @@ for you.
 Note: for the WSL subsystem on Windows you might need to adjust the path for the
 volume.
 
-### Codespaces
+## Model Context Protocol (MCP) Server
 
-The fastest way to get started is to use a GitHub Codespace. Just click on the
-button in the repository's main page.
+Serena's functionality is intended to be used via the model context protocol (MCP),
+which allows for easy integration into applications like Claude Desktop and IDEs.
+
+### Project Configuration File
+
+The first step is to create a `.yml` configuration file for the project you want
+Serena to work on:
+
+Copy `myproject.demo.yml` to `myproject.yml` and adjust the settings to your project.
+
+### MCP Server Configuration
+
+Tools like Claude Desktop need to be informed about the MCP server.
+They typically start the server themselves and only need to be informed how to start
+the server. 
+This is typically done by providing a configuration file in JSON format as follows,
+
+```json
+{
+    "mcpServers": {
+        "serena": {
+            "command": "uv",
+            "args": ["run", "--directory", "/path/to/serena", "python", "scripts/mcp_server.py", "myproject.yml"]
+        }
+    }
+}
+```
+
+where you must adjust `/path/to/serena` to the actual path of the Serena repository as well as the `.yml` file
+for your project configuration.
+On Windows, you can specify the path in the format `C:/path/to/serena`.
+
+**Claude Desktop**: The JSON configuration file can be found via File / Settings / Developer / Edit Config. 
+    Then edit the file named `claude_desktop_config.json`.
 
 ## Contributing
 

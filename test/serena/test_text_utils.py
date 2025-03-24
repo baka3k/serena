@@ -1,6 +1,7 @@
 import re
 
 import pytest
+
 from serena.text_utils import LineType, search_text
 
 

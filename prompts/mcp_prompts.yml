@@ -1,0 +1,12 @@
+lang: en
+prompts:
+  onboarding_prompt: |
+    You are to assist in generating overview documentation for onboarding developers of the project.
+    Specifically, you are to create the file `{{ onboarding_file }}` in the project root directory.
+    The file should contain 
+      * a brief description of the project, including the project's purpose, 
+      * an overview of the structure of the project,
+      * instructions on how to add and execute new automated tests.
+    Use functions for reading the project's directory structure and individual files to accomplish this.
+    Read only the necessary files and directories to generate the documentation.
+    You are to provide the content for the file in markdown format.
