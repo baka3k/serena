@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import yaml
+from mcp.server.fastmcp import server
 from mcp.server.fastmcp.prompts.base import Message, UserMessage
 from mcp.server.fastmcp.server import Context, FastMCP, Settings
 from sensai.util import logging
@@ -23,6 +24,17 @@ from serena.llm.prompt_factory import PromptFactory
 from serena.util.file_system import scan_directory
 
 log = logging.getLogger(__name__)
+
+
+def configure_logging(*args, **kwargs) -> None:
+    # log to stderr (will be captured by Claude Desktop); stdio is the MCP communication stream and cannot be used!
+    logging.basicConfig(
+        level=logging.DEBUG, stream=sys.stderr, format="%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+    )
+
+
+# patch the logging configuration function in fastmcp, because it's hard-coded and broken
+server.configure_logging = configure_logging
 
 
 @dataclass
@@ -194,7 +206,5 @@ def onboarding(ctx: Context) -> str:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG, stream=sys.stderr, format="%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
-    )
+    log.info("Starting server")
     mcp.run()
