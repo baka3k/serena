@@ -214,6 +214,12 @@ class UnifiedSymbolInformation(TypedDict):
     
     body: NotRequired[str]
     """ The body of the symbol. """
+    
+    children: NotRequired[List[UnifiedSymbolInformation]]
+    """ The children of the symbol. 
+    Added to be compatible with `lsp_types.DocumentSymbol`, 
+    since it is sometimes useful to have the children of the symbol as a user-facing feature."""
+    
 
 TreeRepr = Dict[int, List['TreeRepr']]
 

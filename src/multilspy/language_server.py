@@ -31,7 +31,7 @@ from .multilspy_config import MultilspyConfig, Language
 from .multilspy_exceptions import MultilspyException
 from .multilspy_utils import PathUtils, FileUtils, TextUtils
 from pathlib import Path, PurePath
-from typing import AsyncIterator, Iterator, List, Dict, Optional, Union, Tuple
+from typing import AsyncIterator, Iterator, List, Dict, Optional, TypedDict, Union, Tuple, cast
 from .type_helpers import ensure_all_methods_implemented
 
 
@@ -43,6 +43,8 @@ from .type_helpers import ensure_all_methods_implemented
 # Moreover, the way we want to use the language server (for retrieving actual content),
 # it makes sense to have more content-related utils directly in it.
 
+
+GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, multilspy_types.UnifiedSymbolInformation]
 
 @dataclasses.dataclass
 class LSPFileBuffer:
@@ -187,7 +189,7 @@ class LanguageServer:
         self.open_file_buffers: Dict[str, LSPFileBuffer] = {}
         
         # --------------------------------- MODIFICATIONS BY MISCHA ---------------------------------
-        self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], Optional[List[multilspy_types.TreeRepr]]]]] = {}
+        self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self.load_cache()
         self._cache_has_changed = bool
@@ -651,18 +653,21 @@ class LanguageServer:
                 for json_repr in set([json.dumps(item, sort_keys=True) for item in completions_list])
             ]
 
-    async def request_document_symbols(self, relative_file_path: str) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], Union[List[multilspy_types.TreeRepr], None]]:
+    async def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
         """
         Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
         to find symbols in the given file. Wait for the response and return the result.
 
         :param relative_file_path: The relative path of the file that has the symbols
-
-        :return Tuple[List[multilspy_types.UnifiedSymbolInformation], Union[List[multilspy_types.TreeRepr], None]]: A list of symbols in the file, and the tree representation of the symbols
-        """        
+        :param include_body: whether to include the body of the symbols in the result.
+        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols. Each symbol in hierarchy starting from the roots has a children attribute.
+        """
         self.logger.log(f"Requesting document symbols for {relative_file_path} for the first time", logging.DEBUG)
+        # TODO: it's kinda dumb to not use the cache if include_body is False after include_body was True once
+        #   Should be fixed in the future, it's a small performance optimization
+        cache_key = f"{relative_file_path}-{include_body}"
         with self.open_file(relative_file_path) as file_data:
-            file_hash_and_result = self._document_symbols_cache.get(relative_file_path)
+            file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is not None:
                 file_hash, result = file_hash_and_result
                 if file_hash == file_data.content_hash:
@@ -679,11 +684,31 @@ class LanguageServer:
                     }
                 }
             )
+            
+        def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
+            item = cast(multilspy_types.UnifiedSymbolInformation, item)
+            if "location" not in item:
+                absolute_path = os.path.join(self.repository_root_path, relative_file_path)
+                uri = pathlib.Path(absolute_path).as_uri()
+                assert "range" in item
+                tree_location = multilspy_types.Location(
+                    uri=uri,
+                    range=item['range'],
+                    absolutePath=absolute_path,
+                    relativePath=relative_file_path,
+                )
+                item['location'] = tree_location
+            if include_body:
+                item['body'] = self.retrieve_symbol_body(item)
+            item[LSPConstants.CHILDREN] = item.get(LSPConstants.CHILDREN, [])
         
-        ret: List[multilspy_types.UnifiedSymbolInformation] = []
-        l_tree = None
+        symbols_without_children: List[multilspy_types.UnifiedSymbolInformation] = []
         assert isinstance(response, list)
+        root_nodes: List[multilspy_types.UnifiedSymbolInformation] = []
         for item in response:
+            turn_item_into_symbol_with_children(item)
+            item = cast(multilspy_types.UnifiedSymbolInformation, item)
+            root_nodes.append(item)
             assert isinstance(item, dict)
             assert LSPConstants.NAME in item
             assert LSPConstants.KIND in item
@@ -691,26 +716,29 @@ class LanguageServer:
             if LSPConstants.CHILDREN in item:
                 # TODO: l_tree should be a list of TreeRepr. Define the following function to return TreeRepr as well
                 
-                def visit_tree_nodes_and_build_tree_repr(tree: LSPTypes.DocumentSymbol) -> List[multilspy_types.UnifiedSymbolInformation]:
+                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> List[multilspy_types.UnifiedSymbolInformation]:
+                    node = cast(multilspy_types.UnifiedSymbolInformation, node)
                     l: List[multilspy_types.UnifiedSymbolInformation] = []
-                    children = tree['children'] if 'children' in tree else []
-                    if 'children' in tree:
-                        del tree['children']
-                    l.append(multilspy_types.UnifiedSymbolInformation(**tree))
+                    turn_item_into_symbol_with_children(node)
+                    assert LSPConstants.CHILDREN in node
+                    children = node[LSPConstants.CHILDREN]
+                    node_without_children = node.copy()
+                    del node_without_children[LSPConstants.CHILDREN]
+                    l.append(node_without_children)
                     for child in children:
                         l.extend(visit_tree_nodes_and_build_tree_repr(child))
                     return l
                 
-                ret.extend(visit_tree_nodes_and_build_tree_repr(item))
+                symbols_without_children.extend(visit_tree_nodes_and_build_tree_repr(item))
             else:
-                ret.append(multilspy_types.UnifiedSymbolInformation(**item))
+                symbols_without_children.append(multilspy_types.UnifiedSymbolInformation(**item))
 
-        result = ret, l_tree
+        result = symbols_without_children, root_nodes
         self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
-        self._document_symbols_cache[relative_file_path] = (file_data.content_hash, result)
+        self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
         self._cache_has_changed = True
         return result
-    
+        
     async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
@@ -744,7 +772,7 @@ class LanguageServer:
     
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
     
-    def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation) -> str:
+    def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation) -> str:
         """
         Load the body of the given symbol. If the body is already contained in the symbol, just return it.
         """
@@ -1241,17 +1269,17 @@ class SyncLanguageServer:
         ).result()
         return result
 
-    def request_document_symbols(self, relative_file_path: str) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], Union[List[multilspy_types.TreeRepr], None]]:
+    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
         """
         Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
         to find symbols in the given file. Wait for the response and return the result.
 
         :param relative_file_path: The relative path of the file that has the symbols
-
-        :return Tuple[List[multilspy_types.UnifiedSymbolInformation], Union[List[multilspy_types.TreeRepr], None]]: A list of symbols in the file, and the tree representation of the symbols
+        :param include_body: whether to include the body of the symbols in the result.
+        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols. Each symbol in hierarchy starting from the roots has a children attribute.
         """
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_document_symbols(relative_file_path), self.loop
+            self.language_server.request_document_symbols(relative_file_path, include_body), self.loop
         ).result()
         return result
 

@@ -318,3 +318,37 @@ class TestLanguageServerSymbols:
                 import warnings
 
                 warnings.warn("Could not verify container hierarchy - implementation detail")
+
+    def test_symbol_tree_structure(self, language_server: SyncLanguageServer, repo_path: Path):
+        """Test the symbol tree structure."""
+        file_path = str(repo_path / "test_repo" / "services.py")
+        symbols, root_nodes = language_server.request_document_symbols(file_path)
+        assert len(symbols) > 0
+        assert {root["name"] for root in root_nodes} == {
+            "UserService",
+            "ItemService",
+            "create_service_container",
+            "user_var_str",
+            "user_service",
+        }
+        user_service_root = next(root for root in root_nodes if root["name"] == "UserService")
+        assert user_service_root
+        assert "children" in user_service_root
+        assert {child["name"] for child in user_service_root["children"] if child["kind"] != SymbolKind.Variable} == {
+            "__init__",
+            "create_user",
+            "get_user",
+            "list_users",
+            "delete_user",
+        }
+
+        # Now recursively flatten the tree into a set of names and assert that it coincides with the set of symbol names
+        all_names_in_tree = set()
+
+        def flatten_tree(nodes):
+            for node in nodes:
+                all_names_in_tree.add(node["name"])
+                flatten_tree(node.get("children", []))
+
+        flatten_tree(root_nodes)
+        assert all_names_in_tree == {symbol["name"] for symbol in symbols}
