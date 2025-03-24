@@ -144,8 +144,7 @@ def read_file(ctx: Context, relative_path: str) -> str:
 
     class ReadFileTool(Tool):
         def _execute(self):
-            with self.langsrv.open_file(relative_path):
-                return self.langsrv.get_open_file_text(relative_path)
+            return self.langsrv.retrieve_full_file_content(relative_path)
 
     return ReadFileTool(ctx).execute()
 

@@ -211,6 +211,9 @@ class UnifiedSymbolInformation(TypedDict):
     selectionRange: NotRequired[Range]
     """ The range that should be selected and revealed when this symbol is being picked, e.g the name of a function.
     Must be contained by the `range`. """
+    
+    body: NotRequired[str]
+    """ The body of the symbol. """
 
 TreeRepr = Dict[int, List['TreeRepr']]
 

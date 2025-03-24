@@ -140,3 +140,6 @@ pylint.html
 /*.yml
 !myproject.demo.yml
 
+
+# Cache is in .multilspy 
+**/.multilspy/**

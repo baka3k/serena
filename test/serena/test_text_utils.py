@@ -21,7 +21,7 @@ class TestTextUtils:
         assert matches[0].num_matched_lines == 1
         assert matches[0].start_line == 3
         assert matches[0].end_line == 3
-        assert matches[0].context_lines[0].line_content.strip() == 'print("Hello, World!")'
+        assert matches[0].lines[0].line_content.strip() == 'print("Hello, World!")'
 
     def test_search_text_with_regex_pattern(self):
         """Test searching with a regex pattern."""
@@ -42,10 +42,10 @@ class TestTextUtils:
         matches = search_text(pattern, content=content)
 
         assert len(matches) == 3
-        assert matches[0].context_lines[0].match_type == LineType.MATCH
-        assert "def __init__" in matches[0].context_lines[0].line_content
-        assert "def process" in matches[1].context_lines[0].line_content
-        assert "def filter" in matches[2].context_lines[0].line_content
+        assert matches[0].lines[0].match_type == LineType.MATCH
+        assert "def __init__" in matches[0].lines[0].line_content
+        assert "def process" in matches[1].lines[0].line_content
+        assert "def filter" in matches[2].lines[0].line_content
 
     def test_search_text_with_compiled_regex(self):
         """Test searching with a pre-compiled regex pattern."""
@@ -68,8 +68,8 @@ class TestTextUtils:
         matches = search_text(pattern, content=content)
 
         assert len(matches) == 2
-        assert "DEBUG = True" in matches[0].context_lines[0].line_content
-        assert "MAX_RETRIES = 3" in matches[1].context_lines[0].line_content
+        assert "DEBUG = True" in matches[0].lines[0].line_content
+        assert "MAX_RETRIES = 3" in matches[1].lines[0].line_content
 
     def test_search_text_with_context_lines(self):
         """Test searching with context lines before and after the match."""
@@ -91,15 +91,15 @@ class TestTextUtils:
 
         # Check the first match with context
         first_match = matches[0]
-        assert len(first_match.context_lines) == 3
-        assert first_match.context_lines[0].match_type == LineType.BEFORE_MATCH
-        assert first_match.context_lines[1].match_type == LineType.MATCH
-        assert first_match.context_lines[2].match_type == LineType.AFTER_MATCH
+        assert len(first_match.lines) == 3
+        assert first_match.lines[0].match_type == LineType.BEFORE_MATCH
+        assert first_match.lines[1].match_type == LineType.MATCH
+        assert first_match.lines[2].match_type == LineType.AFTER_MATCH
 
         # Verify the content of lines
-        assert "if a > b:" in first_match.context_lines[0].line_content
-        assert "return a * c" in first_match.context_lines[1].line_content
-        assert "elif b > a:" in first_match.context_lines[2].line_content
+        assert "if a > b:" in first_match.lines[0].line_content
+        assert "return a * c" in first_match.lines[1].line_content
+        assert "elif b > a:" in first_match.lines[2].line_content
 
     def test_search_text_with_multiline_match(self):
         """Test searching with multiline pattern matching."""
@@ -120,10 +120,10 @@ class TestTextUtils:
         assert len(matches) == 1
         multiline_match = matches[0]
         assert multiline_match.num_matched_lines >= 3
-        assert "if n <= 1:" in multiline_match.context_lines[0].line_content
+        assert "if n <= 1:" in multiline_match.lines[0].line_content
 
         # All matched lines should have match_type == LineType.MATCH
-        match_lines = [line for line in multiline_match.context_lines if line.match_type == LineType.MATCH]
+        match_lines = [line for line in multiline_match.lines if line.match_type == LineType.MATCH]
         assert len(match_lines) >= 3
 
     def test_search_text_with_glob_pattern(self):
@@ -146,9 +146,9 @@ class TestTextUtils:
         matches = search_text("*_user*", content=content, is_glob=True)
 
         assert len(matches) == 3
-        assert "get_user" in matches[0].context_lines[0].line_content
-        assert "create_user" in matches[1].context_lines[0].line_content
-        assert "update_user" in matches[2].context_lines[0].line_content
+        assert "get_user" in matches[0].lines[0].line_content
+        assert "create_user" in matches[1].lines[0].line_content
+        assert "update_user" in matches[2].lines[0].line_content
 
     def test_search_text_with_complex_glob_pattern(self):
         """Test searching with more complex glob patterns."""
@@ -175,7 +175,7 @@ class TestTextUtils:
         instance_matches = [
             line.line_content
             for match in matches
-            for line in match.context_lines
+            for line in match.lines
             if line.match_type == LineType.MATCH and "isinstance(item," in line.line_content
         ]
         assert len(instance_matches) >= 2

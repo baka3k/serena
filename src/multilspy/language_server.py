@@ -11,12 +11,13 @@ import dataclasses
 import hashlib
 import json
 import pickle
-import time
 import logging
 import os
 import pathlib
 import threading
 from contextlib import asynccontextmanager, contextmanager
+
+from serena.text_utils import MatchedConsecutiveLines, LineType, TextLine
 from .lsp_protocol_handler.lsp_constants import LSPConstants
 from  .lsp_protocol_handler import lsp_types as LSPTypes
 
@@ -32,6 +33,15 @@ from .multilspy_utils import PathUtils, FileUtils, TextUtils
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Iterator, List, Dict, Optional, Union, Tuple
 from .type_helpers import ensure_all_methods_implemented
+
+
+# Serena dependencies
+# We will need to watch out for circular imports, but it's probably better to not
+# move all generic util code from serena into multilspy.
+# It does however make sense to integrate many text-related utils into the language server
+# since it caches (in-memory) file contents, so we can avoid reading from disk.
+# Moreover, the way we want to use the language server (for retrieving actual content),
+# it makes sense to have more content-related utils directly in it.
 
 
 @dataclasses.dataclass
@@ -68,7 +78,6 @@ class LanguageServer:
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
     """
-
     @classmethod
     def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str) -> "LanguageServer":
         """
@@ -347,28 +356,6 @@ class LanguageServer:
         )
         return deleted_text
 
-    def get_open_file_text(self, relative_file_path: str) -> str:
-        """
-        Get the contents of the given opened file as per the Language Server.
-
-        :param relative_file_path: The relative path of the file to open.
-        """
-        if not self.server_started:
-            self.logger.log(
-                "get_open_file_text called before Language Server started",
-                logging.ERROR,
-            )
-            raise MultilspyException("Language Server not started")
-
-        absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
-        uri = pathlib.Path(absolute_file_path).as_uri()
-
-        # Ensure the file is open
-        assert uri in self.open_file_buffers
-
-        file_buffer = self.open_file_buffers[uri]
-        return file_buffer.contents
-
     async def request_definition(
         self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
@@ -514,7 +501,62 @@ class LanguageServer:
             ret.append(multilspy_types.Location(**new_item))
 
         return ret
+    
+    async def request_references_with_content(
+        self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
+    ) -> List[MatchedConsecutiveLines]:
+        """
+        Like request_references, but returns the content of the lines containing the references, not just the locations.
 
+        :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
+        :param line: The line number of the symbol
+        :param column: The column number of the symbol
+        :param context_lines_before: The number of lines to include in the context before the line containing the reference
+        :param context_lines_after: The number of lines to include in the context after the line containing the reference
+
+        :return: A list of MatchedConsecutiveLines objects, one for each reference.
+        """
+        references = await self.request_references(relative_file_path, line, column)
+        return [self.retrieve_content_around_line(ref["relativePath"], ref["range"]["start"]["line"], context_lines_before, context_lines_after) for ref in references]
+    
+    def retrieve_full_file_content(self, relative_file_path: str) -> str:
+        """
+        Retrieve the full content of the given file.
+        """
+        with self.open_file(relative_file_path) as file_data:
+            return file_data.contents
+    
+    def retrieve_content_around_line(self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0) -> MatchedConsecutiveLines:
+        """
+        Retrieve the content of the given file around the given line.
+        
+        :param relative_file_path: The relative path of the file to retrieve the content from
+        :param line: The line number to retrieve the content around
+        :param context_lines_before: The number of lines to retrieve before the given line
+        :param context_lines_after: The number of lines to retrieve after the given line
+
+        :return MatchedConsecutiveLines: A container with the desired lines.
+        """
+        with self.open_file(relative_file_path) as file_data:
+            file_contents = file_data.contents
+        
+        line_contents = file_contents.split("\n")
+        start_lineno = max(0, line - context_lines_before)
+        end_lineno = min(len(line_contents) - 1, line + context_lines_after)
+        # instantiate TextLines with the write LineType
+        text_lines: list[TextLine] = []
+        # before the line
+        for lineno in range(start_lineno, line):
+            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.BEFORE_MATCH))
+        # the line
+        text_lines.append(TextLine(line_number=line, line_content=line_contents[line], match_type=LineType.MATCH))
+        # after the line
+        for lineno in range(line + 1, end_lineno + 1):
+            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.AFTER_MATCH))
+        
+        return MatchedConsecutiveLines(lines=text_lines, source_file_path=relative_file_path)
+        
+        
     async def request_completions(
         self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
     ) -> List[multilspy_types.CompletionItem]:
@@ -702,6 +744,24 @@ class LanguageServer:
     
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
     
+    def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation) -> str:
+        """
+        Load the body of the given symbol. If the body is already contained in the symbol, just return it.
+        """
+        existing_body = symbol.get("body", None)
+        if existing_body:
+            return existing_body
+        
+        assert "location" in symbol
+        symbol_start_line = symbol["location"]["range"]["start"]["line"]
+        symbol_end_line = symbol["location"]["range"]["end"]["line"]
+        assert "relativePath" in symbol["location"]
+        symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
+        symbol_lines = symbol_file.split("\n")
+        symbol_body = "\n".join(symbol_lines[symbol_start_line:symbol_end_line])
+        return symbol_body
+        
+    
     async def request_parsed_files(self) -> list[str]:
         """This is slow, as it finds all files by finding all symbols. 
         
@@ -724,6 +784,7 @@ class LanguageServer:
         column: int,
         include_imports: bool = True,
         include_self: bool = False,
+        include_body: bool = False,
     ) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds all symbols that reference the symbol at the given location.
@@ -738,6 +799,7 @@ class LanguageServer:
             will not be easily distinguishable from definitions.
         :param include_self: whether to include the references that is the "input symbol" itself. 
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
+        :param include_body: whether to include the body of the symbols in the result.
         :return: List of symbols that reference the target symbol.
         """
         if not self.server_started:
@@ -763,7 +825,7 @@ class LanguageServer:
             with self.open_file(ref_path) as file_data:
                 # Get the containing symbol for this reference
                 containing_symbol = await self.request_containing_symbol(
-                    ref_path, ref_line, ref_col
+                    ref_path, ref_line, ref_col, include_body=include_body
                 )
                 if containing_symbol is None:
                     # TODO: HORRIBLE HACK! I don't know how to do it better for now...
@@ -833,6 +895,7 @@ class LanguageServer:
         line: int,
         column: Optional[int] = None,
         strict: bool = False,
+        include_body: bool = False,
     ) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
@@ -857,6 +920,7 @@ class LanguageServer:
             Setting to True is useful for example for finding the parent of a symbol, as with strict=False,
             and the line pointing to a symbol itself, the containing symbol will be the symbol itself
             (and not the parent).
+        :param include_body: Whether to include the body of the symbol in the result.
         :return: The container symbol (if found) or None.
         """
         # checking if the line is empty, unfortunately ugly and duplicating code, but I don't want to refactor
@@ -938,13 +1002,19 @@ class LanguageServer:
 
         if containing_symbols:
             # Return the one with the greatest starting position (i.e. the innermost container).
-            return max(containing_symbols, key=lambda s: s["location"]["range"]["start"]["line"])
+            containing_symbol = max(containing_symbols, key=lambda s: s["location"]["range"]["start"]["line"])
+            if include_body:
+                containing_symbol["body"] = self.retrieve_symbol_body(containing_symbol)
+            return containing_symbol
         else:
             return None
     
-    async def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation) -> multilspy_types.UnifiedSymbolInformation | None:
+    async def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one.
+        
+        :param symbol: The symbol to find the container of.
+        :param include_body: whether to include the body of the symbol in the result.
         """
         assert "location" in symbol
         return await self.request_containing_symbol(
@@ -952,6 +1022,7 @@ class LanguageServer:
             symbol["location"]["range"]["start"]["line"],
             symbol["location"]["range"]["start"]["character"],
             strict=True,
+            include_body=include_body,
         )
     
     async def request_defining_symbol(
@@ -959,6 +1030,7 @@ class LanguageServer:
         relative_file_path: str,
         line: int,
         column: int,
+        include_body: bool = False,
     ) -> Optional[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds the symbol that defines the symbol at the given location.
@@ -969,6 +1041,7 @@ class LanguageServer:
         :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column number.
+        :param include_body: whether to include the body of the symbol in the result.
         :return: The symbol information for the definition, or None if not found.
         """
         if not self.server_started:
@@ -991,7 +1064,7 @@ class LanguageServer:
         
         # Find the symbol at or containing this location
         defining_symbol = await self.request_containing_symbol(
-            def_path, def_line, def_col, strict=False
+            def_path, def_line, def_col, strict=False, include_body=include_body
         )
         
         return defining_symbol
@@ -1080,14 +1153,6 @@ class SyncLanguageServer:
         Delete text between the given start and end positions in the given file and return the deleted text.
         """
         return self.language_server.delete_text_between_positions(relative_file_path, start, end)
-
-    def get_open_file_text(self, relative_file_path: str) -> str:
-        """
-        Get the contents of the given opened file as per the Language Server.
-
-        :param relative_file_path: The relative path of the file to open.
-        """
-        return self.language_server.get_open_file_text(relative_file_path)
    
     @contextmanager
     def start_server(self) -> Iterator["SyncLanguageServer"]:
@@ -1137,7 +1202,26 @@ class SyncLanguageServer:
             self.language_server.request_references(file_path, line, column), self.loop
         ).result()
         return result
+    
+    def request_references_with_content(
+        self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
+    ) -> List[MatchedConsecutiveLines]:
+        """
+        Like request_references, but returns the content of the lines containing the references, not just the locations.
+        
+        :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
+        :param line: The line number of the symbol
+        :param column: The column number of the symbol
+        :param context_lines_before: The number of lines to include in the context before the line containing the reference
+        :param context_lines_after: The number of lines to include in the context after the line containing the reference
 
+        :return: A list of MatchedConsecutiveLines objects, one for each reference.
+        """
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_references_with_content(relative_file_path, line, column, context_lines_before, context_lines_after), self.loop
+        ).result()
+        return result
+    
     def request_completions(
         self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
     ) -> List[multilspy_types.CompletionItem]:
@@ -1189,6 +1273,15 @@ class SyncLanguageServer:
     
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
     
+    def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation) -> str:
+        """
+        Load the body of the given symbol. If the body is already contained in the symbol, just return it.
+        
+        :param symbol: The symbol to retrieve the body of.
+        :return: The body of the symbol.
+        """
+        return self.language_server.retrieve_symbol_body(symbol)
+    
     def request_parsed_files(self) -> list[str]:
         """This is slow, as it finds all files by finding all symbols. 
         
@@ -1202,6 +1295,7 @@ class SyncLanguageServer:
     def request_referencing_symbols(
         self, relative_file_path: str, line: int, column: int,
         include_imports: bool = True, include_self: bool = False,
+        include_body: bool = False,
     ) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds all symbols that reference the symbol at the given location.
@@ -1216,6 +1310,7 @@ class SyncLanguageServer:
             will not be easily distinguishable from definitions.
         :param include_self: whether to include the references that is the "input symbol" itself. 
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
+        :param include_body: whether to include the body of the symbols in the result.
         :return: List of symbols that reference the target symbol.
         """
         assert self.loop
@@ -1225,7 +1320,8 @@ class SyncLanguageServer:
                 line, 
                 column, 
                 include_imports=include_imports, 
-                include_self=include_self
+                include_self=include_self,
+                include_body=include_body,
             ), 
             self.loop
         ).result()
@@ -1233,7 +1329,8 @@ class SyncLanguageServer:
         
     def request_containing_symbol(
         self, relative_file_path: str, line: int, 
-        column: Optional[int] = None, strict: bool = False
+        column: Optional[int] = None, strict: bool = False,
+        include_body: bool = False,
     ) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
@@ -1258,26 +1355,31 @@ class SyncLanguageServer:
             Setting to true is useful for example for finding the parent of a symbol, as with strict=False,
             and the line pointing to a symbol itself, the containing symbol will be the symbol itself 
             (and not the parent).
+        :param include_body: whether to include the body of the symbol in the result.
         :return: The container symbol (if found) or None.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_containing_symbol(relative_file_path, line, column=column, strict=strict), self.loop
+            self.language_server.request_containing_symbol(relative_file_path, line, column=column, strict=strict, include_body=include_body), self.loop
         ).result()
         return result
     
-    def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation) -> multilspy_types.UnifiedSymbolInformation | None:
+    def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one.
+        
+        :param symbol: The symbol to find the container of.
+        :param include_body: whether to include the body of the symbol in the result.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_container_of_symbol(symbol), self.loop
+            self.language_server.request_container_of_symbol(symbol, include_body=include_body), self.loop
         ).result()
         return result
     
     def request_defining_symbol(
-        self, relative_file_path: str, line: int, column: int
+        self, relative_file_path: str, line: int, column: int, 
+        include_body: bool = False,
     ) -> Optional[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds the symbol that defines the symbol at the given location.
@@ -1288,13 +1390,32 @@ class SyncLanguageServer:
         :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column number.
+        :param include_body: whether to include the body of the symbol in the result.
         :return: The symbol information for the definition, or None if not found.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_defining_symbol(relative_file_path, line, column), self.loop
+            self.language_server.request_defining_symbol(relative_file_path, line, column, include_body=include_body), self.loop
         ).result()
         return result
+    
+    def retrieve_full_file_content(self, relative_file_path: str) -> str:
+        """
+        Retrieve the full content of the given file.
+        """
+        return self.language_server.retrieve_full_file_content(relative_file_path)
+    
+    def retrieve_content_around_line(self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0) -> MatchedConsecutiveLines:
+        """
+        Retrieve the content of the given file around the given line.
+        
+        :param relative_file_path: The relative path of the file to retrieve the content from
+        :param line: The line number to retrieve the content around
+        :param context_lines_before: The number of lines to retrieve before the given line
+        :param context_lines_after: The number of lines to retrieve after the given line
+        :return MatchedConsecutiveLines: A container with the desired lines.
+        """
+        return self.language_server.retrieve_content_around_line(relative_file_path, line, context_lines_before, context_lines_after)
     
     def start(self) -> "SyncLanguageServer":
         """

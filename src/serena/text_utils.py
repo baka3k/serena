@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 
@@ -37,27 +37,46 @@ class TextLine:
 
 
 @dataclass(kw_only=True)
-class TextSearchMatch:
-    """Represents a match found in a text file or a string."""
+class MatchedConsecutiveLines:
+    """Represents a collection of consecutive lines found through some criterion in a text file or a string.
+    May include lines before, after, and matched.
+    """
 
-    context_lines: list[TextLine]
+    lines: list[TextLine]
+    """All lines in the context of the match. At least one of them should be of match_type MATCH."""
     source_file_path: str | None = None
-    """Path to the file where the match was found."""
+    """Path to the file where the match was found (Metadata)."""
+
+    # set in post-init
+    lines_before_matched: list[TextLine] = field(default_factory=list)
+    matched_lines: list[TextLine] = field(default_factory=list)
+    lines_after_matched: list[TextLine] = field(default_factory=list)
+
+    def __post_init__(self):
+        for line in self.lines:
+            if line.match_type == LineType.BEFORE_MATCH:
+                self.lines_before_matched.append(line)
+            elif line.match_type == LineType.MATCH:
+                self.matched_lines.append(line)
+            elif line.match_type == LineType.AFTER_MATCH:
+                self.lines_after_matched.append(line)
+
+        assert len(self.matched_lines) > 0, "At least one matched line is required"
 
     @property
     def start_line(self) -> int:
-        return self.context_lines[0].line_number
+        return self.lines[0].line_number
 
     @property
     def end_line(self) -> int:
-        return self.context_lines[-1].line_number
+        return self.lines[-1].line_number
 
     @property
     def num_matched_lines(self) -> int:
-        return len([line for line in self.context_lines if line.match_type == LineType.MATCH])
+        return len(self.matched_lines)
 
     def to_display_string(self) -> str:
-        return "\n".join([line.format_line() for line in self.context_lines])
+        return "\n".join([line.format_line() for line in self.lines])
 
 
 def search_text(
@@ -68,7 +87,7 @@ def search_text(
     context_lines_before: int = 0,
     context_lines_after: int = 0,
     is_glob: bool = False,
-) -> list[TextSearchMatch]:
+) -> list[MatchedConsecutiveLines]:
     """
     Search for a pattern in text content. Supports both regex and glob-like patterns.
 
@@ -160,7 +179,7 @@ def search_text(
 
                 context_lines.append(TextLine(line_number=line_num, line_content=lines[i], match_type=match_type))
 
-            matches.append(TextSearchMatch(context_lines=context_lines, source_file_path=source_file_path))
+            matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
     else:
         # Search line by line
         for i, line in enumerate(lines):
@@ -183,6 +202,6 @@ def search_text(
 
                     context_lines.append(TextLine(line_number=context_line_num, line_content=lines[j], match_type=match_type))
 
-                matches.append(TextSearchMatch(context_lines=context_lines, source_file_path=source_file_path))
+                matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
 
     return matches
