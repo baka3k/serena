@@ -20,12 +20,13 @@ class TestLanguageServerSymbols:
         # Test for a position inside the create_user method
         file_path = str(repo_path / "test_repo" / "services.py")
         # Line 17 is inside the create_user method body
-        containing_symbol = language_server.request_containing_symbol(file_path, 17, 20)
+        containing_symbol = language_server.request_containing_symbol(file_path, 17, 20, include_body=True)
 
         # Verify that we found the containing symbol
         assert containing_symbol is not None
         assert containing_symbol["name"] == "create_user"
         assert containing_symbol["kind"] == SymbolKind.Method
+        assert containing_symbol["body"].strip().startswith("def create_user(self")
 
     def test_references_to_variables(self, language_server: SyncLanguageServer, repo_path: Path):
         """Test request_referencing_symbols for a variable."""

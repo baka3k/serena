@@ -78,7 +78,6 @@ class LanguageServer:
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
     """
-
     @classmethod
     def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str) -> "LanguageServer":
         """
@@ -745,6 +744,24 @@ class LanguageServer:
     
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
     
+    def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation) -> str:
+        """
+        Load the body of the given symbol. If the body is already contained in the symbol, just return it.
+        """
+        existing_body = symbol.get("body", None)
+        if existing_body:
+            return existing_body
+        
+        assert "location" in symbol
+        symbol_start_line = symbol["location"]["range"]["start"]["line"]
+        symbol_end_line = symbol["location"]["range"]["end"]["line"]
+        assert "relativePath" in symbol["location"]
+        symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
+        symbol_lines = symbol_file.split("\n")
+        symbol_body = "\n".join(symbol_lines[symbol_start_line:symbol_end_line])
+        return symbol_body
+        
+    
     async def request_parsed_files(self) -> list[str]:
         """This is slow, as it finds all files by finding all symbols. 
         
@@ -767,6 +784,7 @@ class LanguageServer:
         column: int,
         include_imports: bool = True,
         include_self: bool = False,
+        include_body: bool = False,
     ) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds all symbols that reference the symbol at the given location.
@@ -781,6 +799,7 @@ class LanguageServer:
             will not be easily distinguishable from definitions.
         :param include_self: whether to include the references that is the "input symbol" itself. 
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
+        :param include_body: whether to include the body of the symbols in the result.
         :return: List of symbols that reference the target symbol.
         """
         if not self.server_started:
@@ -806,7 +825,7 @@ class LanguageServer:
             with self.open_file(ref_path) as file_data:
                 # Get the containing symbol for this reference
                 containing_symbol = await self.request_containing_symbol(
-                    ref_path, ref_line, ref_col
+                    ref_path, ref_line, ref_col, include_body=include_body
                 )
                 if containing_symbol is None:
                     # TODO: HORRIBLE HACK! I don't know how to do it better for now...
@@ -876,6 +895,7 @@ class LanguageServer:
         line: int,
         column: Optional[int] = None,
         strict: bool = False,
+        include_body: bool = False,
     ) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
@@ -900,6 +920,7 @@ class LanguageServer:
             Setting to True is useful for example for finding the parent of a symbol, as with strict=False,
             and the line pointing to a symbol itself, the containing symbol will be the symbol itself
             (and not the parent).
+        :param include_body: Whether to include the body of the symbol in the result.
         :return: The container symbol (if found) or None.
         """
         # checking if the line is empty, unfortunately ugly and duplicating code, but I don't want to refactor
@@ -981,13 +1002,19 @@ class LanguageServer:
 
         if containing_symbols:
             # Return the one with the greatest starting position (i.e. the innermost container).
-            return max(containing_symbols, key=lambda s: s["location"]["range"]["start"]["line"])
+            containing_symbol = max(containing_symbols, key=lambda s: s["location"]["range"]["start"]["line"])
+            if include_body:
+                containing_symbol["body"] = self.retrieve_symbol_body(containing_symbol)
+            return containing_symbol
         else:
             return None
     
-    async def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation) -> multilspy_types.UnifiedSymbolInformation | None:
+    async def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one.
+        
+        :param symbol: The symbol to find the container of.
+        :param include_body: whether to include the body of the symbol in the result.
         """
         assert "location" in symbol
         return await self.request_containing_symbol(
@@ -995,6 +1022,7 @@ class LanguageServer:
             symbol["location"]["range"]["start"]["line"],
             symbol["location"]["range"]["start"]["character"],
             strict=True,
+            include_body=include_body,
         )
     
     async def request_defining_symbol(
@@ -1002,6 +1030,7 @@ class LanguageServer:
         relative_file_path: str,
         line: int,
         column: int,
+        include_body: bool = False,
     ) -> Optional[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds the symbol that defines the symbol at the given location.
@@ -1012,6 +1041,7 @@ class LanguageServer:
         :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column number.
+        :param include_body: whether to include the body of the symbol in the result.
         :return: The symbol information for the definition, or None if not found.
         """
         if not self.server_started:
@@ -1034,7 +1064,7 @@ class LanguageServer:
         
         # Find the symbol at or containing this location
         defining_symbol = await self.request_containing_symbol(
-            def_path, def_line, def_col, strict=False
+            def_path, def_line, def_col, strict=False, include_body=include_body
         )
         
         return defining_symbol
@@ -1243,6 +1273,15 @@ class SyncLanguageServer:
     
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
     
+    def retrieve_symbol_body(self, symbol: multilspy_types.UnifiedSymbolInformation) -> str:
+        """
+        Load the body of the given symbol. If the body is already contained in the symbol, just return it.
+        
+        :param symbol: The symbol to retrieve the body of.
+        :return: The body of the symbol.
+        """
+        return self.language_server.retrieve_symbol_body(symbol)
+    
     def request_parsed_files(self) -> list[str]:
         """This is slow, as it finds all files by finding all symbols. 
         
@@ -1256,6 +1295,7 @@ class SyncLanguageServer:
     def request_referencing_symbols(
         self, relative_file_path: str, line: int, column: int,
         include_imports: bool = True, include_self: bool = False,
+        include_body: bool = False,
     ) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds all symbols that reference the symbol at the given location.
@@ -1270,6 +1310,7 @@ class SyncLanguageServer:
             will not be easily distinguishable from definitions.
         :param include_self: whether to include the references that is the "input symbol" itself. 
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
+        :param include_body: whether to include the body of the symbols in the result.
         :return: List of symbols that reference the target symbol.
         """
         assert self.loop
@@ -1279,7 +1320,8 @@ class SyncLanguageServer:
                 line, 
                 column, 
                 include_imports=include_imports, 
-                include_self=include_self
+                include_self=include_self,
+                include_body=include_body,
             ), 
             self.loop
         ).result()
@@ -1287,7 +1329,8 @@ class SyncLanguageServer:
         
     def request_containing_symbol(
         self, relative_file_path: str, line: int, 
-        column: Optional[int] = None, strict: bool = False
+        column: Optional[int] = None, strict: bool = False,
+        include_body: bool = False,
     ) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
@@ -1312,26 +1355,31 @@ class SyncLanguageServer:
             Setting to true is useful for example for finding the parent of a symbol, as with strict=False,
             and the line pointing to a symbol itself, the containing symbol will be the symbol itself 
             (and not the parent).
+        :param include_body: whether to include the body of the symbol in the result.
         :return: The container symbol (if found) or None.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_containing_symbol(relative_file_path, line, column=column, strict=strict), self.loop
+            self.language_server.request_containing_symbol(relative_file_path, line, column=column, strict=strict, include_body=include_body), self.loop
         ).result()
         return result
     
-    def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation) -> multilspy_types.UnifiedSymbolInformation | None:
+    def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one.
+        
+        :param symbol: The symbol to find the container of.
+        :param include_body: whether to include the body of the symbol in the result.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_container_of_symbol(symbol), self.loop
+            self.language_server.request_container_of_symbol(symbol, include_body=include_body), self.loop
         ).result()
         return result
     
     def request_defining_symbol(
-        self, relative_file_path: str, line: int, column: int
+        self, relative_file_path: str, line: int, column: int, 
+        include_body: bool = False,
     ) -> Optional[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds the symbol that defines the symbol at the given location.
@@ -1342,11 +1390,12 @@ class SyncLanguageServer:
         :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column number.
+        :param include_body: whether to include the body of the symbol in the result.
         :return: The symbol information for the definition, or None if not found.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_defining_symbol(relative_file_path, line, column), self.loop
+            self.language_server.request_defining_symbol(relative_file_path, line, column, include_body=include_body), self.loop
         ).result()
         return result
     
