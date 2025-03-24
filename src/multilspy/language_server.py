@@ -503,6 +503,23 @@ class LanguageServer:
 
         return ret
     
+    async def request_references_with_content(
+        self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
+    ) -> List[MatchedConsecutiveLines]:
+        """
+        Like request_references, but returns the content of the lines containing the references, not just the locations.
+
+        :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
+        :param line: The line number of the symbol
+        :param column: The column number of the symbol
+        :param context_lines_before: The number of lines to include in the context before the line containing the reference
+        :param context_lines_after: The number of lines to include in the context after the line containing the reference
+
+        :return: A list of MatchedConsecutiveLines objects, one for each reference.
+        """
+        references = await self.request_references(relative_file_path, line, column)
+        return [self.retrieve_content_around_line(ref["relativePath"], ref["range"]["start"]["line"], context_lines_before, context_lines_after) for ref in references]
+    
     def retrieve_full_file_content(self, relative_file_path: str) -> str:
         """
         Retrieve the full content of the given file.
@@ -1155,7 +1172,26 @@ class SyncLanguageServer:
             self.language_server.request_references(file_path, line, column), self.loop
         ).result()
         return result
+    
+    def request_references_with_content(
+        self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
+    ) -> List[MatchedConsecutiveLines]:
+        """
+        Like request_references, but returns the content of the lines containing the references, not just the locations.
+        
+        :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
+        :param line: The line number of the symbol
+        :param column: The column number of the symbol
+        :param context_lines_before: The number of lines to include in the context before the line containing the reference
+        :param context_lines_after: The number of lines to include in the context after the line containing the reference
 
+        :return: A list of MatchedConsecutiveLines objects, one for each reference.
+        """
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_references_with_content(relative_file_path, line, column, context_lines_before, context_lines_after), self.loop
+        ).result()
+        return result
+    
     def request_completions(
         self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
     ) -> List[multilspy_types.CompletionItem]:
