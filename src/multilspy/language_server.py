@@ -702,7 +702,7 @@ class LanguageServer:
                 item['body'] = self.retrieve_symbol_body(item)
             item[LSPConstants.CHILDREN] = item.get(LSPConstants.CHILDREN, [])
         
-        symbols_without_children: List[multilspy_types.UnifiedSymbolInformation] = []
+        flat_all_symbol_list: List[multilspy_types.UnifiedSymbolInformation] = []
         assert isinstance(response, list)
         root_nodes: List[multilspy_types.UnifiedSymbolInformation] = []
         for item in response:
@@ -722,18 +722,16 @@ class LanguageServer:
                     turn_item_into_symbol_with_children(node)
                     assert LSPConstants.CHILDREN in node
                     children = node[LSPConstants.CHILDREN]
-                    node_without_children = node.copy()
-                    del node_without_children[LSPConstants.CHILDREN]
-                    l.append(node_without_children)
+                    l.append(node)
                     for child in children:
                         l.extend(visit_tree_nodes_and_build_tree_repr(child))
                     return l
                 
-                symbols_without_children.extend(visit_tree_nodes_and_build_tree_repr(item))
+                flat_all_symbol_list.extend(visit_tree_nodes_and_build_tree_repr(item))
             else:
-                symbols_without_children.append(multilspy_types.UnifiedSymbolInformation(**item))
+                flat_all_symbol_list.append(multilspy_types.UnifiedSymbolInformation(**item))
 
-        result = symbols_without_children, root_nodes
+        result = flat_all_symbol_list, root_nodes
         self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
         self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
         self._cache_has_changed = True
