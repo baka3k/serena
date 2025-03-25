@@ -26,7 +26,7 @@ from serena.util.file_system import scan_directory
 log = logging.getLogger(__name__)
 
 
-def configure_logging(*args, **kwargs) -> None:
+def configure_logging(*args, **kwargs) -> None:  # type: ignore
     # log to stderr (will be captured by Claude Desktop); stdio is the MCP communication stream and cannot be used!
     logging.basicConfig(
         level=logging.DEBUG, stream=sys.stderr, format="%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -104,10 +104,6 @@ class Tool(Component):
 
 
 class SimplePrompt(Component):
-    def __init__(self, ctx: Context):
-        super().__init__(ctx)
-        self.messages = []
-
     def create(self) -> str:
         return self._create_prompt()
 
@@ -119,7 +115,7 @@ class SimplePrompt(Component):
 class SequentialPrompt(Component):
     def __init__(self, ctx: Context):
         super().__init__(ctx)
-        self.messages = []
+        self.messages: list[Message] = []
 
     def create(self) -> list[Message]:
         self._add_messages()
@@ -143,7 +139,7 @@ def read_file(ctx: Context, relative_path: str) -> str:
     log.info(f"read_file: {relative_path=}")
 
     class ReadFileTool(Tool):
-        def _execute(self):
+        def _execute(self) -> str:
             return self.langsrv.retrieve_full_file_content(relative_path)
 
     return ReadFileTool(ctx).execute()
@@ -160,7 +156,7 @@ def create_text_file(ctx: Context, relative_path: str, content: str) -> str:
     log.info(f"create_file: {relative_path=}")
 
     class CreateFileTool(Tool):
-        def _execute(self):
+        def _execute(self) -> str:
             absolute_path = os.path.join(self.project_root, relative_path)
             with open(absolute_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -180,7 +176,7 @@ def list_dir(ctx: Context, relative_path: str, recursive: bool) -> str:
     log.info(f"list_dir: {relative_path=}")
 
     class ListDirTool(Tool):
-        def _execute(self):
+        def _execute(self) -> str:
             dirs, files = scan_directory(
                 os.path.join(self.project_root, relative_path), recursive=recursive, ignored_dirs=self.project_config["ignored_dirs"]
             )
@@ -198,7 +194,7 @@ def onboarding(ctx: Context) -> str:
     onboarding_file = "serena_onboarding.md"
 
     class OnboardingPrompt(SimplePrompt):
-        def _create_prompt(self):
+        def _create_prompt(self) -> str:
             return self.prompt_factory.create_onboarding_prompt(onboarding_file=onboarding_file)
 
     return OnboardingPrompt(ctx).create()

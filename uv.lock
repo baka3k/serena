@@ -2087,6 +2087,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "sensai-utils" },
+    { name = "types-pyyaml" },
 ]
 
 [package.optional-dependencies]
@@ -2152,6 +2153,7 @@ requires-dist = [
     { name = "sphinxcontrib-bibtex", marker = "extra == 'dev'" },
     { name = "sphinxcontrib-spelling", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "toml-sort", marker = "extra == 'dev'", specifier = ">=0.24.2" },
+    { name = "types-pyyaml", specifier = ">=6.0.12.20241230" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.12.20241230" },
 ]
 provides-extras = ["dev"]

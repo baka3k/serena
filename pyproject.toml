@@ -28,6 +28,7 @@ dependencies = [
   "fastmcp>=0.4.1",
   "sensai-utils>=1.4.0",
   "pydantic>=2.10.6",
+  "types-pyyaml>=6.0.12.20241230",
 ]
 
 [project.license]
