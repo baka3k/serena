@@ -191,6 +191,13 @@ class SymbolKind(IntEnum):
     Event = 24
     Operator = 25
     TypeParameter = 26
+    
+    @classmethod    
+    def from_int(cls, value: int) -> "SymbolKind":
+        for symbol_kind in cls:
+            if symbol_kind.value == value:
+                return symbol_kind
+        raise ValueError(f"Invalid symbol kind: {value}")
 
 
 class SymbolTag(IntEnum):
