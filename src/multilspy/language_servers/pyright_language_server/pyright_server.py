@@ -31,7 +31,8 @@ class PyrightServer(LanguageServer):
             config,
             logger,
             repository_root_path,
-            # we can also use `pyright-langserver --stdio` but it requires pyright to be installed with npm
+            # Note 1: we can also use `pyright-langserver --stdio` but it requires pyright to be installed with npm
+            # Note 2: we can also use `bpyright-langserver --stdio` if we ever are unhappy with pyright
             ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=repository_root_path),
             "python",
         )
@@ -41,7 +42,7 @@ class PyrightServer(LanguageServer):
         Returns the initialize params for the Pyright Language Server.
         """
         # Create basic initialization parameters
-        initialize_params = {
+        initialize_params: InitializeParams = { # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
@@ -182,10 +183,11 @@ class PyrightServer(LanguageServer):
             initialize_params = self._get_initialize_params(self.repository_root_path)
 
             self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
+                "Sending initialize request from LSP client to pyright server and awaiting response",
                 logging.INFO,
             )
             init_response = await self.server.send.initialize(initialize_params)
+            self.logger.log(f"Received initialize response from pyright server: {init_response}", logging.INFO)
 
             # Verify that the server supports our required features
             self.server.notify.initialized({})
