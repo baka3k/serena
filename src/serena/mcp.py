@@ -5,6 +5,7 @@ The Serena Model Context Protocol (MCP) Server
 import json
 import os
 import sys
+import traceback
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -96,8 +97,8 @@ class Tool(Component):
         try:
             return self._execute()
         except Exception as e:
-            log.error(f"Error executing tool: {e}")
-            return f"Error executing tool: {e}"
+            msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
+            return msg
 
     @abstractmethod
     def _execute(self) -> str:
