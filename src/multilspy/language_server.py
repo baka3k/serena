@@ -660,7 +660,9 @@ class LanguageServer:
 
         :param relative_file_path: The relative path of the file that has the symbols
         :param include_body: whether to include the body of the symbols in the result.
-        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols. Each symbol in hierarchy starting from the roots has a children attribute.
+        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols. 
+            Each symbol in hierarchy starting from the roots has a children attribute.
+            All symbols will have a location and a children attribute.
         """
         self.logger.log(f"Requesting document symbols for {relative_file_path} for the first time", logging.DEBUG)
         # TODO: it's kinda dumb to not use the cache if include_body is False after include_body was True once
@@ -736,7 +738,92 @@ class LanguageServer:
         self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
         self._cache_has_changed = True
         return result
+    
+    async def request_full_symbol_tree(self, start_package_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+        """
+        Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
         
+        For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
+        that are within the repository.
+        Will ignore all directories that start with a dot (.) and __pycache__ directories.
+        
+        Args:
+            start_package_relative_path: if passed, only the symbols within this directory will be considered.
+            include_body: whether to include the body of the symbols in the result.
+
+        Returns:
+            A list of root symbols representing the top-level packages/modules in the project.
+        """
+        if not self.server_started:
+            self.logger.log(
+                "request_full_symbol_tree called before Language Server started",
+                logging.ERROR,
+            )
+            raise MultilspyException("Language Server not started")
+
+        # Helper function to check if a path should be ignored
+        def should_ignore_path(path: str) -> bool:
+            parts = path.split(os.sep)
+            return any(part.startswith('.') or part == '__pycache__' for part in parts)
+
+        # Helper function to recursively process directories
+        async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
+            if should_ignore_path(dir_path):
+                return []
+
+            result = []
+            try:
+                items = os.listdir(os.path.join(self.repository_root_path, dir_path))
+            except OSError:
+                return []
+
+            # Create package symbol for directory
+            package_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
+                name=os.path.basename(dir_path),
+                kind=multilspy_types.SymbolKind.Package,
+                location=multilspy_types.Location(
+                    uri=str(pathlib.Path(os.path.join(self.repository_root_path, dir_path)).as_uri()),
+                    range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
+                    absolutePath=str(os.path.join(self.repository_root_path, dir_path)),
+                    relativePath=str(Path(dir_path).resolve().relative_to(self.repository_root_path)),
+                ),
+                children=[]
+            )
+            result.append(package_symbol)
+
+            for item in items:
+                item_path = os.path.join(dir_path, item)
+                abs_item_path = os.path.join(self.repository_root_path, item_path)
+
+                if os.path.isdir(abs_item_path):
+                    child_symbols = await process_directory(item_path)
+                    package_symbol["children"].extend(child_symbols)
+
+                elif os.path.isfile(abs_item_path):
+                    _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
+                    
+                    # Create module symbol
+                    module_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
+                        name=os.path.splitext(item)[0],
+                        kind=multilspy_types.SymbolKind.Module,
+                        location=multilspy_types.Location(
+                            uri=str(pathlib.Path(abs_item_path).as_uri()),
+                            range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
+                            absolutePath=str(abs_item_path),
+                            relativePath=str(Path(item_path).resolve().relative_to(self.repository_root_path)),
+                        ),
+                        children=root_nodes
+                    )
+                    
+                    package_symbol["children"].append(module_symbol)
+
+            return result
+
+        # Start from the root or the specified directory
+        start_path = start_package_relative_path or self.repository_root_path
+        return await process_directory(start_path)
+
     async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
@@ -1188,8 +1275,8 @@ class SyncLanguageServer:
         :return: None
         """
         self.loop = asyncio.new_event_loop()
-        loop_thread = threading.Thread(target=self.loop.run_forever, daemon=True)
-        loop_thread.start()
+        self.loop_thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+        self.loop_thread.start()
         ctx = self.language_server.start_server()
         asyncio.run_coroutine_threadsafe(ctx.__aenter__(), loop=self.loop).result()
         yield self
@@ -1280,6 +1367,28 @@ class SyncLanguageServer:
             self.language_server.request_document_symbols(relative_file_path, include_body), self.loop
         ).result()
         return result
+    
+    def request_full_symbol_tree(self, start_package_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+        """
+        Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
+        
+        For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
+        that are within the repository.
+        Will ignore all directories that start with a dot (.) and __pycache__ directories.
+        
+        Args:
+            start_package_relative_path: if passed, only the symbols within this directory will be considered.
+            include_body: whether to include the body of the symbols in the result.
+
+        Returns:
+            A list of root symbols representing the top-level packages/modules in the project.
+        """
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_full_symbol_tree(start_package_relative_path, include_body), self.loop
+        ).result()
+        return result
+
 
     def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
