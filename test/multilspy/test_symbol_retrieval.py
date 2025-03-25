@@ -338,7 +338,7 @@ class TestLanguageServerSymbols:
         examples_package = next(child for child in repo_structure[0]["children"] if child["name"] == "examples")
         # assert that children are __init__ and user_management
         assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
-        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.Module}
+        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.File}
 
         # assert that tree of user_management node is same as retrieved directly
         user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
@@ -357,7 +357,7 @@ class TestLanguageServerSymbols:
         assert examples_package["kind"] == SymbolKind.Package
         # assert that children are __init__ and user_management
         assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
-        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.Module}
+        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.File}
 
         # assert that tree of user_management node is same as retrieved directly
         user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")

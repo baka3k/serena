@@ -811,10 +811,10 @@ class LanguageServer:
 
                     _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
                     
-                    # Create module symbol
-                    module_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
+                    # Create file symbol
+                    file_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
                         name=os.path.splitext(item)[0],
-                        kind=multilspy_types.SymbolKind.Module,
+                        kind=multilspy_types.SymbolKind.File,
                         location=multilspy_types.Location(
                             uri=str(pathlib.Path(abs_item_path).as_uri()),
                             range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
@@ -824,7 +824,7 @@ class LanguageServer:
                         children=root_nodes
                     )
                     
-                    package_symbol["children"].append(module_symbol)
+                    package_symbol["children"].append(file_symbol)
 
             return result
 
@@ -907,7 +907,7 @@ class LanguageServer:
         roots = await self.request_full_symbol_tree()
         paths = [] 
         def collect_module_files(symbol):
-            if symbol["kind"] == multilspy_types.SymbolKind.Module:
+            if symbol["kind"] == multilspy_types.SymbolKind.File:
                 assert "location" in symbol
                 paths.append(symbol["location"]["relativePath"])
             
@@ -946,6 +946,7 @@ class LanguageServer:
         all_files = await self.request_parsed_files()
         for path in all_files:
             # Apply glob filters if provided
+            # TODO: fnmatch is not exactly the same as glob
             if paths_include_glob and not fnmatch(path, paths_include_glob):
                 self.logger.log(f"Skipping {path}: does not match include pattern {paths_include_glob}", logging.DEBUG)
                 continue
