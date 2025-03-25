@@ -821,7 +821,7 @@ class LanguageServer:
                             uri=str(pathlib.Path(abs_item_path).as_uri()),
                             range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
                             absolutePath=str(abs_item_path),
-                            relativePath=str(Path(item_path).resolve().relative_to(self.repository_root_path)),
+                            relativePath=str(Path(abs_item_path).resolve().relative_to(self.repository_root_path)),
                         ),
                         children=root_nodes
                     )
