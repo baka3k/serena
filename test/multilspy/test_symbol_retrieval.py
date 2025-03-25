@@ -360,7 +360,7 @@ class TestLanguageServerSymbols:
         user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
-            assert user_management_rel_path == "examples/user_management.py"
+            assert user_management_rel_path == os.path.join("examples", "user_management.py")
             _, user_management_roots = language_server.request_document_symbols(str(repo_path / "examples" / "user_management.py"))
             assert user_management_roots == user_management_node["children"]
 
@@ -380,7 +380,7 @@ class TestLanguageServerSymbols:
         user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
-            assert user_management_rel_path == "examples/user_management.py"
+            assert user_management_rel_path == os.path.join("examples", "user_management.py")
             _, user_management_roots = language_server.request_document_symbols(str(repo_path / "examples" / "user_management.py"))
             assert user_management_roots == user_management_node["children"]
 
