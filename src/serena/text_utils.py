@@ -108,11 +108,11 @@ def search_text(
     :raises: ValueError if the pattern is not valid
 
     """
-    if source_file_path and not content:
+    if source_file_path and content is None:
         with open(source_file_path) as f:
             content = f.read()
 
-    if not content:
+    if content is None:
         raise ValueError("Pass either content or source_file_path")
 
     matches = []
