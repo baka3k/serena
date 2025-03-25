@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 def scan_directory(
     path: str,
-    recursive=False,
+    recursive: bool = False,
     relative_to: str | None = None,
     ignored_dirs: Sequence[str] = (),
     ignored_files: Sequence[str] = (),
@@ -24,7 +24,7 @@ def scan_directory(
     rel_base = os.path.abspath(relative_to) if relative_to else None
 
     # Helper function to check if an item should be ignored
-    def is_ignored(entry_path, ignored_items):
+    def is_ignored(entry_path: str, ignored_items: Sequence[str]) -> bool:
         entry_name = os.path.basename(entry_path)
 
         # Check if name is directly in ignored list

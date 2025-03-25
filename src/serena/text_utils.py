@@ -52,7 +52,7 @@ class MatchedConsecutiveLines:
     matched_lines: list[TextLine] = field(default_factory=list)
     lines_after_matched: list[TextLine] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for line in self.lines:
             if line.match_type == LineType.BEFORE_MATCH:
                 self.lines_before_matched.append(line)

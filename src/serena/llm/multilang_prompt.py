@@ -12,7 +12,7 @@ LANG_CODES = ["en", "de"]
 
 
 class PromptTemplate(ToStringMixin):
-    def __init__(self, name: str, jinja_template_string: str):
+    def __init__(self, name: str, jinja_template_string: str) -> None:
         self.name = name
         self.jinja_template = JinjaTemplate(jinja_template_string.strip())
         self.parameters = self.jinja_template.get_parameters()
@@ -20,15 +20,15 @@ class PromptTemplate(ToStringMixin):
     def _tostring_excludes(self) -> list[str]:
         return ["jinja_template"]
 
-    def instantiate(self, **kwargs) -> str:
+    def instantiate(self, **kwargs: Any) -> str:
         return self.jinja_template.render(**kwargs)
 
 
 class PromptList:
-    def __init__(self, items: list[str]):
+    def __init__(self, items: list[str]) -> None:
         self.items = [x.strip() for x in items]
 
-    def to_string(self):
+    def to_string(self) -> str:
         bullet = " * "
         indent = " " * len(bullet)
         items = [x.replace("\n", "\n" + indent) for x in self.items]
@@ -43,7 +43,7 @@ class MultiLangContainer(Generic[T], ToStringMixin):
     Represents a container of items which are associated with different languages
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self.name = name
         self.lang2item: dict[str, T] = {}
 
@@ -63,7 +63,7 @@ class MultiLangContainer(Generic[T], ToStringMixin):
         If the requested language is not found, raise an exception
         """
 
-    def add_item(self, item: T, lang: str = ""):
+    def add_item(self, item: T, lang: str = "") -> None:
         self.lang2item[lang] = item
 
     def get_item(self, lang: str, fallback_mode: FallbackMode = FallbackMode.EXCEPTION) -> T:
@@ -105,6 +105,7 @@ class MultiLangPromptTemplate(MultiLangContainer[PromptTemplate]):
                     params == prev_params
                 ), f"Parameters of MLPT '{self.name}' are inconsistent: {sorted(params)} vs {sorted(prev_params)}"
             prev_params = params
+        assert prev_params is not None
         return sorted(prev_params)
 
 
@@ -126,7 +127,7 @@ class MultiLangPromptTemplateCollection:
           The language of all can be set by specifying the key 'lang' in addition to 'prompts'.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.prompt_templates: dict[str, MultiLangPromptTemplate] = {}
         self.prompt_lists: dict[str, MultiLangPromptList] = {}
         prompts_dir = self._prompt_template_folder()
@@ -141,7 +142,7 @@ class MultiLangPromptTemplateCollection:
             prompts_dir = os.path.join(dir_path, "prompts")
             if os.path.isdir(prompts_dir):
                 break
-        if not os.path.isdir(prompts_dir):
+        if prompts_dir is None or not os.path.isdir(prompts_dir):
             raise FileNotFoundError("Could not find the 'prompts' directory")
         return prompts_dir
 
@@ -159,7 +160,7 @@ class MultiLangPromptTemplateCollection:
 
         return container, lang
 
-    def _add_prompt_template(self, prompt_name: str, jinja_prompt_template: str):
+    def _add_prompt_template(self, prompt_name: str, jinja_prompt_template: str) -> None:
         """
         :param prompt_name: a prompt name, which may have a language shortcode suffix (e.g. "_de")
         :param jinja_prompt_template: the actual prompt string which may contain placeholders/parameters (e.g. "{name}")
@@ -167,7 +168,7 @@ class MultiLangPromptTemplateCollection:
         multilang_prompt_template, lang = self._container_lang(prompt_name, self.prompt_templates, MultiLangPromptTemplate)
         multilang_prompt_template.add_item(PromptTemplate(prompt_name, jinja_prompt_template), lang=lang)
 
-    def _add_prompt_list(self, prompt_name: str, prompt_list: list[str]):
+    def _add_prompt_list(self, prompt_name: str, prompt_list: list[str]) -> None:
         """
         :param prompt_name: a prompt name, which may have a language shortcode suffix (e.g. "_de")
         :param prompt_list: a list of prompts
@@ -175,7 +176,7 @@ class MultiLangPromptTemplateCollection:
         multilang_prompt_list, lang = self._container_lang(prompt_name, self.prompt_lists, MultiLangPromptList)
         multilang_prompt_list.add_item(PromptList(prompt_list), lang=lang)
 
-    def _read_prompt_templates(self, prompts_dir: str):
+    def _read_prompt_templates(self, prompts_dir: str) -> None:
         for fn in os.listdir(prompts_dir):
             path = os.path.join(prompts_dir, fn)
             if fn.endswith(".txt"):
