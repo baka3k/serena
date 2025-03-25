@@ -398,11 +398,11 @@ class TestLanguageServerSymbols:
 
         # Check for specific symbols from services.py
         expected_symbols = [
-            ("UserService", SymbolKind.Class, 9),
-            ("ItemService", SymbolKind.Class, 40),
-            ("create_service_container", SymbolKind.Function, 67),
-            ("user_var_str", SymbolKind.Variable, 73),
-            ("user_service", SymbolKind.Variable, 76),
+            ("UserService", SymbolKind.Class, 9, 6),
+            ("ItemService", SymbolKind.Class, 40, 6),
+            ("create_service_container", SymbolKind.Function, 67, 4),
+            ("user_var_str", SymbolKind.Variable, 73, 0),
+            ("user_service", SymbolKind.Variable, 76, 0),
         ]
 
         for symbol in expected_symbols:

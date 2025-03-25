@@ -833,12 +833,12 @@ class LanguageServer:
         start_path = start_dir_relative_path or self.repository_root_path
         return await process_directory(start_path)
     
-    async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int]]]:
+    async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
         An overview of the given directory. 
         
         Maps relative paths of all contained files to info about top-level symbols in the file 
-        (name, kind, line).
+        (name, kind, line, column).
         """
         if not self.server_started:
             self.logger.log(
@@ -851,7 +851,7 @@ class LanguageServer:
         symbol_tree = await self.request_full_symbol_tree(relative_dir_path)
         
         # Initialize result dictionary
-        result: dict[str, list[tuple[str, multilspy_types.SymbolKind, int]]] = defaultdict(list)
+        result: dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]] = defaultdict(list)
         
         # Helper function to process a symbol and its children
         def process_symbol(symbol: multilspy_types.UnifiedSymbolInformation):
@@ -859,11 +859,13 @@ class LanguageServer:
                 # For file symbols, process their children (top-level symbols)
                 for child in symbol["children"]:
                     assert "location" in child
+                    assert "selectionRange" in child
                     path = Path(child["location"]["relativePath"]).resolve().relative_to(self.repository_root_path)
                     result[str(path)].append((
                         child["name"],
                         child["kind"],
-                        child["location"]["range"]["start"]["line"]
+                        child["selectionRange"]["start"]["line"],
+                        child["selectionRange"]["start"]["character"]
                     ))
             # For package/directory symbols, process their children
             for child in symbol["children"]:
@@ -1511,12 +1513,12 @@ class SyncLanguageServer:
         ).result()
         return result
     
-    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int]]]:
+    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
         An overview of the given directory. 
         
         Maps relative paths of all contained files to info about top-level symbols in the file 
-        (name, kind, line).
+        (name, kind, line, column).
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
