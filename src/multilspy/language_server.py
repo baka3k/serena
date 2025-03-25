@@ -8,16 +8,18 @@ The details of Language Specific configuration are not exposed to the user.
 import asyncio
 from copy import copy
 import dataclasses
+from fnmatch import fnmatch
 import hashlib
 import json
 import pickle
 import logging
 import os
 import pathlib
+import re
 import threading
 from contextlib import asynccontextmanager, contextmanager
 
-from serena.text_utils import MatchedConsecutiveLines, LineType, TextLine
+from serena.text_utils import MatchedConsecutiveLines, LineType, TextLine, search_text
 from .lsp_protocol_handler.lsp_constants import LSPConstants
 from  .lsp_protocol_handler import lsp_types as LSPTypes
 
@@ -102,11 +104,11 @@ class LanguageServer:
             return PyrightServer(config, logger, repository_root_path)
             # It used to be jedi, but pyright is a bit faster, and also more actively maintained
             # Keeping the previous code for reference
-            # from multilspy.language_servers.jedi_language_server.jedi_server import (
-            #     JediServer,
-            # )
+            from multilspy.language_servers.jedi_language_server.jedi_server import (
+                JediServer,
+            )
 
-            # return JediServer(config, logger, repository_root_path)
+            return JediServer(config, logger, repository_root_path)
         elif config.code_language == Language.JAVA:
             from multilspy.language_servers.eclipse_jdtls.eclipse_jdtls import (
                 EclipseJDTLS,
@@ -888,11 +890,79 @@ class LanguageServer:
                 logging.ERROR,
             )
             raise MultilspyException("Language Server not started")
+        # TODO: this worked in jedi, but pyright and basedpyright return nothing...
+        # I don't know why
+        # params = LSPTypes.WorkspaceSymbolParams(query="")  # Empty query returns all symbols
+        # symbols = await self.server.send.workspace_symbol(params) or []
         
-        params = LSPTypes.WorkspaceSymbolParams(query="")  # Empty query returns all symbols
-        symbols = await self.server.send.workspace_symbol(params) or []
-        return list({str(Path(s["location"]["uri"].replace("file://", "")).resolve().relative_to(self.repository_root_path)) for s in symbols})
+        # Thus, instead of calling all symbols, we hack this and use the symbol tree instead, which
+        # seems to work in all these language servers
+        # walk through all children recursively, find all symbols of type Module and collect their relative paths
+        roots = await self.request_full_symbol_tree()
+        paths = [] 
+        def collect_module_files(symbol):
+            if symbol["kind"] == multilspy_types.SymbolKind.Module:
+                assert "location" in symbol
+                paths.append(symbol["location"]["relativePath"])
+            
+            elif symbol["kind"] == multilspy_types.SymbolKind.Package:
+                for child in symbol["children"]:
+                    collect_module_files(child)
+        
+        for root in roots:
+            collect_module_files(root)
+        
+        return paths
     
+    
+    async def search_files_for_pattern(
+        self,
+        pattern: re.Pattern | str,
+        context_lines_before: int = 0,
+        context_lines_after: int = 0,
+        paths_include_glob: str | None = None,
+        paths_exclude_glob: str | None = None,
+    ) -> list[MatchedConsecutiveLines]:
+        """
+        Search for a pattern across all files analyzed by the Language Server.
+        
+        :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
+        :param context_lines_before: Number of lines of context to include before each match
+        :param context_lines_after: Number of lines of context to include after each match
+        :param paths_include_glob: Glob pattern to filter which files to include in the search
+        :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+        :return: List of matched consecutive lines with context
+        """
+        if isinstance(pattern, str):
+            pattern = re.compile(pattern)
+        
+        matches = []
+        all_files = await self.request_parsed_files()
+        for path in all_files:
+            # Apply glob filters if provided
+            if paths_include_glob and not fnmatch(path, paths_include_glob):
+                self.logger.log(f"Skipping {path}: does not match include pattern {paths_include_glob}", logging.DEBUG)
+                continue
+            
+            if paths_exclude_glob and fnmatch(path, paths_exclude_glob):
+                self.logger.log(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}", logging.DEBUG)
+                continue
+                
+            file_content = self.retrieve_full_file_content(path)
+            search_results = search_text(
+                pattern, 
+                file_content, 
+                source_file_path=path, 
+                allow_multiline_match=True, 
+                context_lines_before=context_lines_before, 
+                context_lines_after=context_lines_after
+            )
+            if len(search_results) > 0:
+                self.logger.log(f"Found {len(search_results)} matches in {path}", logging.DEBUG)
+                matches.extend(search_results)
+        
+        return matches
+                
     async def request_referencing_symbols(
         self,
         relative_file_path: str,
@@ -1554,6 +1624,30 @@ class SyncLanguageServer:
         :return MatchedConsecutiveLines: A container with the desired lines.
         """
         return self.language_server.retrieve_content_around_line(relative_file_path, line, context_lines_before, context_lines_after)
+    
+    def search_files_for_pattern(
+        self,
+        pattern: re.Pattern | str,
+        context_lines_before: int = 0,
+        context_lines_after: int = 0,
+        paths_include_glob: str | None = None,
+        paths_exclude_glob: str | None = None,
+    ) -> list[MatchedConsecutiveLines]:
+        """
+        Search for a pattern across all files analyzed by the Language Server.
+        
+        :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
+        :param context_lines_before: Number of lines of context to include before each match
+        :param context_lines_after: Number of lines of context to include after each match
+        :param paths_include_glob: Glob pattern to filter which files to include in the search
+        :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+        :return: List of matched consecutive lines with context
+        """
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.search_files_for_pattern(pattern, context_lines_before, context_lines_after, paths_include_glob, paths_exclude_glob), self.loop
+        ).result()
+        return result
     
     def start(self) -> "SyncLanguageServer":
         """
