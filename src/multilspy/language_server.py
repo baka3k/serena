@@ -190,11 +190,12 @@ class LanguageServer:
         self.language_id = language_id
         self.open_file_buffers: Dict[str, LSPFileBuffer] = {}
         
-        # --------------------------------- MODIFICATIONS BY MISCHA ---------------------------------
+        # --------------------------------- MODIFICATIONS BY ORAIOS ---------------------------------
         self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self.load_cache()
         self._cache_has_changed = bool
+        self.language = Language(language_id)
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["LanguageServer"]:
@@ -765,13 +766,15 @@ class LanguageServer:
             raise MultilspyException("Language Server not started")
 
         # Helper function to check if a path should be ignored
-        def should_ignore_path(path: str) -> bool:
+        def should_ignore_dir(path: str) -> bool:
             parts = path.split(os.sep)
             return any(part.startswith('.') or part == '__pycache__' for part in parts)
 
+        fn_matcher = self.language.get_source_fn_matcher()
+
         # Helper function to recursively process directories
         async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
-            if should_ignore_path(dir_path):
+            if should_ignore_dir(dir_path):
                 return []
 
             result = []
@@ -803,6 +806,9 @@ class LanguageServer:
                     package_symbol["children"].extend(child_symbols)
 
                 elif os.path.isfile(abs_item_path):
+                    if not fn_matcher.is_relevant_filename(item):
+                        continue
+
                     _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
                     
                     # Create module symbol

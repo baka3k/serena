@@ -1,9 +1,24 @@
 """
 Configuration parameters for Multilspy.
 """
-
+import fnmatch
 from enum import Enum
 from dataclasses import dataclass
+
+
+class FilenameMatcher:
+    def __init__(self, *patterns: str) -> None:
+        """
+        :param patterns: fnmatch-compatible patterns
+        """
+        self.patterns = patterns
+
+    def is_relevant_filename(self, fn: str) -> bool:
+        for pattern in self.patterns:
+            if fnmatch.fnmatch(fn, pattern):
+                return True
+        return False
+
 
 class Language(str, Enum):
     """
@@ -21,6 +36,14 @@ class Language(str, Enum):
 
     def __str__(self) -> str:
         return self.value
+
+    def get_source_fn_matcher(self) -> FilenameMatcher:
+        match self:
+            case self.PYTHON:
+                return FilenameMatcher("*.py")
+            case _:
+                raise ValueError
+
 
 @dataclass
 class MultilspyConfig:
