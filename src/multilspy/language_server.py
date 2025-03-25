@@ -775,11 +775,13 @@ class LanguageServer:
 
         # Helper function to recursively process directories
         async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
-            if should_ignore_dir(dir_path):
+            abs_dir_path = self.repository_root_path if dir_path == "." else os.path.join(self.repository_root_path, dir_path)
+            abs_dir_path = os.path.realpath(abs_dir_path)
+
+            if should_ignore_dir(abs_dir_path):
                 return []
 
             result = []
-            abs_dir_path = os.path.join(self.repository_root_path, dir_path)
             try:
                 items = os.listdir(abs_dir_path)
             except OSError:
@@ -787,7 +789,7 @@ class LanguageServer:
 
             # Create package symbol for directory
             package_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
-                name=os.path.basename(dir_path),
+                name=os.path.basename(abs_dir_path),
                 kind=multilspy_types.SymbolKind.Package,
                 location=multilspy_types.Location(
                     uri=str(pathlib.Path(abs_dir_path).as_uri()),
