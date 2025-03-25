@@ -1355,7 +1355,7 @@ class SyncLanguageServer:
         yield self
         asyncio.run_coroutine_threadsafe(ctx.__aexit__(None, None, None), loop=self.loop).result()
         self.loop.call_soon_threadsafe(self.loop.stop)
-        loop_thread.join()
+        self.loop_thread.join()
 
     def request_definition(self, file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
         """
