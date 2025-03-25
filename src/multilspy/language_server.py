@@ -6,6 +6,7 @@ The details of Language Specific configuration are not exposed to the user.
 """
 
 import asyncio
+from collections import defaultdict
 from copy import copy
 import dataclasses
 from fnmatch import fnmatch
@@ -742,7 +743,7 @@ class LanguageServer:
         self._cache_has_changed = True
         return result
     
-    async def request_full_symbol_tree(self, start_package_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+    async def request_full_symbol_tree(self, start_dir_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
         
@@ -829,9 +830,50 @@ class LanguageServer:
             return result
 
         # Start from the root or the specified directory
-        start_path = start_package_relative_path or self.repository_root_path
+        start_path = start_dir_relative_path or self.repository_root_path
         return await process_directory(start_path)
+    
+    async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, int, int]]]:
+        """
+        An overview of the given directory. 
+        
+        Maps relative paths of all contained files to info about top-level symbols in the file 
+        (name, kind, line).
+        """
+        if not self.server_started:
+            self.logger.log(
+                "request_dir_overview called before Language Server started",
+                logging.ERROR,
+            )
+            raise MultilspyException("Language Server not started")
 
+        # Get the full symbol tree for the directory
+        symbol_tree = await self.request_full_symbol_tree(relative_dir_path)
+        
+        # Initialize result dictionary
+        result: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
+        
+        # Helper function to process a symbol and its children
+        def process_symbol(symbol: multilspy_types.UnifiedSymbolInformation):
+            if symbol["kind"] == multilspy_types.SymbolKind.File:
+                # For file symbols, process their children (top-level symbols)
+                for child in symbol["children"]:
+                    assert "location" in child
+                    path = Path(child["location"]["relativePath"]).resolve().relative_to(self.repository_root_path)
+                    result[str(path)].append((
+                        child["name"],
+                        child["kind"],
+                        child["location"]["range"]["start"]["line"]
+                    ))
+            # For package/directory symbols, process their children
+            for child in symbol["children"]:
+                process_symbol(child)
+        
+        # Process each root symbol
+        for root in symbol_tree:
+            process_symbol(root)
+        return result
+    
     async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
@@ -1468,7 +1510,19 @@ class SyncLanguageServer:
             self.language_server.request_full_symbol_tree(start_package_relative_path, include_body), self.loop
         ).result()
         return result
-
+    
+    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, int, int]]]:
+        """
+        An overview of the given directory. 
+        
+        Maps relative paths of all contained files to info about top-level symbols in the file 
+        (name, kind, line).
+        """
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_dir_overview(relative_dir_path), self.loop
+        ).result()
+        return result
 
     def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
