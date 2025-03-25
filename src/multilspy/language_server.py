@@ -779,8 +779,9 @@ class LanguageServer:
                 return []
 
             result = []
+            abs_dir_path = os.path.join(self.repository_root_path, dir_path)
             try:
-                items = os.listdir(os.path.join(self.repository_root_path, dir_path))
+                items = os.listdir(abs_dir_path)
             except OSError:
                 return []
 
@@ -789,17 +790,17 @@ class LanguageServer:
                 name=os.path.basename(dir_path),
                 kind=multilspy_types.SymbolKind.Package,
                 location=multilspy_types.Location(
-                    uri=str(pathlib.Path(os.path.join(self.repository_root_path, dir_path)).as_uri()),
+                    uri=str(pathlib.Path(abs_dir_path).as_uri()),
                     range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
-                    absolutePath=str(os.path.join(self.repository_root_path, dir_path)),
-                    relativePath=str(Path(dir_path).resolve().relative_to(self.repository_root_path)),
+                    absolutePath=str(abs_dir_path),
+                    relativePath=str(Path(abs_dir_path).resolve().relative_to(self.repository_root_path)),
                 ),
                 children=[]
             )
             result.append(package_symbol)
 
             for item in items:
-                item_path = os.path.join(dir_path, item)
+                item_path = os.path.join(abs_dir_path, item)
                 abs_item_path = os.path.join(self.repository_root_path, item_path)
 
                 if os.path.isdir(abs_item_path):
@@ -830,7 +831,7 @@ class LanguageServer:
             return result
 
         # Start from the root or the specified directory
-        start_path = start_dir_relative_path or self.repository_root_path
+        start_path = start_dir_relative_path or "."
         return await process_directory(start_path)
     
     async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
