@@ -876,7 +876,10 @@ class LanguageServer:
         
     
     async def request_parsed_files(self) -> list[str]:
-        """This is slow, as it finds all files by finding all symbols. 
+        """
+        Retrieves relative paths of all files analyzed by the Language Server.
+        
+        This is slow, as it finds all files by finding all symbols. 
         
         This seems to be the only way, the LSP does not provide any endpoints for listing project files."""
         if not self.server_started:
@@ -888,7 +891,7 @@ class LanguageServer:
         
         params = LSPTypes.WorkspaceSymbolParams(query="")  # Empty query returns all symbols
         symbols = await self.server.send.workspace_symbol(params) or []
-        return list({s["location"]["uri"].replace("file://", "") for s in symbols})
+        return list({str(Path(s["location"]["uri"].replace("file://", "")).resolve().relative_to(self.repository_root_path)) for s in symbols})
     
     async def request_referencing_symbols(
         self,
