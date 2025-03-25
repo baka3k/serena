@@ -833,7 +833,7 @@ class LanguageServer:
         start_path = start_dir_relative_path or self.repository_root_path
         return await process_directory(start_path)
     
-    async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, int, int]]]:
+    async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int]]]:
         """
         An overview of the given directory. 
         
@@ -851,7 +851,7 @@ class LanguageServer:
         symbol_tree = await self.request_full_symbol_tree(relative_dir_path)
         
         # Initialize result dictionary
-        result: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
+        result: dict[str, list[tuple[str, multilspy_types.SymbolKind, int]]] = defaultdict(list)
         
         # Helper function to process a symbol and its children
         def process_symbol(symbol: multilspy_types.UnifiedSymbolInformation):
@@ -1511,7 +1511,7 @@ class SyncLanguageServer:
         ).result()
         return result
     
-    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, int, int]]]:
+    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int]]]:
         """
         An overview of the given directory. 
         

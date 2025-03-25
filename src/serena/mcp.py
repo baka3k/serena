@@ -186,6 +186,25 @@ def list_dir(ctx: Context, relative_path: str, recursive: bool) -> str:
 
 
 @mcp.tool()
+def get_dir_overview(ctx: Context, relative_path: str) -> str:
+    """
+    Get an overview of the given directory.
+    For each file in the directory, we list the top-level symbols in the file (name, kind, line).
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the directory to get the overview of
+    :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line).
+    """
+    log.info(f"get_dir_overview: {relative_path=}")
+
+    class GetDirOverviewTool(Tool):
+        def _execute(self) -> str:
+            return json.dumps(self.langsrv.request_dir_overview(relative_path))
+
+    return GetDirOverviewTool(ctx).execute()
+
+
+@mcp.tool()
 def onboarding(ctx: Context) -> str:
     """
     :param ctx: the context object, which will be created and provided automatically
