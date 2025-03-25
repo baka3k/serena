@@ -166,6 +166,9 @@ class SymbolKind(IntEnum):
     Module = 2
     Namespace = 3
     Package = 4
+    """
+    Represents a package or simply a directory in the filesystem
+    """
     Class = 5
     Method = 6
     Property = 7

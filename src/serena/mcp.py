@@ -21,6 +21,7 @@ from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from serena.llm.prompt_factory import PromptFactory
+from serena.symbol import SymbolRetriever
 from serena.util.file_system import scan_directory
 
 log = logging.getLogger(__name__)
@@ -183,6 +184,46 @@ def list_dir(ctx: Context, relative_path: str, recursive: bool) -> str:
             return json.dumps({"dirs": dirs, "files": files})
 
     return ListDirTool(ctx).execute()
+
+
+@mcp.tool()
+def find_symbol(ctx: Context, name: str, depth: int = 0) -> str:
+    """
+    Retrieves information on the symbol/code entity with the given name
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param name: the name of the symbol
+    :param depth: specifies the depth up to which descendants of the symbol are to be retrieved
+        (e.g. depth 1 will retrieve methods for the case where the symbol refers to a class)
+    :return: a list of JSON objects with the result
+    """
+
+    class FindSymbolTool(Tool):
+        def _execute(self) -> str:
+            symbols = SymbolRetriever(self.langsrv).find(name)
+            symbol_dicts = [s.to_dict(kind=True, location=True, depth=depth) for s in symbols]
+            return json.dumps(symbol_dicts)
+
+    return FindSymbolTool(ctx).execute()
+
+
+@mcp.tool()
+def find_referencing_symbols(ctx: Context, relative_path: str, line: int, column: int) -> str:
+    """
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the file containing the symbol
+    :param line: the line number
+    :param column: the column
+    :return: a list of JSON objects with the symbols referencing the requested symbol
+    """
+
+    class FindReferencingSymbolsTool(Tool):
+        def _execute(self) -> str:
+            symbols = SymbolRetriever(self.langsrv).find_references(relative_path, line, column)
+            symbol_dicts = [s.to_dict(kind=True, location=True, depth=0) for s in symbols]
+            return json.dumps(symbol_dicts)
+
+    return FindReferencingSymbolsTool(ctx).execute()
 
 
 @mcp.tool()
