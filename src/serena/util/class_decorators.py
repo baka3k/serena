@@ -1,7 +1,10 @@
-def singleton(cls):
+from typing import Any
+
+
+def singleton(cls: type[Any]) -> Any:
     instance = None
 
-    def get_instance(*args, **kwargs):
+    def get_instance(*args: Any, **kwargs: Any) -> Any:
         nonlocal instance
         if instance is None:
             instance = cls(*args, **kwargs)

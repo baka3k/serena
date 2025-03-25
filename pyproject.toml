@@ -59,6 +59,7 @@ dev = [
   "sphinx-toolbox>=3.5.0",
   "sphinxcontrib-bibtex",
   "sphinxcontrib-spelling>=8.0.0",
+  "types-pyyaml>=6.0.12.20241230",
 ]
 
 [project.urls]

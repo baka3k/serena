@@ -293,6 +293,8 @@ class TestLanguageServerSymbols:
 
         # Step 3: Verify that they refer to the same symbol
         assert defining_symbol["kind"] == containing_symbol["kind"]
+        assert "location" in defining_symbol
+        assert "location" in containing_symbol
         assert defining_symbol["location"]["uri"] == containing_symbol["location"]["uri"]
 
         # The integration test is successful if we've gotten this far,
@@ -320,35 +322,46 @@ class TestLanguageServerSymbols:
                 warnings.warn("Could not verify container hierarchy - implementation detail")
 
     def test_symbol_tree_structure(self, language_server: SyncLanguageServer, repo_path: Path):
-        """Test the symbol tree structure."""
-        file_path = str(repo_path / "test_repo" / "services.py")
-        symbols, root_nodes = language_server.request_document_symbols(file_path)
-        assert len(symbols) > 0
-        assert {root["name"] for root in root_nodes} == {
-            "UserService",
-            "ItemService",
-            "create_service_container",
-            "user_var_str",
-            "user_service",
-        }
-        user_service_root = next(root for root in root_nodes if root["name"] == "UserService")
-        assert user_service_root
-        assert "children" in user_service_root
-        assert {child["name"] for child in user_service_root["children"] if child["kind"] != SymbolKind.Variable} == {
-            "__init__",
-            "create_user",
-            "get_user",
-            "list_users",
-            "delete_user",
-        }
+        """Test that the symbol tree structure is correctly built."""
+        # Get all symbols in the test file
+        repo_structure = language_server.request_full_symbol_tree()
+        assert len(repo_structure) == 1
+        # Assert that the root symbol is the test_repo directory
+        assert repo_structure[0]["name"] == "test_repo"
+        assert repo_structure[0]["kind"] == SymbolKind.Package
+        assert "children" in repo_structure[0]
+        # Assert that the children are the top-level packages
+        child_names = {child["name"] for child in repo_structure[0]["children"]}
+        child_kinds = {child["kind"] for child in repo_structure[0]["children"]}
+        assert child_names == {"test_repo", "custom_test", "examples", "scripts"}
+        assert child_kinds == {SymbolKind.Package}
+        examples_package = next(child for child in repo_structure[0]["children"] if child["name"] == "examples")
+        # assert that children are __init__ and user_management
+        assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
+        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.Module}
 
-        # Now recursively flatten the tree into a set of names and assert that it coincides with the set of symbol names
-        all_names_in_tree = set()
+        # assert that tree of user_management node is same as retrieved directly
+        user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
+        user_management_rel_path = user_management_node["location"]["relativePath"]
+        assert user_management_rel_path == "examples/user_management.py"
+        _, user_management_roots = language_server.request_document_symbols(str(repo_path / "examples" / "user_management.py"))
+        assert user_management_roots == user_management_node["children"]
 
-        def flatten_tree(nodes):
-            for node in nodes:
-                all_names_in_tree.add(node["name"])
-                flatten_tree(node.get("children", []))
+    def test_symbol_tree_structure_subdir(self, language_server: SyncLanguageServer, repo_path: Path):
+        """Test that the symbol tree structure is correctly built."""
+        # Get all symbols in the test file
+        examples_package_roots = language_server.request_full_symbol_tree(start_package_relative_path=str(repo_path / "examples"))
+        assert len(examples_package_roots) == 1
+        examples_package = examples_package_roots[0]
+        assert examples_package["name"] == "examples"
+        assert examples_package["kind"] == SymbolKind.Package
+        # assert that children are __init__ and user_management
+        assert {child["name"] for child in examples_package["children"]} == {"__init__", "user_management"}
+        assert {child["kind"] for child in examples_package["children"]} == {SymbolKind.Module}
 
-        flatten_tree(root_nodes)
-        assert all_names_in_tree == {symbol["name"] for symbol in symbols}
+        # assert that tree of user_management node is same as retrieved directly
+        user_management_node = next(child for child in examples_package["children"] if child["name"] == "user_management")
+        user_management_rel_path = user_management_node["location"]["relativePath"]
+        assert user_management_rel_path == "examples/user_management.py"
+        _, user_management_roots = language_server.request_document_symbols(str(repo_path / "examples" / "user_management.py"))
+        assert user_management_roots == user_management_node["children"]

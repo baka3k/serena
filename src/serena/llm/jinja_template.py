@@ -1,3 +1,5 @@
+from typing import Any
+
 import jinja2
 import jinja2.meta
 import jinja2.nodes
@@ -8,21 +10,21 @@ from serena.util.class_decorators import singleton
 
 @singleton
 class JinjaEnvProvider:
-    def __init__(self):
-        self._env = None
+    def __init__(self) -> None:
+        self._env: jinja2.Environment | None = None
 
-    def get_env(self):
+    def get_env(self) -> jinja2.Environment:
         if self._env is None:
             self._env = jinja2.Environment()
         return self._env
 
 
 class JinjaTemplate:
-    def __init__(self, template_string: str):
+    def __init__(self, template_string: str) -> None:
         self._template_string = template_string
         self._template = JinjaEnvProvider().get_env().from_string(self._template_string)
 
-    def render(self, **kwargs) -> str:
+    def render(self, **kwargs: Any) -> str:
         return self._template.render(**kwargs)
 
     def get_parameters(self) -> set[str]:
