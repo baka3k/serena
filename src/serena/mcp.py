@@ -204,7 +204,7 @@ def list_dir(ctx: Context, relative_path: str, recursive: bool, max_answer_chars
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the directory to list; pass "." to scan the project root
     :param recursive: whether to scan subdirectories recursively
-    :param max_answer_chars: if the directory is longer than this number of characters,
+    :param max_answer_chars: if the output is longer than this number of characters,
         no content will be returned. Don't adjust unless there is really no other way to get the content
         required for the task.
     :return: a JSON object with the names of directories and files within the given directory
