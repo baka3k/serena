@@ -7,6 +7,7 @@ import os
 import sys
 import traceback
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -259,3 +260,44 @@ def onboarding(ctx: Context) -> str:
             return self.prompt_factory.create_onboarding_prompt(onboarding_file=onboarding_file)
 
     return OnboardingPrompt(ctx).create()
+
+
+@mcp.tool()
+def search_files_for_pattern(
+    ctx: Context,
+    pattern: str,
+    context_lines_before: int = 0,
+    context_lines_after: int = 0,
+    paths_include_glob: str | None = None,
+    paths_exclude_glob: str | None = None,
+) -> str:
+    """
+    Search for a pattern in all codefiles in the project.
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
+    :param context_lines_before: Number of lines of context to include before each match
+    :param context_lines_after: Number of lines of context to include after each match
+    :param paths_include_glob: Glob pattern to filter which files to include in the search
+    :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+    :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
+
+    """
+
+    class SearchInAllCodeTool(Tool):
+        def _execute(self) -> str:
+            matches = self.langsrv.search_files_for_pattern(
+                pattern=pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
+                paths_include_glob=paths_include_glob,
+                paths_exclude_glob=paths_exclude_glob,
+            )
+            # group matches by file
+            file_to_matches: dict[str, list[str]] = defaultdict(list)
+            for match in matches:
+                assert match.source_file_path is not None
+                file_to_matches[match.source_file_path].append(match.to_display_string())
+            return json.dumps(file_to_matches)
+
+    return SearchInAllCodeTool(ctx).execute()
