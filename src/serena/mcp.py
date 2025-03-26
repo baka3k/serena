@@ -245,6 +245,27 @@ def get_dir_overview(ctx: Context, relative_path: str, max_answer_chars: int = _
 
 
 @mcp.tool()
+def get_document_overview(ctx: Context, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    """
+    Get an overview of the given file.
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the file to get the overview of
+    :param max_answer_chars: if the overview is longer than this number of characters,
+        no content will be returned. Don't adjust unless there is really no other way to get the content
+        required for the task.
+    :return: a JSON object with the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+    """
+    log.info(f"get_document_overview: {relative_path=}")
+
+    class GetDocumentOverviewTool(Tool):
+        def _execute(self) -> str:
+            return json.dumps(self.langsrv.request_document_overview(relative_path))
+
+    return GetDocumentOverviewTool(ctx).execute(max_answer_chars=max_answer_chars)
+
+
+@mcp.tool()
 def find_symbol(
     ctx: Context,
     name: str,

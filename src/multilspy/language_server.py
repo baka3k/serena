@@ -843,16 +843,7 @@ class LanguageServer:
         Maps relative paths of all contained files to info about top-level symbols in the file 
         (name, kind, line, column).
         """
-        if not self.server_started:
-            self.logger.log(
-                "request_dir_overview called before Language Server started",
-                logging.ERROR,
-            )
-            raise MultilspyException("Language Server not started")
-
-        # Get the full symbol tree for the directory
         symbol_tree = await self.request_full_symbol_tree(relative_dir_path)
-        
         # Initialize result dictionary
         result: dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]] = defaultdict(list)
         
@@ -878,6 +869,22 @@ class LanguageServer:
         for root in symbol_tree:
             process_symbol(root)
         return result
+    
+    async def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
+        """
+        An overview of the given file. 
+        Returns the the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+        """
+        _, document_roots = await self.request_document_symbols(relative_file_path)
+        return [
+            (
+                root["name"],
+                root["kind"],
+                root["selectionRange"]["start"]["line"], # type: ignore
+                root["selectionRange"]["start"]["character"] # type: ignore
+            )
+            for root in document_roots
+        ]
     
     async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
@@ -1526,6 +1533,18 @@ class SyncLanguageServer:
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_dir_overview(relative_dir_path), self.loop
+        ).result()
+        return result
+    
+    def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
+        """
+        An overview of the given file. 
+        
+        Returns the the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+        """
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_document_overview(relative_file_path), self.loop
         ).result()
         return result
 

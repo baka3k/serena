@@ -407,3 +407,12 @@ class TestLanguageServerSymbols:
 
         for symbol in expected_symbols:
             assert symbol in services_symbols
+
+    def test_request_document_overview(self, language_server: SyncLanguageServer, repo_path: Path):
+        """Test that request_document_overview returns correct symbol information for a file."""
+        # Get overview of the user_management.py file
+        overview = language_server.request_document_overview(os.path.join("examples", "user_management.py"))
+
+        # Verify that we have entries for both files
+        symbol_names = {s_info[0] for s_info in overview}
+        assert {"UserStats", "UserManager", "process_user_data", "main"}.issubset(symbol_names)
