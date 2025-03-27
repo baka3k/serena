@@ -289,7 +289,9 @@ def find_symbol(
     :param ctx: the context object, which will be created and provided automatically
     :param name: the name of the symbols to find
     :param depth: specifies the depth up to which descendants of the symbol are to be retrieved
-        (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class)
+        (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class).
+        Provide a non-zero depth if you intend to subsequently query symbols that are contained in the
+        retrieved symbol.
     :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
         If None, the entire codebase will be considered.
     :param include_body: whether to include the body of all symbols in the result.
@@ -400,6 +402,64 @@ def replace_symbol_body(
             return "OK"
 
     return ReplaceSymbolBodyTool(ctx).execute()
+
+
+@mcp.tool()
+def append_after_symbol(
+    ctx: Context,
+    relative_path: str,
+    line: int,
+    column: int,
+    body: str,
+) -> str:
+    """
+    Appends the given body/content after the end of the definition of the given symbol (via its location).
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the file containing the symbol
+    :param line: the line number
+    :param column: the column
+    :param body: the body/content to be inserted
+    """
+
+    class AppendAfterSymbolTool(Tool):
+        def _execute(self) -> str:
+            SymbolManager(self.langsrv).append_after(
+                SymbolLocation(relative_path, line, column),
+                body=body,
+            )
+            return "OK"
+
+    return AppendAfterSymbolTool(ctx).execute()
+
+
+@mcp.tool()
+def insert_before_symbol(
+    ctx: Context,
+    relative_path: str,
+    line: int,
+    column: int,
+    body: str,
+) -> str:
+    """
+    Inserts the given body/content before the beginning of the definition of the given symbol (via its location).
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the file containing the symbol
+    :param line: the line number
+    :param column: the column
+    :param body: the body/content to be inserted
+    """
+
+    class AppendAfterSymbolTool(Tool):
+        def _execute(self) -> str:
+            SymbolManager(self.langsrv).insert_before(
+                SymbolLocation(relative_path, line, column),
+                body=body,
+            )
+            return "OK"
+
+    return AppendAfterSymbolTool(ctx).execute()
 
 
 @mcp.tool()

@@ -2,6 +2,7 @@ import logging
 import os
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from copy import copy
 from dataclasses import asdict, dataclass
 from typing import Any, Self
 
@@ -261,6 +262,14 @@ class SymbolManager:
             with open(abs_path, "w") as f:
                 f.write(file_buffer.contents)
 
+    @contextmanager
+    def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
+        symbol = self.find_by_location(location)
+        if symbol is None:
+            raise ValueError("Symbol not found")
+        with self._edited_file(location.relative_path):
+            yield symbol
+
     def replace_body(self, location: SymbolLocation, body: str) -> None:
         """
         Replace the body of the symbol at the given location with the given body
@@ -268,11 +277,30 @@ class SymbolManager:
         :param location: the location of the symbol to replace
         :param body: the new body
         """
-        symbol = self.find_by_location(location)
-        if symbol is None:
-            raise ValueError("Symbol not found")
-        with self._edited_file(location.relative_path):
+        with self._edited_symbol_location(location) as symbol:
             self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
             self.lang_server.insert_text_at_position(
                 location.relative_path, symbol.body_start_position["line"], symbol.body_start_position["character"], body
             )
+
+    def append_after(self, location: SymbolLocation, body: str) -> None:
+        """
+        Appends content after the given symbol
+
+        :param location: the location of the symbol after which to add new lines
+        :param body: the body of the entity to append
+        """
+        with self._edited_symbol_location(location) as symbol:
+            pos = symbol.body_end_position
+            self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
+
+    def insert_before(self, location: SymbolLocation, body: str) -> None:
+        """
+        Inserts content before the given symbol
+
+        :param location: the location of the symbol before which to add new lines
+        :param body: the body of the entity to insert
+        """
+        with self._edited_symbol_location(location) as symbol:
+            pos = copy(symbol.body_start_position)
+            self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
