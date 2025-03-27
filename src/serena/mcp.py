@@ -282,13 +282,17 @@ def find_symbol(
 
     :param ctx: the context object, which will be created and provided automatically
     :param name: the name of the symbols to find
+    :param depth: specifies the depth up to which descendants of the symbol are to be retrieved
+        (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class)
     :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
         If None, the entire codebase will be considered.
     :param include_body: whether to include the body of all symbols in the result.
-        Note: you can filter out the bodies of the children if you set include_children_body=False
-        in the to_dict method.
-    :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
+    :param include_kinds: an optional list of ints representing the LSP symbol kind.
         If provided, only symbols of the given kinds will be included in the result.
+        Valid kinds:
+        1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
+        11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
+        20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter
     :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
         Takes precedence over include_kinds.
     :param substring_matching: whether to use substring matching for the symbol name.
@@ -328,12 +332,16 @@ def find_referencing_symbols(
     max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
 ) -> str:
     """
+    Finds symbols that reference the symbol at the given location.
+    Note that this function can be used to find subclasses of a class, as subclasses are referencing symbols
+    that have the kind class.
+
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
     :param line: the line number
     :param column: the column
     :param include_body: whether to include the body of the symbols in the result
-    :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
+    :param include_kinds: an optional list of integers representing the LSP symbol kinds to include.
         If provided, only symbols of the given kinds will be included in the result.
     :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
         Takes precedence over include_kinds.
@@ -381,20 +389,19 @@ def search_files_for_pattern(
     max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
 ) -> str:
     """
-    Search for a pattern in all codefiles in the project.
+    Search for a pattern in all code files in the project.
 
     :param ctx: the context object, which will be created and provided automatically
     :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
     :param context_lines_before: Number of lines of context to include before each match
     :param context_lines_after: Number of lines of context to include after each match
-    :param paths_include_glob: Glob pattern to filter which files to include in the search
-    :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+    :param paths_include_glob: optional glob pattern specifying files to include in the search; if not provided, search globally.
+    :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search (takes precedence over paths_include_glob).
     :param max_answer_chars: if the output is longer than this number of characters,
         no content will be returned. Don't adjust unless there is really no other way to get the content
         required for the task. Instead, if the output is too long, you should
         make a stricter query.
     :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
-
     """
 
     class SearchInAllCodeTool(Tool):
