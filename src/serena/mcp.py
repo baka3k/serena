@@ -24,7 +24,7 @@ from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena.llm.prompt_factory import PromptFactory
-from serena.symbol import SymbolRetriever
+from serena.symbol import SymbolLocation, SymbolManager
 from serena.util.file_system import scan_directory
 
 log = logging.getLogger(__name__)
@@ -306,7 +306,7 @@ def find_symbol(
 
     class FindSymbolTool(Tool):
         def _execute(self) -> str:
-            symbols = SymbolRetriever(self.langsrv).find(
+            symbols = SymbolManager(self.langsrv).find_by_name(
                 name,
                 include_body=include_body,
                 include_kinds=include_kinds,
@@ -354,13 +354,46 @@ def find_referencing_symbols(
 
     class FindReferencingSymbolsTool(Tool):
         def _execute(self) -> str:
-            symbols = SymbolRetriever(self.langsrv).find_references(
-                relative_path, line, column, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+            symbols = SymbolManager(self.langsrv).find_referencing_symbols(
+                SymbolLocation(relative_path, line, column),
+                include_body=include_body,
+                include_kinds=include_kinds,
+                exclude_kinds=exclude_kinds,
             )
             symbol_dicts = [s.to_dict(kind=True, location=True, depth=0, include_body=include_body) for s in symbols]
             return json.dumps(symbol_dicts)
 
     return FindReferencingSymbolsTool(ctx).execute(max_answer_chars=max_answer_chars)
+
+
+@mcp.tool()
+def replace_symbol_body(
+    ctx: Context,
+    relative_path: str,
+    line: int,
+    column: int,
+    body: str,
+) -> str:
+    """
+    Replaces the body of the symbol at the given location
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the file containing the symbol
+    :param line: the line number
+    :param column: the column
+    :param body: the new symbol body. Important: Provide the correct level of indentation
+        (as the original body)
+    """
+
+    class ReplaceSymbolBodyTool(Tool):
+        def _execute(self) -> str:
+            SymbolManager(self.langsrv).replace_body(
+                SymbolLocation(relative_path, line, column),
+                body=body,
+            )
+            return "OK"
+
+    return ReplaceSymbolBodyTool(ctx).execute()
 
 
 @mcp.tool()

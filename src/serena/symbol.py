@@ -1,13 +1,30 @@
 import logging
+import os
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
 from typing import Any, Self
 
 from sensai.util.string import ToStringMixin
 
 from multilspy import SyncLanguageServer
-from multilspy.multilspy_types import SymbolKind, UnifiedSymbolInformation
+from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class SymbolLocation:
+    """
+    Represents the (start) location of a symbol identifier
+    """
+
+    relative_path: str
+    line: int
+    column: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 class Symbol(ToStringMixin):
@@ -35,6 +52,21 @@ class Symbol(ToStringMixin):
     @property
     def relative_path(self) -> str:
         return self.s["location"]["relativePath"]
+
+    @property
+    def location(self) -> SymbolLocation:
+        """
+        :return: the start location of the actual symbol identifier
+        """
+        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
+
+    @property
+    def body_start_position(self) -> Position:
+        return self.s["location"]["range"]["start"]
+
+    @property
+    def body_end_position(self) -> Position:
+        return self.s["location"]["range"]["end"]
 
     @property
     def line(self) -> int:
@@ -99,7 +131,7 @@ class Symbol(ToStringMixin):
             result["kind"] = self.kind
 
         if location:
-            result["location"] = {"relativePath": self.relative_path, "line": self.line, "column": self.column}
+            result["location"] = self.location.to_dict()
 
         if include_body:
             if self.body is None:
@@ -126,14 +158,14 @@ class Symbol(ToStringMixin):
         return result
 
 
-class SymbolRetriever:
+class SymbolManager:
     def __init__(self, lang_server: SyncLanguageServer) -> None:
         self.lang_server = lang_server
 
     def _to_symbols(self, items: list[UnifiedSymbolInformation]) -> list[Symbol]:
         return [Symbol(s) for s in items]
 
-    def find(
+    def find_by_name(
         self,
         name: str,
         dir_relative_path: str | None = None,
@@ -167,11 +199,22 @@ class SymbolRetriever:
             )
         return symbols
 
-    def find_references(
+    def get_document_symbols(self, relative_path: str) -> list[Symbol]:
+        symbol_dicts, roots = self.lang_server.request_document_symbols(relative_path, include_body=False)
+        symbols = [Symbol(s) for s in symbol_dicts]
+        return symbols
+
+    def find_by_location(self, location: SymbolLocation) -> Symbol | None:
+        symbol_dicts, roots = self.lang_server.request_document_symbols(location.relative_path, include_body=False)
+        for symbol_dict in symbol_dicts:
+            symbol = Symbol(symbol_dict)
+            if symbol.location == location:
+                return symbol
+        return None
+
+    def find_referencing_symbols(
         self,
-        relative_path: str,
-        line: int,
-        column: int,
+        symbol_location: SymbolLocation,
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
@@ -179,10 +222,7 @@ class SymbolRetriever:
         """
         Find all symbols that reference the given symbol.
 
-        :param relative_path: the relative path to the file containing the symbol
-        :param line: the line number of the symbol (0-indexed).
-        :param column: the column number of the symbol. Note that this usually corresponds to the
-            column in `selectionRange` of the symbol (as opposed to the `range`).
+        :param symbol_location: the location of the symbol for which to find references
         :param include_body: whether to include the body of all symbols in the result.
             Note: you can filter out the bodies of the children if you set include_children_body=False
             in the to_dict method.
@@ -193,7 +233,12 @@ class SymbolRetriever:
         :return: a list of symbols that reference the given symbol
         """
         symbol_dicts = self.lang_server.request_referencing_symbols(
-            relative_file_path=relative_path, line=line, column=column, include_imports=False, include_self=False, include_body=include_body
+            relative_file_path=symbol_location.relative_path,
+            line=symbol_location.line,
+            column=symbol_location.column,
+            include_imports=False,
+            include_self=False,
+            include_body=include_body,
         )
 
         if include_kinds is not None:
@@ -203,3 +248,28 @@ class SymbolRetriever:
             symbol_dicts = [s for s in symbol_dicts if s["kind"] not in exclude_kinds]
 
         return self._to_symbols(symbol_dicts)
+
+    @contextmanager
+    def _edited_file(self, relative_path: str) -> Iterator[None]:
+        with self.lang_server.open_file(relative_path) as file_buffer:
+            yield
+            root_path = self.lang_server.language_server.repository_root_path
+            abs_path = os.path.join(root_path, relative_path)
+            with open(abs_path, "w") as f:
+                f.write(file_buffer.contents)
+
+    def replace_body(self, location: SymbolLocation, body: str) -> None:
+        """
+        Replace the body of the symbol at the given location with the given body
+
+        :param location: the location of the symbol to replace
+        :param body: the new body
+        """
+        symbol = self.find_by_location(location)
+        if symbol is None:
+            raise ValueError("Symbol not found")
+        with self._edited_file(location.relative_path):
+            self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
+            self.lang_server.insert_text_at_position(
+                location.relative_path, symbol.body_start_position["line"], symbol.body_start_position["character"], body
+            )
