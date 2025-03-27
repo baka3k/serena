@@ -214,7 +214,10 @@ def list_dir(ctx: Context, relative_path: str, recursive: bool, max_answer_chars
     class ListDirTool(Tool):
         def _execute(self) -> str:
             dirs, files = scan_directory(
-                os.path.join(self.project_root, relative_path), recursive=recursive, ignored_dirs=self.project_config["ignored_dirs"]
+                os.path.join(self.project_root, relative_path),
+                relative_to=self.project_root,
+                recursive=recursive,
+                ignored_dirs=self.project_config["ignored_dirs"],
             )
             return json.dumps({"dirs": dirs, "files": files})
 
@@ -278,7 +281,10 @@ def find_symbol(
     max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
 ) -> str:
     """
-    Retrieves information on all symbols/code entities with the given name.
+    Retrieves information on all symbols/code entities, i.e. classes, methods, attributes, variables, etc.
+    with the given name.
+    The returned symbol location information can subsequently be used to edit the returned symbols
+    or to retrieve further information using other tools.
 
     :param ctx: the context object, which will be created and provided automatically
     :param name: the name of the symbols to find
