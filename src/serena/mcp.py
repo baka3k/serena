@@ -62,7 +62,7 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
         print(f"Project file not found: {project_file}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Starting serena server for project {project_file}")
+    log.info(f"Starting serena server for project {project_file}")
 
     # read project configuration
     with open(project_file, encoding="utf-8") as f:
