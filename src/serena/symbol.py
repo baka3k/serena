@@ -23,6 +23,9 @@ class SymbolLocation:
     line: int
     column: int
 
+    def __post_init__(self) -> None:
+        self.relative_path = self.relative_path.replace("/", os.path.sep)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
