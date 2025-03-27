@@ -814,7 +814,20 @@ class LanguageServer:
                         continue
 
                     _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
-                    
+
+                    def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
+                        for node in nodes:
+                            path = Path(node["location"]["relativePath"])
+                            if path.is_absolute():
+                                try:
+                                    path = path.relative_to(self.repository_root_path)
+                                    node["location"]["relativePath"] = str(path)
+                                except:
+                                    pass
+                            fix_relative_path(node["children"])
+
+                    fix_relative_path(root_nodes)
+
                     # Create file symbol
                     file_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
                         name=os.path.splitext(item)[0],
