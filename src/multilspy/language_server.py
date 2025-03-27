@@ -1367,14 +1367,14 @@ class SyncLanguageServer:
         return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path))
 
     @contextmanager
-    def open_file(self, relative_file_path: str) -> Iterator[None]:
+    def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
         """
         Open a file in the Language Server. This is required before making any requests to the Language Server.
 
         :param relative_file_path: The relative path of the file to open.
         """
-        with self.language_server.open_file(relative_file_path):
-            yield
+        with self.language_server.open_file(relative_file_path) as file_buffer:
+            yield file_buffer
 
     def insert_text_at_position(
         self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str
