@@ -1345,7 +1345,11 @@ class LanguageServer:
             return
         self.logger.log(f"Loading document symbols cache from {self._cache_path}", logging.INFO)
         with open(self._cache_path, "rb") as f:
-            self._document_symbols_cache = pickle.load(f)
+            try:
+                self._document_symbols_cache = pickle.load(f)
+            except:
+                # cache often becomes corrupt, so just skip loading it
+                pass
 
 
 @ensure_all_methods_implemented(LanguageServer)
