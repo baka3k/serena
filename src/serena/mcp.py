@@ -92,6 +92,7 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
 class MemoriesManager:
     def __init__(self, memory_dir: str):
         self._memory_dir = Path(memory_dir)
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_memory_file_path(self, memory_file_name: str) -> Path:
         return self._memory_dir / memory_file_name
