@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import inspect
 import json
 import os
 import platform
@@ -21,6 +22,7 @@ from mcp.server.fastmcp import server
 from mcp.server.fastmcp.prompts.base import Message, UserMessage
 from mcp.server.fastmcp.server import Context, FastMCP, Settings
 from sensai.util import logging
+from sensai.util.string import dict_string
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
@@ -37,14 +39,13 @@ log = logging.getLogger(__name__)
 
 def configure_logging(*args, **kwargs) -> None:  # type: ignore
     log_format = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
-    level = logging.DEBUG
+    level = logging.INFO
 
     # configure logging to stderr (will be captured by Claude Desktop); stdio is the MCP communication stream and cannot be used!
     logging.basicConfig(level=level, stream=sys.stderr, format=log_format)
 
     # configure logging to GUI window
-    log_viewer = GuiLogViewer(title="Serena Logs")
-    log_handler = GuiLogViewerHandler(log_viewer, level=level)
+    log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=level)
     Logger.root.addHandler(log_handler)
 
 
@@ -144,16 +145,29 @@ _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
 class Tool(Component):
-    _on_too_long_answer_msg = """
-The answer is too long to display ({} characters).
-Please try a more specific tool query or raise the max_answer_length parameter.
-"""
+    @staticmethod
+    def _log_tool_application(frame: Any) -> None:
+        params = {}
+        tool_name = None
+        for name, value in frame.f_locals.items():
+            if name == "ctx":
+                continue
+            if name.endswith("Tool"):
+                tool_name = name
+                continue
+            params[name] = value
+        log.info(f"{tool_name}: {dict_string(params)}")
 
     def execute(self, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         try:
+            self._log_tool_application(inspect.currentframe().f_back)  # type: ignore
             result = self._execute()
             if (n_chars := len(result)) > max_answer_chars:
-                return self._on_too_long_answer_msg.format(n_chars)
+                result = (
+                    f"The answer is too long ({n_chars} characters). "
+                    + "Please try a more specific tool query or raise the max_answer_chars parameter."
+                )
+            log.info(f"Result: {result}")
             return result
         except Exception as e:
             msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
@@ -206,7 +220,6 @@ def read_file(
         required for the task.
     :return: the full text of the file at the given relative path
     """
-    log.info(f"read_file: {relative_path=}")
 
     class ReadFileTool(Tool):
         def _execute(self) -> str:
@@ -230,7 +243,6 @@ def create_text_file(ctx: Context, relative_path: str, content: str) -> str:
     :param content: the (utf-8-encoded) content to write to the file
     :return: a message indicating success or failure
     """
-    log.info(f"create_file: {relative_path=}")
 
     class CreateFileTool(Tool):
         def _execute(self) -> str:
@@ -253,7 +265,6 @@ def list_dir(ctx: Context, relative_path: str, recursive: bool, max_answer_chars
         required for the task.
     :return: a JSON object with the names of directories and files within the given directory
     """
-    log.info(f"list_dir: {relative_path=}")
 
     class ListDirTool(Tool):
         def _execute(self) -> str:
@@ -282,7 +293,6 @@ def get_dir_overview(ctx: Context, relative_path: str, max_answer_chars: int = _
         (e.g. a subdirectory).
     :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line).
     """
-    log.info(f"get_dir_overview: {relative_path=}")
 
     class GetDirOverviewTool(Tool):
         def _execute(self) -> str:
@@ -303,7 +313,6 @@ def get_document_overview(ctx: Context, relative_path: str, max_answer_chars: in
         required for the task.
     :return: a JSON object with the list of tuples (name, kind, line, column) of all top-level symbols in the file.
     """
-    log.info(f"get_document_overview: {relative_path=}")
 
     class GetDocumentOverviewTool(Tool):
         def _execute(self) -> str:
@@ -563,7 +572,8 @@ def check_onboarding_performed(ctx: Context) -> str:
     before any question about code or the project is asked.
     You will call this tool only once per conversation.
     """
-    if len(list_memories(ctx)) == 0:
+    memories = json.loads(list_memories(ctx))
+    if len(memories) == 0:
         return (
             "Onboarding not performed yet (no memories available). "
             + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
@@ -768,7 +778,6 @@ def shell_command(
         required for the task.
     :return: a JSON object containing the command's stdout and optionally stderr output
     """
-    log.info(f"execute_shell_command: {command=}")
 
     class ExecuteShellCommandTool(Tool):
         def _execute(self) -> str:
