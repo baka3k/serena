@@ -4,7 +4,6 @@ The Serena Model Context Protocol (MCP) Server
 
 import json
 import os
-from pathlib import Path
 import platform
 import sys
 import traceback
@@ -13,6 +12,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, cast
 
 import yaml
@@ -28,6 +28,7 @@ from multilspy.multilspy_types import SymbolKind
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.util.file_system import scan_directory
+from serena.util.shell import execute_shell_command
 
 log = logging.getLogger(__name__)
 
@@ -49,10 +50,10 @@ class SerenaMCPRequestContext:
     project_root: str
     project_config: dict[str, Any]
     prompt_factory: PromptFactory
-    
+
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, ".serena")
-        
+
 
 @asynccontextmanager
 async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequestContext]:
@@ -86,35 +87,36 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
             )
     finally:
         language_server.stop()
-        
-        
+
+
 class MemoriesManager:
     def __init__(self, memory_dir: str):
         self._memory_dir = Path(memory_dir)
-        
+
     def _get_memory_file_path(self, memory_file_name: str) -> Path:
         return self._memory_dir / memory_file_name
-        
+
     def load_memory(self, memory_file_name: str) -> str:
         memory_file_path = self._get_memory_file_path(memory_file_name)
         if not memory_file_path.exists():
             return f"Memory file {memory_file_name} not found, consider creating it with the `write_memory` tool if you need it."
-        with open(memory_file_path, "r", encoding="utf-8") as f:
+        with open(memory_file_path, encoding="utf-8") as f:
             return f.read()
-        
+
     def save_memory(self, memory_file_name: str, content: str) -> str:
         memory_file_path = self._get_memory_file_path(memory_file_name)
         with open(memory_file_path, "w", encoding="utf-8") as f:
             f.write(content)
         return f"Memory file {memory_file_name} written."
-    
-    def list_memories(self) -> list[str]:   
+
+    def list_memories(self) -> list[str]:
         return [f.name for f in self._memory_dir.iterdir() if f.is_file()]
-    
+
     def delete_memory(self, memory_file_name: str) -> str:
         memory_file_path = self._get_memory_file_path(memory_file_name)
         memory_file_path.unlink()
         return f"Memory file {memory_file_name} deleted."
+
 
 mcp_settings = Settings(lifespan=server_lifespan)
 mcp = FastMCP(**mcp_settings.model_dump())
@@ -127,7 +129,7 @@ class Component(ABC):
         self.project_root = lifespan_context.project_root
         self.project_config = lifespan_context.project_config
         self.prompt_factory = lifespan_context.prompt_factory
-        
+
         memories_dir = os.path.join(lifespan_context.get_serena_managed_dir(), "memories")
         self.memories_manager = MemoriesManager(memories_dir)
 
@@ -551,13 +553,15 @@ def insert_at_line(
 def check_onboarding_performed(ctx: Context) -> str:
     """
     Check if onboarding was performed yet.
-    You should always call this tool in the beginning of the conversation, 
+    You should always call this tool in the beginning of the conversation,
     before any question about code or the project is asked.
     You will call this tool only once per conversation.
     """
     if len(list_memories(ctx)) == 0:
-        return "Onboarding not performed yet (no memories available). " + \
-            "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
+        return (
+            "Onboarding not performed yet (no memories available). "
+            + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
+        )
     else:
         return "Onboarding already performed, no need to perform it again."
 
@@ -567,7 +571,7 @@ def onboarding(ctx: Context) -> str:
     """
     Call this tool if onboarding was not performed yet.
     You will call this tool at most once per conversation.
-    
+
     :param ctx: the context object, which will be created and provided automatically
     :return: instructions on how to create the onboarding information
     """
@@ -581,17 +585,23 @@ def onboarding(ctx: Context) -> str:
 
 
 @mcp.tool()
-def write_memory(ctx: Context, memory_file_name: str, content: str) -> str:
+def write_memory(ctx: Context, memory_file_name: str, content: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
     """
     Write some general information about this project that can be useful for future tasks to a memory file.
     The information should be short and to the point.
     The memory file name should be meaningful, such that from the name you can infer what the information is about.
     It is better to have multiple small memory files than to have a single large one because
     memories will be read one by one and we only ever want to read relevant memories.
-    
+
     This tool is either called during the onboarding process or when you have identified
     something worth remembering about the project from the past conversation.
     """
+    if len(content) > max_answer_chars:
+        raise ValueError(
+            f"Content for {memory_file_name    } is too long. Max length is {max_answer_chars} characters. "
+            + "Please make the content shorter."
+        )
+
     class WriteMemoryTool(Tool):
         def _execute(self) -> str:
             return self.memories_manager.save_memory(memory_file_name, content)
@@ -600,25 +610,27 @@ def write_memory(ctx: Context, memory_file_name: str, content: str) -> str:
 
 
 @mcp.tool()
-def read_memory(ctx: Context, memory_file_name: str) -> str:
+def read_memory(ctx: Context, memory_file_name: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
     """
-    Read the content of a memory file. This tool should only be used if the information 
+    Read the content of a memory file. This tool should only be used if the information
     is relevant to the current task. You should be able to infer whether the information
     is relevant from the memory file name.
     You should not read the same memory file multiple times in the same conversation.
     """
+
     class ReadMemoryTool(Tool):
         def _execute(self) -> str:
             return self.memories_manager.load_memory(memory_file_name)
-        
-    return ReadMemoryTool(ctx).execute()
+
+    return ReadMemoryTool(ctx).execute(max_answer_chars=max_answer_chars)
 
 
 @mcp.tool()
 def list_memories(ctx: Context) -> str:
     """
     List available memories. Any memory can be read using the `read_memory` tool.
-    """ 
+    """
+
     class ListMemoriesTool(Tool):
         def _execute(self) -> str:
             return json.dumps(self.memories_manager.list_memories())
@@ -633,6 +645,7 @@ def delete_memory(ctx: Context, memory_file_name: str) -> str:
     for example by saying that the information retrieved from a memory file is no longer correct
     or no longer relevant for the project.
     """
+
     class DeleteMemoryTool(Tool):
         def _execute(self) -> str:
             return self.memories_manager.delete_memory(memory_file_name)
@@ -645,10 +658,11 @@ def think_about_collected_information(ctx: Context) -> str:
     """
     Think about the collected information and whether it is sufficient and relevant.
     """
+
     class ThinkAboutCollectedInformationTool(Tool):
         def _execute(self) -> str:
             return self.prompt_factory.create_think_about_collected_information()
-        
+
     return ThinkAboutCollectedInformationTool(ctx).execute()
 
 
@@ -659,6 +673,7 @@ def think_about_task_adherence(ctx: Context) -> str:
     Especially important if the conversation has been going on for a while and there
     has been a lot of back and forth.
     """
+
     class ThinkAboutTaskAdherenceTool(Tool):
         def _execute(self) -> str:
             return self.prompt_factory.create_think_about_task_adherence()
@@ -671,6 +686,7 @@ def think_about_whether_you_are_done(ctx: Context) -> str:
     """
     Think about whether you are done with the task.
     """
+
     class ThinkAboutWhetherYouAreDoneTool(Tool):
         def _execute(self) -> str:
             return self.prompt_factory.create_think_about_whether_you_are_done()
@@ -721,3 +737,37 @@ def search_files_for_pattern(
             return json.dumps(file_to_matches)
 
     return SearchInAllCodeTool(ctx).execute(max_answer_chars=max_answer_chars)
+
+
+@mcp.tool()
+def shell_command(
+    ctx: Context,
+    command: str,
+    cwd: str | None = None,
+    capture_stderr: bool = True,
+    max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+) -> str:
+    """
+    Execute a shell command and return its output.
+    You should have at least once looked at the suggested shell commands from the corresponding memory
+    created during the onboarding process before using this tool.
+    Never execute unsafe shell commands like `rm -rf /` or similar! Generally be very careful with deletions.
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param command: the shell command to execute
+    :param cwd: the working directory to execute the command in. If None, the project root will be used.
+    :param capture_stderr: whether to capture and return stderr output
+    :param max_answer_chars: if the output is longer than this number of characters,
+        no content will be returned. Don't adjust unless there is really no other way to get the content
+        required for the task.
+    :return: a JSON object containing the command's stdout and optionally stderr output
+    """
+    log.info(f"execute_shell_command: {command=}")
+
+    class ExecuteShellCommandTool(Tool):
+        def _execute(self) -> str:
+            _cwd = cwd or self.project_root
+            result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
+            return result.json()
+
+    return ExecuteShellCommandTool(ctx).execute(max_answer_chars=max_answer_chars)
