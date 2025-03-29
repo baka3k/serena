@@ -947,6 +947,10 @@ class LanguageServer:
         symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
         symbol_lines = symbol_file.split("\n")
         symbol_body = "\n".join(symbol_lines[symbol_start_line:symbol_end_line])
+        
+        # remove leading indentation
+        symbol_start_column = symbol["location"]["range"]["start"]["character"]
+        symbol_body = symbol_body[symbol_start_column:]
         return symbol_body
         
     
