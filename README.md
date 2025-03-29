@@ -68,8 +68,8 @@ This is typically done by providing a configuration file in JSON format as follo
 {
     "mcpServers": {
         "serena": {
-            "command": "uv",
-            "args": ["run", "--directory", "/path/to/serena", "python", "scripts/mcp_server.py", "myproject.yml"]
+            "command": "/path/to/uv",
+            "args": ["run", "--directory", "/path/to/serena", "serena", "/path/to/myproject.yml"]
         }
     }
 }
