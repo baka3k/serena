@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from pydantic import BaseModel
 
+
 class LogLine(BaseModel):
     """
     Represents a line in the Multilspy log
@@ -17,6 +18,7 @@ class LogLine(BaseModel):
     caller_name: str
     caller_line: int
     message: str
+
 
 class MultilspyLogger:
     """

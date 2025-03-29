@@ -19,15 +19,13 @@ class PromptFactory:
         return mpl.get_item(self.lang_shortcode, self.fallback_mode)
 
     def create_onboarding_prompt(self, *, system) -> str:
-        return self._format_prompt('onboarding_prompt', locals())
+        return self._format_prompt("onboarding_prompt", locals())
 
     def create_think_about_collected_information(self) -> str:
-        return self._format_prompt('think_about_collected_information', locals())
+        return self._format_prompt("think_about_collected_information", locals())
 
     def create_think_about_task_adherence(self) -> str:
-        return self._format_prompt('think_about_task_adherence', locals())
+        return self._format_prompt("think_about_task_adherence", locals())
 
     def create_think_about_whether_you_are_done(self) -> str:
-        return self._format_prompt('think_about_whether_you_are_done', locals())
-
-    
+        return self._format_prompt("think_about_whether_you_are_done", locals())
