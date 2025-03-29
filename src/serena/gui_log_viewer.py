@@ -56,7 +56,7 @@ class GuiLogViewer:
             self.print_status("Starting thread")
             self.running = True
             self.log_thread = threading.Thread(target=self._run_gui)
-            self.log_thread.daemon = False
+            self.log_thread.daemon = True
             self.log_thread.start()
             return True
         return False
