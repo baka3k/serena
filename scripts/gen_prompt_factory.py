@@ -35,7 +35,7 @@ def main():
         code = f.read()
     methods_str = "".join(methods)
     code = code.replace("# methods", methods_str)
-    
+
     prompt_factory_module = f"{package}/llm/prompt_factory.py"
     with open(prompt_factory_module, "w") as f:
         f.write(code)

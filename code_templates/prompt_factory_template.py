@@ -1,3 +1,7 @@
+# ruff: noqa
+# black: skip
+# mypy: ignore-errors
+
 from .multilang_prompt import MultiLangContainer, MultiLangPromptTemplateCollection, PromptList
 
 
