@@ -20,6 +20,8 @@ Because of this, serena can find the right context and do the right thing even i
 complex projects! So not only is it free and open source, it is also often better than other existing
 solutions.
 
+Serena stands for *Semantic Retrieval and Editing Noetic Agent*, but we also just liked the name.
+
 
 ## Is it Really Free?
 
@@ -28,7 +30,7 @@ Presumably, the same will be true for ChatGPT Desktop once they add support for 
 But we do recommend to buy the Claude Pro subscription for 20$ per month as this way the rate
 limits are much higher.
 
-Serena is Oraios AI's contribution to the developer community. We use it ourselves every day.
+Serena is [Oraios AI](https://oraios-ai.de/)'s contribution to the developer community. We use it ourselves every day.
 
 We got tired of having to pay multiple
 subscriptions (Cursor, Windsurf) that forced us to keep purchasing tokens on top of the subscription costs.
@@ -38,11 +40,11 @@ See below for a more detailed comparison to existing technologies.
 
 ## What if I Do Want to Pay?
 
-If you want to use your own API key, or use serena within a paid tool, you can do so.
+If you want to use your own API key, connect serena to a custom model,
+or use it within a paid tool, you can do so.
 We decoupled the tools offered by serena from the MCP server implementation, so they can also
-be used in any agent framework and with any model! See the section [Serena as Agent](#serena-as-agent)
- 
-Serena stands for Semantic Retrieval and Editing Noetic Agent (but).
+be used in any agent framework and with any model. See the section [Serena as Agent](#serena-as-agent).
+This way, you can run serena as a command line tool or within a UI of your choice.
 
 ## Quick Start
 
