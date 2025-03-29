@@ -1,6 +1,7 @@
 # Serena
 
-> A powerful, fully-featured coding agent that you can use for free. No API key and no subscription required!
+> **🚀 A powerful, fully-featured coding agent that you can use for free. No API key and no subscription required!**
+
 
 Serena answers the following important question: 
 Can I have a state-of-the-art coding agent without paying (enormous) API costs 
@@ -15,7 +16,7 @@ The former allows MCP clients like Claude Desktop to gain access to your codebas
 tools. Using the latter, we built the core logic of serena - a set of versatile code querying
 and editing functionalities based on symbolic understanding of the code. Serena discovers and
 edits code just like a seasoned developer would do it by navigating the codebase inside an IDE.
-Because of this serena can find the right context and do the right thing even in very large and
+Because of this, serena can find the right context and do the right thing even in very large and
 complex projects! So not only is it free and open source, it is also often better than other existing
 solutions.
 
