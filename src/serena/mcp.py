@@ -134,6 +134,10 @@ class MemoriesManager:
 mcp_settings = Settings(lifespan=server_lifespan)
 mcp = FastMCP(**mcp_settings.model_dump())
 
+def start_mcp_server():
+    log.info("Starting server")
+    mcp.run()
+
 
 class Component(ABC):
     def __init__(self, ctx: Context):

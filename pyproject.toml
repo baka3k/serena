@@ -29,6 +29,9 @@ dependencies = [
   "types-pyyaml>=6.0.12.20241230",
 ]
 
+[project.scripts]
+serena = "serena.mcp:start_mcp_server"
+
 [project.license]
 text = "MIT"
 
