@@ -321,6 +321,8 @@ def find_symbol(
     with the given name.
     The returned symbol location information can subsequently be used to edit the returned symbols
     or to retrieve further information using other tools.
+    If you already anticipate that you will need to reference children of the symbol, you can specify a
+    depth > 0.
 
     :param ctx: the context object, which will be created and provided automatically
     :param name: the name of the symbols to find
@@ -345,7 +347,7 @@ def find_symbol(
         no content will be returned. Don't adjust unless there is really no other way to get the content
         required for the task. Instead, if the output is too long, you should
         make a stricter query.
-    :return: a list of symbols that match the given name
+    :return: a list of symbols (with symbol locations) that match the given name in JSON format
     """
 
     class FindSymbolTool(Tool):
@@ -419,14 +421,15 @@ def replace_symbol_body(
     body: str,
 ) -> str:
     """
-    Replaces the body of the symbol at the given location
+    Replaces the body of the symbol at the given location.
+    Important: Do not try to guess symbol locations but use the find_symbol tool to get the correct location.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
     :param line: the line number
     :param column: the column
     :param body: the new symbol body. Important: Provide the correct level of indentation
-        (as the original body)
+        (as the original body). Note that the first line must not be indented (i.e. no leading spaces).
     """
 
     class ReplaceSymbolBodyTool(Tool):
@@ -441,7 +444,7 @@ def replace_symbol_body(
 
 
 @mcp.tool()
-def append_after_symbol(
+def insert_after_symbol(
     ctx: Context,
     relative_path: str,
     line: int,
@@ -449,7 +452,7 @@ def append_after_symbol(
     body: str,
 ) -> str:
     """
-    Appends the given body/content after the end of the definition of the given symbol (via its location).
+    Inserts the given body/content after the end of the definition of the given symbol (via the symbol's location).
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
@@ -460,7 +463,7 @@ def append_after_symbol(
 
     class AppendAfterSymbolTool(Tool):
         def _execute(self) -> str:
-            SymbolManager(self.langsrv).append_after(
+            SymbolManager(self.langsrv).insert_after(
                 SymbolLocation(relative_path, line, column),
                 body=body,
             )
@@ -478,7 +481,7 @@ def insert_before_symbol(
     body: str,
 ) -> str:
     """
-    Inserts the given body/content before the beginning of the definition of the given symbol (via its location).
+    Inserts the given body/content before the beginning of the definition of the given symbol (via the symbol's location).
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
@@ -496,6 +499,52 @@ def insert_before_symbol(
             return "OK"
 
     return AppendAfterSymbolTool(ctx).execute()
+
+
+def delete_lines(
+    ctx: Context,
+    relative_path: str,
+    start_line: int,
+    end_line: int,
+) -> str:
+    """
+    Inserts the given content at the given line in the file.
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the file
+    :param start_line: the 0-based index of the first line to be deleted
+    :param end_line: the 0-based index of the last line to be deleted
+    """
+
+    class DeleteLinesTool(Tool):
+        def _execute(self) -> str:
+            SymbolManager(self.langsrv).delete_lines(relative_path, start_line, end_line)
+            return "OK"
+
+    return DeleteLinesTool(ctx).execute()
+
+
+def insert_at_line(
+    ctx: Context,
+    relative_path: str,
+    line: int,
+    content: str,
+) -> str:
+    """
+    Inserts the given content at the given line in the file.
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param relative_path: the relative path to the file
+    :param line: the 0-based index of the line to insert content at
+    :param content: the body/content to be inserted
+    """
+
+    class InsertAtLineTool(Tool):
+        def _execute(self) -> str:
+            SymbolManager(self.langsrv).insert_at_line(relative_path, line, content)
+            return "OK"
+
+    return InsertAtLineTool(ctx).execute()
 
 
 @mcp.tool()
