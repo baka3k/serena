@@ -24,9 +24,10 @@ prompts:
     Read only the necessary files and directories to avoid loading too much data into memory.
     If you cannot find everything you need from the project itself, you should ask the user for more information.
 
-    After collecting all the information, use the `write_memory` tool (in multiple calls) to save it to various memory files.
+    After collecting all the information, you will use the `write_memory` tool (in multiple calls) to save it to various memory files.
     A particularly important memory file will be the `suggested_commands.md` file, which should contain
-    a list of commands that the user should know about to develop code in this project.
+    a list of commands that the user should know about to develop code in this project. 
+    **Important**: after done with the onboarding task, remember to call the `write_memory` to save the collected information!
 
   think_about_collected_information: |
     Have you collected all the information you need for solving the current task? If not, can the missing information be acquired by using the available tools,
