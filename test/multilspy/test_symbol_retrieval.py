@@ -387,7 +387,7 @@ class TestLanguageServerSymbols:
     def test_request_dir_overview(self, language_server: SyncLanguageServer, repo_path: Path):
         """Test that request_dir_overview returns correct symbol information for files in a directory."""
         # Get overview of the examples directory
-        overview = language_server.request_dir_overview(str(repo_path / "test_repo"))
+        overview = language_server.request_dir_overview("test_repo")
 
         # Verify that we have entries for both files
         assert os.path.join("test_repo", "nested.py") in overview

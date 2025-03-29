@@ -867,7 +867,7 @@ class LanguageServer:
                 for child in symbol["children"]:
                     assert "location" in child
                     assert "selectionRange" in child
-                    path = Path(child["location"]["relativePath"]).resolve().relative_to(self.repository_root_path)
+                    path = Path(child["location"]["absolutePath"]).resolve().relative_to(self.repository_root_path)
                     result[str(path)].append((
                         child["name"],
                         child["kind"],
