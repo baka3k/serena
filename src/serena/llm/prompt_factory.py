@@ -38,9 +38,7 @@ class PromptFactory:
         return self._format_prompt("summarize_changes", locals())
 
     def create_prepare_for_new_conversation(self) -> str:
-        return self._format_prompt('prepare_for_new_conversation', locals())
+        return self._format_prompt("prepare_for_new_conversation", locals())
 
     def create_system_prompt(self) -> str:
-        return self._format_prompt('system_prompt', locals())
-
-
+        return self._format_prompt("system_prompt", locals())
