@@ -79,11 +79,11 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
     config = MultilspyConfig(code_language=language)
     logger = MultilspyLogger()
     language_server = SyncLanguageServer.create(config, logger, project_root)
-    language_server.start()
     try:
-        yield SerenaMCPRequestContext(
-            language_server=language_server, project_root=project_root, project_config=project_config, prompt_factory=PromptFactory()
-        )
+        with language_server.start_server():
+            yield SerenaMCPRequestContext(
+                language_server=language_server, project_root=project_root, project_config=project_config, prompt_factory=PromptFactory()
+            )
     finally:
         language_server.stop()
         
