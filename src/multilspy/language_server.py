@@ -1793,8 +1793,3 @@ class SyncLanguageServer:
         Load the cache from a file.
         """
         self.language_server.load_cache()
-    
-        
-    def __del__(self):
-        if self.loop:
-            self.stop()
