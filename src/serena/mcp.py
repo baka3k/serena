@@ -563,7 +563,8 @@ def check_onboarding_performed(ctx: Context) -> str:
     before any question about code or the project is asked.
     You will call this tool only once per conversation.
     """
-    if len(list_memories(ctx)) == 0:
+    memories = json.loads(list_memories(ctx))
+    if len(memories) == 0:
         return (
             "Onboarding not performed yet (no memories available). "
             + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
