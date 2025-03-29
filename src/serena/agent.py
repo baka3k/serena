@@ -7,6 +7,7 @@ import json
 import os
 import platform
 import sys
+import traceback
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
@@ -165,6 +166,28 @@ class Tool(Component):
                 f"The answer is too long ({n_chars} characters). "
                 + "Please try a more specific tool query or raise the max_answer_chars parameter."
             )
+        return result
+
+    def apply_ex(self, *args, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:
+        """
+        Applies the tool with the given arguments
+        """
+        apply_fn = getattr(self, "apply")
+        if apply_fn is None:
+            raise ValueError(f"apply not defined in {self}")
+
+        if log_call:
+            self._log_tool_application(inspect.currentframe())
+        try:
+            result = apply_fn(*args, **kwargs)
+        except Exception as e:
+            if not catch_exceptions:
+                raise
+            msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
+            log.error(f"Error executing tool: {e}", exc_info=e)
+            result = msg
+        if log_call:
+            log.info("Result: {}")
         return result
 
 

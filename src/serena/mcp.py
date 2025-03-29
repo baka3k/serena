@@ -3,7 +3,6 @@ The Serena Model Context Protocol (MCP) Server
 """
 
 import sys
-import traceback
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -56,11 +55,7 @@ def make_tool(
 
     def execute_fn(ctx: Context, *args, **kwargs) -> str:  # type: ignore
         mark_used(ctx)
-        try:
-            return apply_fn(*args, **kwargs)
-        except Exception as e:
-            msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
-            return msg
+        tool.apply_ex(*args, log_call=True, catch_exceptions=True, **kwargs)
 
     return MCPTool(
         fn=execute_fn,
@@ -96,5 +91,5 @@ def create_mcp_server() -> FastMCP:
     return mcp
 
 
-def start_mcp_server():
+def start_mcp_server() -> None:
     create_mcp_server().run()
