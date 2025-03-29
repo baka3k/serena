@@ -224,7 +224,7 @@ class SymbolManager:
         exclude_kinds: Sequence[SymbolKind] | None = None,
     ) -> list[Symbol]:
         """
-        Find all symbols that reference the given symbol.
+        Find all symbols that reference the symbol at the given location.
 
         :param symbol_location: the location of the symbol for which to find references
         :param include_body: whether to include the body of all symbols in the result.
@@ -283,7 +283,7 @@ class SymbolManager:
                 location.relative_path, symbol.body_start_position["line"], symbol.body_start_position["character"], body
             )
 
-    def append_after(self, location: SymbolLocation, body: str) -> None:
+    def insert_after(self, location: SymbolLocation, body: str) -> None:
         """
         Appends content after the given symbol
 
@@ -304,3 +304,25 @@ class SymbolManager:
         with self._edited_symbol_location(location) as symbol:
             pos = copy(symbol.body_start_position)
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
+
+    def insert_at_line(self, relative_path: str, line: int, content: str) -> None:
+        """
+        Inserts content at the given line in the given file.
+
+        :param line: the 0-based index of the line to insert content at
+        :param content: the content to insert
+        """
+        with self._edited_file(relative_path):
+            self.lang_server.insert_text_at_position(relative_path, line, 0, content)
+
+    def delete_lines(self, relative_path: str, start_line: int, end_line: int) -> None:
+        """
+        Deletes lines in the given file.
+
+        :param start_line: the 0-based index of the first line to delete (inclusive)
+        :param end_line: the 0-based index of the last line to delete (inclusive)
+        """
+        with self._edited_file(relative_path):
+            start_pos = Position(line=start_line, character=0)
+            end_pos = Position(line=end_line + 1, character=0)
+            self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
