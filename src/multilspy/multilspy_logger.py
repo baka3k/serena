@@ -25,9 +25,10 @@ class MultilspyLogger:
     Logger class
     """
 
-    def __init__(self) -> None:
+    def __init__(self, json_format: bool = False) -> None:
         self.logger = logging.getLogger("multilspy")
         self.logger.setLevel(logging.INFO)
+        self.json_format = json_format
 
     def log(self, debug_message: str, level: int, sanitized_error_message: str = "") -> None:
         """
@@ -44,17 +45,20 @@ class MultilspyLogger:
         caller_line = calframe[1][2]
         caller_name = calframe[1][3]
 
-        # Construct the debug log line
-        debug_log_line = LogLine(
-            time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-            level=logging.getLevelName(level),
-            caller_file=caller_file,
-            caller_name=caller_name,
-            caller_line=caller_line,
-            message=debug_message,
-        )
+        if self.json_format:
+            # Construct the debug log line
+            debug_log_line = LogLine(
+                time=str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                level=logging.getLevelName(level),
+                caller_file=caller_file,
+                caller_name=caller_name,
+                caller_line=caller_line,
+                message=debug_message,
+            )
 
-        self.logger.log(
-            level=level,
-            msg=debug_log_line.json(),
-        )
+            self.logger.log(
+                level=level,
+                msg=debug_log_line.json(),
+            )
+        else:
+            self.logger.log(level, debug_message)
