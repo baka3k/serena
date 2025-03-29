@@ -35,19 +35,13 @@ from serena.util.file_system import scan_directory
 from serena.util.shell import execute_shell_command
 
 log = logging.getLogger(__name__)
+LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
+LOG_LEVEL = logging.INFO
 
 
 def configure_logging(*args, **kwargs) -> None:  # type: ignore
-    log_format = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
-    level = logging.INFO
-
     # configure logging to stderr (will be captured by Claude Desktop); stdio is the MCP communication stream and cannot be used!
-    logging.basicConfig(level=level, stream=sys.stderr, format=log_format)
-
-    # configure logging to GUI window
-    # Enable this if you want to see logs in the GUI window. It doesn't work on MacOS
-    # log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=level)
-    # Logger.root.addHandler(log_handler)
+    logging.basicConfig(level=LOG_LEVEL, stream=sys.stderr, format=LOG_FORMAT)
 
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
@@ -78,13 +72,24 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
         print(f"Project file not found: {project_file}", file=sys.stderr)
         sys.exit(1)
 
-    log.info(f"Starting serena server for project {project_file}; process id={os.getpid()}, parent process id={os.getppid()}")
-
     # read project configuration
     with open(project_file, encoding="utf-8") as f:
         project_config = yaml.safe_load(f)
     language = Language(project_config["language"])
     project_root = str(Path(project_config["project_root"]).resolve())
+
+    # enable GUI log window
+    enable_gui_log = project_config.get("gui_log_window", True)
+    if enable_gui_log:
+        if platform.system() == "Darwin":
+            log.warning("GUI log window is not supported on macOS")
+        else:
+            log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=LOG_LEVEL, format_string=LOG_FORMAT)
+            Logger.root.addHandler(log_handler)
+
+    log.info(
+        f"Starting serena server for project {project_file} (language={language}, root={project_root}); process id={os.getpid()}, parent process id={os.getppid()}"
+    )
 
     # create and start the language server instance
     config = MultilspyConfig(code_language=language)
