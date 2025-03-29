@@ -45,8 +45,9 @@ def configure_logging(*args, **kwargs) -> None:  # type: ignore
     logging.basicConfig(level=level, stream=sys.stderr, format=log_format)
 
     # configure logging to GUI window
-    log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=level)
-    Logger.root.addHandler(log_handler)
+    # Enable this if you want to see logs in the GUI window. It doesn't work on MacOS
+    # log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=level)
+    # Logger.root.addHandler(log_handler)
 
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
@@ -209,7 +210,9 @@ def read_file(
     ctx: Context, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH
 ) -> str:
     """
-    Read the given file or a chunk of it (between start_line and end_line).
+    Read the given file or a chunk of it (between start_line and end_line). Generally, symbolic operations
+    like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
+    Reading the entire file is only recommended if there is no other way to get the content required for the task.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file to read
@@ -238,6 +241,11 @@ def read_file(
 @mcp.tool()
 def create_text_file(ctx: Context, relative_path: str, content: str) -> str:
     """
+    Write a new file (or overwrite an existing file). For existing files, it is strongly recommended
+    to use symbolic operations like replace_symbol_body or insert_after_symbol/insert_before_symbol, if possible.
+    You can also use insert_at_line to insert content at a specific line for existing files if the symbolic operations
+    are not the right choice for what you want to do.
+
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file to create
     :param content: the (utf-8-encoded) content to write to the file
@@ -284,6 +292,7 @@ def get_dir_overview(ctx: Context, relative_path: str, max_answer_chars: int = _
     """
     Get an overview of the given directory.
     For each file in the directory, we list the top-level symbols in the file (name, kind, line).
+    Use this tool to get a high-level understanding of the code symbols inside a directory.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the directory to get the overview of
@@ -304,7 +313,9 @@ def get_dir_overview(ctx: Context, relative_path: str, max_answer_chars: int = _
 @mcp.tool()
 def get_document_overview(ctx: Context, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
     """
-    Get an overview of the given file.
+    Use this tool to get a high-level understanding of the code symbols in a file. It often makes sense
+    to call this before targeted reading, searching or editing operations on the code symbols in the file,
+    as the output will contain a lot of information about names and lines.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file to get the overview of
@@ -338,8 +349,8 @@ def find_symbol(
     with the given name.
     The returned symbol location information can subsequently be used to edit the returned symbols
     or to retrieve further information using other tools.
-    If you already anticipate that you will need to reference children of the symbol, you can specify a
-    depth > 0.
+    If you already anticipate that you will need to reference children of the symbol (like methods or fields contained in a class),
+    you can specify a depth > 0.
 
     :param ctx: the context object, which will be created and provided automatically
     :param name: the name of the symbols to find
@@ -396,8 +407,8 @@ def find_referencing_symbols(
 ) -> str:
     """
     Finds symbols that reference the symbol at the given location.
-    Note that this function can be used to find subclasses of a class, as subclasses are referencing symbols
-    that have the kind class.
+    Note that among other kinds of references, this function can be used to find (direct) subclasses of a class,
+    as subclasses are referencing symbols that have the kind class.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
@@ -439,7 +450,7 @@ def replace_symbol_body(
 ) -> str:
     """
     Replaces the body of the symbol at the given location.
-    Important: Do not try to guess symbol locations but use the find_symbol tool to get the correct location.
+    Important: Do not try to guess symbol locations but instead use the find_symbol tool to get the correct location.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
@@ -470,6 +481,7 @@ def insert_after_symbol(
 ) -> str:
     """
     Inserts the given body/content after the end of the definition of the given symbol (via the symbol's location).
+    A typical use case is to insert a new class, function, method, field or variable assignment.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
@@ -499,6 +511,8 @@ def insert_before_symbol(
 ) -> str:
     """
     Inserts the given body/content before the beginning of the definition of the given symbol (via the symbol's location).
+    A typical use case is to insert a new class, function, method, field or variable assignment.
+    It also can be used to insert a new import statement before the first symbol in the file.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file containing the symbol
@@ -525,7 +539,8 @@ def delete_lines(
     end_line: int,
 ) -> str:
     """
-    Inserts the given content at the given line in the file.
+    Deletes the given lines in the file. An editing operation, rarely used alone but can be useful in combination with
+    other tools.
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file
@@ -548,7 +563,9 @@ def insert_at_line(
     content: str,
 ) -> str:
     """
-    Inserts the given content at the given line in the file.
+    Inserts the given content at the given line in the file. In general, symbolic insert operations like
+    insert_after_symbol or insert_before_symbol should be preferred if you know which symbol you are looking for.
+    However, this can also be useful for small targeted edits of the body of a longer symbol (without replacing the entire body).
 
     :param ctx: the context object, which will be created and provided automatically
     :param relative_path: the relative path to the file
@@ -673,6 +690,8 @@ def delete_memory(ctx: Context, memory_file_name: str) -> str:
 def think_about_collected_information(ctx: Context) -> str:
     """
     Think about the collected information and whether it is sufficient and relevant.
+    This tool should ALWAYS be called after you have completed a non-trivial sequence of searching steps like
+    find_symbol, find_referencing_symbols, search_files_for_pattern, read_file, etc.
     """
 
     class ThinkAboutCollectedInformationTool(Tool):
@@ -688,6 +707,8 @@ def think_about_task_adherence(ctx: Context) -> str:
     Think about the task at hand and whether you are still on track.
     Especially important if the conversation has been going on for a while and there
     has been a lot of back and forth.
+
+    This tool should ALWAYS be called before you insert, replace, or delete code.
     """
 
     class ThinkAboutTaskAdherenceTool(Tool):
@@ -701,6 +722,8 @@ def think_about_task_adherence(ctx: Context) -> str:
 def think_about_whether_you_are_done(ctx: Context) -> str:
     """
     Think about whether you are done with the task.
+
+    This tool should ALWAYS be called after you have completed a task or a subtask.
     """
 
     class ThinkAboutWhetherYouAreDoneTool(Tool):
@@ -708,6 +731,34 @@ def think_about_whether_you_are_done(ctx: Context) -> str:
             return self.prompt_factory.create_think_about_whether_you_are_done()
 
     return ThinkAboutWhetherYouAreDoneTool(ctx).execute()
+
+
+@mcp.tool()
+def summarize_changes(ctx: Context) -> str:
+    """
+    Summarize the changes you have made to the codebase.
+    This tool should ALWAYS be called after you have fully completed any non-trivial coding task
+    (but after the think_about_whether_you_are_done call).
+    """
+
+    class SummarizeChangesTool(Tool):
+        def _execute(self) -> str:
+            return self.prompt_factory.create_summarize_changes()
+
+    return SummarizeChangesTool(ctx).execute()
+
+
+@mcp.tool()
+def prepare_for_new_conversation(ctx: Context) -> str:
+    """
+    Instructions for preparing for a new conversation. This tool should only be called on explicit user request.
+    """
+
+    class PrepareForNewConversationTool(Tool):
+        def _execute(self) -> str:
+            return self.prompt_factory.create_prepare_for_new_conversation()
+
+    return PrepareForNewConversationTool(ctx).execute()
 
 
 @mcp.tool()
@@ -721,7 +772,10 @@ def search_files_for_pattern(
     max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
 ) -> str:
     """
-    Search for a pattern in all code files in the project.
+    Search for a pattern in all code files (and only in code files) in the project. Generally, symbolic operations like find_symbol or find_referencing_symbols
+    should be preferred if you know which symbols you are looking for.
+    If you have to look in non-code files (like notebooks, documentation, etc.), you should use the shell_command tool with grep or similar.
+    This tool can be useful if you are looking for a specific pattern in the codebase that is not a symbol name.
 
     :param ctx: the context object, which will be created and provided automatically
     :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
@@ -765,6 +819,11 @@ def shell_command(
 ) -> str:
     """
     Execute a shell command and return its output.
+
+    IMPORTANT: you should always consider the memory about suggested shell commands before using this tool.
+    If this memory was not loaded in the current conversation, you should load it using the `read_memory` tool
+    before using this tool.
+
     You should have at least once looked at the suggested shell commands from the corresponding memory
     created during the onboarding process before using this tool.
     Never execute unsafe shell commands like `rm -rf /` or similar! Generally be very careful with deletions.

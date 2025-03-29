@@ -36,6 +36,9 @@ prompts:
 
   think_about_task_adherence: |
     Are you deviating from the task at hand? Do you need any additional information to proceed?
+    Have you loaded the relevant memory file to see whether your implementation is fully aligned with the
+    code style, conventions, and guidelines of the project? If not, adjust your implementation accordingly
+    before modifying any code into the codebase.
     Note that it is better to stop and ask the user for clarification
     than to perform large changes which might not be aligned with the user's intentions.
     If you feel like the conversation is deviating too much from the original task, apologize and suggest to the user
@@ -46,4 +49,20 @@ prompts:
     Have you already performed all the steps required by the task? Is it appropriate to run tests and linting, and if so,
     have you done that already? Should new tests be written to cover the changes?
     Note that a task that is just about exploring the codebase does not require running tests or linting.
+
+  summarize_changes: |
+    Summarize all the changes you have made to the codebase over the course of the conversation.
+    Explore the diff if needed (e.g. by using `git diff`) to ensure that you have not missed anything.
+    Explain whether and how the changes are covered by tests. Explain how to best use the new code, how to understand it,
+    which existing code it affects and interacts with. Are there any dangers (like potential breaking changes or potential new problems) 
+    that the user should be aware of? Should any new documentation be written or existing documentation updated?
+    You can use tools to explore the codebase prior to writing the summary, but don't write any new code in this step until
+    the summary is complete.
+
+  prepare_for_new_conversation: |
+    You have not yet completed the current task but we are running out of context. You should succinctly summarize the current state of the conversation
+    and all relevant files, symbols and entities that you have discovered so far. Respond with a summary that can be used in the next conversation.
+    Recommend which tools to use and the next steps to take. Imagine that you are handing over the task to another person who has access to the
+    same tools and memory files as you do, but has not been part of the conversation so far. If you have discovered anything general about the project
+    in the course of the conversation, consider writing a new memory file to store that information.
   
