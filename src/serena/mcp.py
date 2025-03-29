@@ -4,6 +4,8 @@ The Serena Model Context Protocol (MCP) Server
 
 import json
 import os
+from pathlib import Path
+import platform
 import sys
 import traceback
 from abc import ABC, abstractmethod
@@ -47,7 +49,10 @@ class SerenaMCPRequestContext:
     project_root: str
     project_config: dict[str, Any]
     prompt_factory: PromptFactory
-
+    
+    def get_serena_managed_dir(self) -> str:
+        return os.path.join(self.project_root, ".serena")
+        
 
 @asynccontextmanager
 async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequestContext]:
@@ -68,7 +73,7 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
     with open(project_file, encoding="utf-8") as f:
         project_config = yaml.safe_load(f)
     language = Language(project_config["language"])
-    project_root = project_config["project_root"]
+    project_root = str(Path(project_config["project_root"]).resolve())
 
     # create and start the language server instance
     config = MultilspyConfig(code_language=language)
@@ -81,7 +86,35 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
         )
     finally:
         language_server.stop()
-
+        
+        
+class MemoriesManager:
+    def __init__(self, memory_dir: str):
+        self._memory_dir = Path(memory_dir)
+        
+    def _get_memory_file_path(self, memory_file_name: str) -> Path:
+        return self._memory_dir / memory_file_name
+        
+    def load_memory(self, memory_file_name: str) -> str:
+        memory_file_path = self._get_memory_file_path(memory_file_name)
+        if not memory_file_path.exists():
+            return f"Memory file {memory_file_name} not found, consider creating it with the `write_memory` tool if you need it."
+        with open(memory_file_path, "r", encoding="utf-8") as f:
+            return f.read()
+        
+    def save_memory(self, memory_file_name: str, content: str) -> str:
+        memory_file_path = self._get_memory_file_path(memory_file_name)
+        with open(memory_file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Memory file {memory_file_name} written."
+    
+    def list_memories(self) -> list[str]:   
+        return [f.name for f in self._memory_dir.iterdir() if f.is_file()]
+    
+    def delete_memory(self, memory_file_name: str) -> str:
+        memory_file_path = self._get_memory_file_path(memory_file_name)
+        memory_file_path.unlink()
+        return f"Memory file {memory_file_name} deleted."
 
 mcp_settings = Settings(lifespan=server_lifespan)
 mcp = FastMCP(**mcp_settings.model_dump())
@@ -94,6 +127,9 @@ class Component(ABC):
         self.project_root = lifespan_context.project_root
         self.project_config = lifespan_context.project_config
         self.prompt_factory = lifespan_context.prompt_factory
+        
+        memories_dir = os.path.join(lifespan_context.get_serena_managed_dir(), "memories")
+        self.memories_manager = MemoriesManager(memories_dir)
 
 
 _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
@@ -463,18 +499,134 @@ def insert_before_symbol(
 
 
 @mcp.tool()
+def check_onboarding_performed(ctx: Context) -> str:
+    """
+    Check if onboarding was performed yet.
+    You should always call this tool in the beginning of the conversation, 
+    before any question about code or the project is asked.
+    You will call this tool only once per conversation.
+    """
+    if len(list_memories(ctx)) == 0:
+        return "Onboarding not performed yet (no memories available). " + \
+            "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
+    else:
+        return "Onboarding already performed, no need to perform it again."
+
+
+@mcp.tool()
 def onboarding(ctx: Context) -> str:
     """
+    Call this tool if onboarding was not performed yet.
+    You will call this tool at most once per conversation.
+    
     :param ctx: the context object, which will be created and provided automatically
     :return: instructions on how to create the onboarding information
     """
-    onboarding_file = "serena_onboarding.md"
+    system = platform.system()
 
     class OnboardingPrompt(SimplePrompt):
         def _create_prompt(self) -> str:
-            return self.prompt_factory.create_onboarding_prompt(onboarding_file=onboarding_file)
+            return self.prompt_factory.create_onboarding_prompt(system=system)
 
     return OnboardingPrompt(ctx).create()
+
+
+@mcp.tool()
+def write_memory(ctx: Context, memory_file_name: str, content: str) -> str:
+    """
+    Write some general information about this project that can be useful for future tasks to a memory file.
+    The information should be short and to the point.
+    The memory file name should be meaningful, such that from the name you can infer what the information is about.
+    It is better to have multiple small memory files than to have a single large one because
+    memories will be read one by one and we only ever want to read relevant memories.
+    
+    This tool is either called during the onboarding process or when you have identified
+    something worth remembering about the project from the past conversation.
+    """
+    class WriteMemoryTool(Tool):
+        def _execute(self) -> str:
+            return self.memories_manager.save_memory(memory_file_name, content)
+
+    return WriteMemoryTool(ctx).execute()
+
+
+@mcp.tool()
+def read_memory(ctx: Context, memory_file_name: str) -> str:
+    """
+    Read the content of a memory file. This tool should only be used if the information 
+    is relevant to the current task. You should be able to infer whether the information
+    is relevant from the memory file name.
+    You should not read the same memory file multiple times in the same conversation.
+    """
+    class ReadMemoryTool(Tool):
+        def _execute(self) -> str:
+            return self.memories_manager.load_memory(memory_file_name)
+        
+    return ReadMemoryTool(ctx).execute()
+
+
+@mcp.tool()
+def list_memories(ctx: Context) -> str:
+    """
+    List available memories. Any memory can be read using the `read_memory` tool.
+    """ 
+    class ListMemoriesTool(Tool):
+        def _execute(self) -> str:
+            return json.dumps(self.memories_manager.list_memories())
+
+    return ListMemoriesTool(ctx).execute()
+
+
+@mcp.tool()
+def delete_memory(ctx: Context, memory_file_name: str) -> str:
+    """
+    Delete a memory file. Should only happen if a user asks for it explicitly,
+    for example by saying that the information retrieved from a memory file is no longer correct
+    or no longer relevant for the project.
+    """
+    class DeleteMemoryTool(Tool):
+        def _execute(self) -> str:
+            return self.memories_manager.delete_memory(memory_file_name)
+
+    return DeleteMemoryTool(ctx).execute()
+
+
+@mcp.tool()
+def think_about_collected_information(ctx: Context) -> str:
+    """
+    Think about the collected information and whether it is sufficient and relevant.
+    """
+    class ThinkAboutCollectedInformationTool(Tool):
+        def _execute(self) -> str:
+            return self.prompt_factory.create_think_about_collected_information()
+        
+    return ThinkAboutCollectedInformationTool(ctx).execute()
+
+
+@mcp.tool()
+def think_about_task_adherence(ctx: Context) -> str:
+    """
+    Think about the task at hand and whether you are still on track.
+    Especially important if the conversation has been going on for a while and there
+    has been a lot of back and forth.
+    """
+    class ThinkAboutTaskAdherenceTool(Tool):
+        def _execute(self) -> str:
+            return self.prompt_factory.create_think_about_task_adherence()
+
+    return ThinkAboutTaskAdherenceTool(ctx).execute()
+
+
+@mcp.tool()
+def think_about_whether_you_are_done(ctx: Context) -> str:
+    """
+    Think about whether you are done with the task.
+    """
+    class ThinkAboutWhetherYouAreDoneTool(Tool):
+        def _execute(self) -> str:
+            return self.prompt_factory.create_think_about_whether_you_are_done()
+
+    return ThinkAboutWhetherYouAreDoneTool(ctx).execute()
 
 
 @mcp.tool()
