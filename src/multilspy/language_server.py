@@ -1331,7 +1331,7 @@ class LanguageServer:
     
     @property
     def _cache_path(self) -> Path:
-        return Path(self.repository_root_path) / ".multilspy" / "cache" / "document_symbols_cache.pkl"
+        return Path(self.repository_root_path) / ".serena" / "cache" / "document_symbols_cache.pkl"
     
     def save_cache(self):
         if self._cache_has_changed:
