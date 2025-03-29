@@ -30,6 +30,7 @@ from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.util.file_system import scan_directory
+from serena.util.shell import execute_shell_command
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequest
 class MemoriesManager:
     def __init__(self, memory_dir: str):
         self._memory_dir = Path(memory_dir)
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_memory_file_path(self, memory_file_name: str) -> Path:
         return self._memory_dir / memory_file_name
@@ -589,7 +591,7 @@ def onboarding(ctx: Context) -> str:
 
 
 @mcp.tool()
-def write_memory(ctx: Context, memory_file_name: str, content: str) -> str:
+def write_memory(ctx: Context, memory_file_name: str, content: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
     """
     Write some general information about this project that can be useful for future tasks to a memory file.
     The information should be short and to the point.
@@ -600,6 +602,11 @@ def write_memory(ctx: Context, memory_file_name: str, content: str) -> str:
     This tool is either called during the onboarding process or when you have identified
     something worth remembering about the project from the past conversation.
     """
+    if len(content) > max_answer_chars:
+        raise ValueError(
+            f"Content for {memory_file_name    } is too long. Max length is {max_answer_chars} characters. "
+            + "Please make the content shorter."
+        )
 
     class WriteMemoryTool(Tool):
         def _execute(self) -> str:
@@ -609,7 +616,7 @@ def write_memory(ctx: Context, memory_file_name: str, content: str) -> str:
 
 
 @mcp.tool()
-def read_memory(ctx: Context, memory_file_name: str) -> str:
+def read_memory(ctx: Context, memory_file_name: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
     """
     Read the content of a memory file. This tool should only be used if the information
     is relevant to the current task. You should be able to infer whether the information
@@ -621,7 +628,7 @@ def read_memory(ctx: Context, memory_file_name: str) -> str:
         def _execute(self) -> str:
             return self.memories_manager.load_memory(memory_file_name)
 
-    return ReadMemoryTool(ctx).execute()
+    return ReadMemoryTool(ctx).execute(max_answer_chars=max_answer_chars)
 
 
 @mcp.tool()
@@ -736,3 +743,37 @@ def search_files_for_pattern(
             return json.dumps(file_to_matches)
 
     return SearchInAllCodeTool(ctx).execute(max_answer_chars=max_answer_chars)
+
+
+@mcp.tool()
+def shell_command(
+    ctx: Context,
+    command: str,
+    cwd: str | None = None,
+    capture_stderr: bool = True,
+    max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+) -> str:
+    """
+    Execute a shell command and return its output.
+    You should have at least once looked at the suggested shell commands from the corresponding memory
+    created during the onboarding process before using this tool.
+    Never execute unsafe shell commands like `rm -rf /` or similar! Generally be very careful with deletions.
+
+    :param ctx: the context object, which will be created and provided automatically
+    :param command: the shell command to execute
+    :param cwd: the working directory to execute the command in. If None, the project root will be used.
+    :param capture_stderr: whether to capture and return stderr output
+    :param max_answer_chars: if the output is longer than this number of characters,
+        no content will be returned. Don't adjust unless there is really no other way to get the content
+        required for the task.
+    :return: a JSON object containing the command's stdout and optionally stderr output
+    """
+    log.info(f"execute_shell_command: {command=}")
+
+    class ExecuteShellCommandTool(Tool):
+        def _execute(self) -> str:
+            _cwd = cwd or self.project_root
+            result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
+            return result.json()
+
+    return ExecuteShellCommandTool(ctx).execute(max_answer_chars=max_answer_chars)
