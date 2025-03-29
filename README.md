@@ -36,7 +36,7 @@ We also got tired of paying the huge API costs from Claude Code, Cline, Aider an
 This is why we built serena and cancelled most subscriptions. 
 See below for a more detailed comparison to existing technologies.
 
-## What if I do Want to Pay?
+## What if I Do Want to Pay?
 
 If you want to use your own API key, or use serena within a paid tool, you can do so.
 We decoupled the tools offered by serena from the MCP server implementation, so they can also
