@@ -1,6 +1,85 @@
-# serena
+# Serena
 
-Welcome to the serena library!
+> **🚀 A powerful, fully-featured coding agent that you can use for free. No API key and no subscription required!**
+
+
+Serena answers the following important question: 
+Can I have a state-of-the-art coding agent without paying (enormous) API costs 
+or constantly purchasing tokens? The answer is: yes, you can!
+
+We enable developers to harness the full coding power of Claude 
+(and soon also ChatGPT, see [here](https://x.com/OpenAIDevs/status/1904957755829481737)) 
+for free by leveraging two key technologies: 
+**MCP Servers** and **Language Servers**.
+
+The former allows MCP clients like Claude Desktop to gain access to your codebase and developer
+tools. Using the latter, we built the core logic of serena - a set of versatile code querying
+and editing functionalities based on symbolic understanding of the code. Serena discovers and
+edits code just like a seasoned developer would do it by navigating the codebase inside an IDE.
+Because of this, serena can find the right context and do the right thing even in very large and
+complex projects! So not only is it free and open source, it is also often better than other existing
+solutions.
+
+Serena stands for *Semantic Retrieval and Editing Noetic Agent*, but we also just liked the name.
+
+
+## Is it Really Free?
+
+Yes! Even the free tier of Anthropic has support for MCP Servers, so you can use serena there.
+Presumably, the same will be true for ChatGPT Desktop once they add support for MCP servers.
+But we do recommend to buy the Claude Pro subscription for 20$ per month as this way the rate
+limits are much higher.
+
+Serena is [Oraios AI](https://oraios-ai.de/)'s contribution to the developer community. We use it ourselves every day.
+
+We got tired of having to pay multiple
+subscriptions (Cursor, Windsurf) that forced us to keep purchasing tokens on top of the subscription costs.
+We also got tired of paying the huge API costs from Claude Code, Cline, Aider and other API-based tools.
+This is why we built serena and cancelled most subscriptions. 
+See below for a more detailed comparison to existing technologies.
+
+## What if I Do Want to Pay?
+
+If you want to use your own API key, connect serena to a custom model,
+or use it within a paid tool, you can do so.
+We decoupled the tools offered by serena from the MCP server implementation, so they can also
+be used in any agent framework and with any model. See the section [Serena as Agent](#serena-as-agent).
+This way, you can run serena as a command line tool or within a UI of your choice.
+
+## Quick Start
+
+1. Install `uv` if not done yet (instructions [here](https://docs.astral.sh/uv/getting-started/installation/))
+2. Clone the repository to `/path/to/serena`.
+3. Create a configuration file for your project, say `myproject.yml`. See `myproject.demo.yml` for the structure. 
+   You can just copy it and edit the entries.
+4. Configure the mcp server in your client. For example, for Claude Desktop, you need to go to `Settings->Developer->MCP Servers`,
+   which will let you open a json file. There add the following to enable serena:
+
+```json
+{
+    "mcpServers": {
+        "serena": {
+            "command": "/abs/path/to/uv",
+            "args": ["run", "--directory", "/abs/path/to/serena", "serena", "/abs/path/to/myproject.yml"]
+        }
+    }
+}
+```
+
+That's it! Save the config, restart Claude (you will have actually terminate the process on windows, just closing the window is not enough),
+and you should see the serena mcp tools in your chat interface (the small hammer icon).
+
+Note that serena is always configured **for a single project**. To use it for another, you will have to
+write a new configuration file and adjust the config in the MCP client (don't forget to restart after).
+
+For more info on MCP servers with Claude Desktop see [here](https://modelcontextprotocol.io/quickstart/user).
+
+## Serena as Agent
+
+In the agent mode, serena can be used with any model, including the currently popular (and SOTA in coding)
+Gemini-2.5-pro.
+
+...
 
 ## Getting Started
 
@@ -68,8 +147,8 @@ This is typically done by providing a configuration file in JSON format as follo
 {
     "mcpServers": {
         "serena": {
-            "command": "uv",
-            "args": ["run", "--directory", "/path/to/serena", "python", "scripts/mcp_server.py", "myproject.yml"]
+            "command": "/path/to/uv",
+            "args": ["run", "--directory", "/path/to/serena", "serena", "/path/to/myproject.yml"]
         }
     }
 }

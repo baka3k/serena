@@ -27,7 +27,12 @@ dependencies = [
   "sensai-utils>=1.4.0",
   "pydantic>=2.10.6",
   "types-pyyaml>=6.0.12.20241230",
+  "pyyaml>=6.0.2",
+  "jinja2>=3.1.6",
 ]
+
+[project.scripts]
+serena = "serena.mcp:start_mcp_server"
 
 [project.license]
 text = "MIT"
@@ -59,6 +64,9 @@ dev = [
   "sphinxcontrib-bibtex",
   "sphinxcontrib-spelling>=8.0.0",
   "types-pyyaml>=6.0.12.20241230",
+]
+agno = [
+    "agno>=1.2.6",
 ]
 
 [project.urls]

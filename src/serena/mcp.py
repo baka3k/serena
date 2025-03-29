@@ -94,3 +94,7 @@ def create_mcp_server() -> FastMCP:
         mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
 
     return mcp
+
+
+def start_mcp_server():
+    create_mcp_server().run()
