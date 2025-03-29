@@ -65,6 +65,9 @@ dev = [
   "sphinxcontrib-spelling>=8.0.0",
   "types-pyyaml>=6.0.12.20241230",
 ]
+agno = [
+    "agno>=1.2.6",
+]
 
 [project.urls]
 Homepage = "https://github.com/oraios/serena"
