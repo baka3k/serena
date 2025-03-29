@@ -1781,7 +1781,6 @@ class SyncLanguageServer:
         self.loop_thread.join()
         self.loop = None
         self.loop_thread = None
-        self.save_cache()
         
     def save_cache(self):
         """
