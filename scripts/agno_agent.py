@@ -1,13 +1,17 @@
 from agno.agent import Agent
 from agno.models.google import Gemini
-from agno.tools.duckduckgo import DuckDuckGoTools
+from agno.playground import Playground, serve_playground_app
 
-agent = Agent(
+serena_agent = Agent(
     model=Gemini(id="gemini-2.5-pro-exp-03-25"),
-    description="",
-    tools=[], # Add serena tools here
+    description="Serena",
+    tools=[],  # Add serena tools here
     show_tool_calls=True,
     markdown=True,
-    context=
+    system_message="",  # use PromptFactory
 )
-agent.print_response("Tell me about a breaking news story from New York.", stream=True)
+
+app = Playground(agents=[serena_agent]).get_app()
+
+if __name__ == "main":
+    serve_playground_app("playground:app", reload=True)
