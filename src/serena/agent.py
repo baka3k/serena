@@ -245,6 +245,7 @@ class CreateFileTool(Tool):
         :return: a message indicating success or failure
         """
         absolute_path = os.path.join(self.project_root, relative_path)
+        os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
         with open(absolute_path, "w", encoding="utf-8") as f:
             f.write(content)
         return f"File created: {relative_path}"
