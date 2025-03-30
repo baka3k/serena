@@ -3,9 +3,9 @@
   <img src="resources/serena-logo-dark-mode.svg#gh-dark-mode-only" style="width:500px">
 </p>
 
-> * :rocket: **Serena is a powerful, fully-featured coding agent that works directly on your codebase.**  
-> * :wrench: **Serena integrates with existing LLMs and provides them with essential semantic code retrieval and editing tools!**
-> * :free: **Serena is free to use. No additional API keys or subscriptions required!**
+* :rocket: Serena is a powerful, fully-featured **coding agent that works directly on your codebase**.
+* :wrench: Serena **integrates with existing LLMs**, providing them with essential **semantic code retrieval and editing tools!**
+* :free: Serena is **free to use**. No additional API keys or subscriptions required!
 
 Q: Can I have a state-of-the-art coding agent without paying (enormous) API costs 
 or constantly purchasing tokens?  
@@ -17,8 +17,8 @@ Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
    Serena provides an MCP server which integrates with Claude (and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)).
  * by using **Agno – the model-agnostic agent framework**.  
-   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's from Google, OpenAI or DeepSeek (with a paid API key)
-   or completely, e.g. Ollama, Together or Anyscale.
+   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or DeepSeek (with a paid API key)
+   or a free model provided by Ollama, Together or Anyscale.
 
 Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
 language server protocol (LSP). The LSP provides a set of versatile code querying
@@ -28,6 +28,19 @@ making use of an IDE's capabilities would.
 Serena can efficiently find the right context and do the right thing even in very large and
 complex projects! So not only is it free and open-source, it frequently achieves better results 
 than existing solutions that charge a premium.
+
+Language servers provide support for a wide range of programming languages.
+With Serena, we provide 
+ * direct, out-of-the-box support for:
+     * Python 
+ * indirect support (requiring separate language server installtion) for:
+     * TypeScript (untested)
+     * Java (untested)
+     * Ruby (untested)
+     * Go (untested)
+     * C# (untested)
+Further languages can easily be supported by providing a shallow adapter for a new language server
+implementation.
 
 ## Is It Really Free?
 
