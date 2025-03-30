@@ -10,11 +10,11 @@ import sys
 import traceback
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from logging import Logger
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import yaml
 from sensai.util import logging
@@ -81,6 +81,7 @@ class SerenaAgent:
         for tool_class in tool_classes:
             tool_instance = tool_class(self)
             self.tools[tool_class] = tool_instance
+        log.info(f"Loaded tools: {', '.join([tool.get_name() for tool in self.tools.values()])}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self.tools[tool_class]  # type: ignore
@@ -311,8 +312,8 @@ class FindSymbolTool(Tool):
         name: str,
         depth: int = 0,
         include_body: bool = False,
-        include_kinds: Sequence[SymbolKind] | None = None,
-        exclude_kinds: Sequence[SymbolKind] | None = None,
+        include_kinds: list[int] | None = None,
+        exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
         dir_relative_path: str | None = None,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
@@ -349,6 +350,8 @@ class FindSymbolTool(Tool):
             make a stricter query.
         :return: a list of symbols (with symbol locations) that match the given name in JSON format
         """
+        include_kinds = cast(list[SymbolKind] | None, include_kinds)
+        exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
         symbols = SymbolManager(self.langsrv).find_by_name(
             name,
             include_body=include_body,
@@ -369,8 +372,8 @@ class FindReferencingSymbolsTool(Tool):
         line: int,
         column: int,
         include_body: bool = False,
-        include_kinds: Sequence[SymbolKind] | None = None,
-        exclude_kinds: Sequence[SymbolKind] | None = None,
+        include_kinds: list[int] | None = None,
+        exclude_kinds: list[int] | None = None,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
@@ -384,6 +387,10 @@ class FindReferencingSymbolsTool(Tool):
         :param include_body: whether to include the body of the symbols in the result
         :param include_kinds: an optional list of integers representing the LSP symbol kinds to include.
             If provided, only symbols of the given kinds will be included in the result.
+            Valid kinds:
+            1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
+            11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
+            20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter
         :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
             Takes precedence over include_kinds.
         :param max_answer_chars: if the output is longer than this number of characters,
@@ -392,6 +399,8 @@ class FindReferencingSymbolsTool(Tool):
             make a stricter query.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
+        include_kinds = cast(list[SymbolKind] | None, include_kinds)
+        exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
         symbols = SymbolManager(self.langsrv).find_referencing_symbols(
             SymbolLocation(relative_path, line, column),
             include_body=include_body,
