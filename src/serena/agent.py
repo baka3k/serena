@@ -10,7 +10,7 @@ import sys
 import traceback
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from logging import Logger
 from pathlib import Path
@@ -146,6 +146,19 @@ class Tool(Component):
         name = "".join(["_" + c.lower() if c.isupper() else c for c in name]).lstrip("_")
         return name
 
+    def get_apply_fn(self) -> Callable:
+        apply_fn = getattr(self, "apply")
+        if apply_fn is None:
+            raise Exception(f"{self} does not define method apply")
+        return apply_fn
+
+    def get_description(self) -> str:
+        apply_fn = self.get_apply_fn()
+        docstring = apply_fn.__doc__
+        if docstring is None:
+            raise Exception(f"Missing docstring for {self}")
+        return docstring
+
     @staticmethod
     def _log_tool_application(frame: Any) -> None:
         params = {}
@@ -168,7 +181,7 @@ class Tool(Component):
             )
         return result
 
-    def apply_ex(self, *args, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:
+    def apply_ex(self, *args, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with the given arguments
         """

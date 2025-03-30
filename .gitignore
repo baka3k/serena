@@ -139,7 +139,7 @@ pylint.html
 # Serena-specific
 /*.yml
 !myproject.demo.yml
-
+/agent-ui
 
 # Cache is in .multilspy 
 **/.multilspy/**
