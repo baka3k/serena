@@ -3,34 +3,35 @@
   <img src="resources/serena-logo-dark-mode.svg#gh-dark-mode-only" style="width:400px">
 </p>
 
-# Serena
+> **:rocket: Serena is a powerful, fully-featured coding agent that works directly on your codebase!  
+> :wrench: Serena integrates with existing LLMs and provides them with essential semantic code retrieval and editing tools!  
+> :free: Serena is free to use. No additional API keys or subscriptions required!**
 
-> **🚀 A powerful, fully-featured coding agent that you can use for free. No API key and no subscription required!**
+Q: Can I have a state-of-the-art coding agent without paying (enormous) API costs 
+or constantly purchasing tokens?  
+A: Yes, you can!
+By integrating Serena with your favourite (even free) LLM and thereby enabling it
+to perform coding tasks directly on your codebase.
 
+Serena can be integrated with an LLM in several ways:
+ * by using the **model context protocol (MCP)**.  
+   Serena provides an MCP server which integrates with Claude (and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)).
+ * by using **Agno – the model-agnostic agent framework**.
+   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's from Google, OpenAI or DeepSeek (with a paid API key)
+   or completely free like Ollama, Together or Anyscale.
 
-Serena answers the following important question: 
-Can I have a state-of-the-art coding agent without paying (enormous) API costs 
-or constantly purchasing tokens? The answer is: yes, you can!
+Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
+language server protocol (LSP). The LSP provides a set of versatile code querying
+and editing functionalities based on symbolic understanding of the code. 
+Equipped with these capabilities, Serena discovers and edits code just like a seasoned developer 
+making use of an IDE's capabilities would.
+Serena can efficiently find the right context and do the right thing even in very large and
+complex projects! So not only is it free and open-source, it frequently achieves better results 
+than existing solutions that charge a premium.
 
-We enable developers to harness the full coding power of Claude 
-(and soon also ChatGPT, see [here](https://x.com/OpenAIDevs/status/1904957755829481737)) 
-for free by leveraging two key technologies: 
-**MCP Servers** and **Language Servers**.
+## Is It Really Free?
 
-The former allows MCP clients like Claude Desktop to gain access to your codebase and developer
-tools. Using the latter, we built the core logic of serena - a set of versatile code querying
-and editing functionalities based on symbolic understanding of the code. Serena discovers and
-edits code just like a seasoned developer would do it by navigating the codebase inside an IDE.
-Because of this, serena can find the right context and do the right thing even in very large and
-complex projects! So not only is it free and open source, it is also often better than other existing
-solutions.
-
-Serena stands for *Semantic Retrieval and Editing Noetic Agent*, but we also just liked the name.
-
-
-## Is it Really Free?
-
-Yes! Even the free tier of Anthropic has support for MCP Servers, so you can use serena there.
+Yes! Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena there.
 Presumably, the same will be true for ChatGPT Desktop once they add support for MCP servers.
 But we do recommend to buy the Claude Pro subscription for 20$ per month as this way the rate
 limits are much higher.
