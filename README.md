@@ -1,3 +1,8 @@
+<p align="center" style="text-align:center">
+  <img src="resources/serena-logo.svg#gh-light-mode-only" style="width:400px">
+  <img src="resources/serena-logo-dark-mode.svg#gh-dark-mode-only" style="width:400px">
+</p>
+
 # Serena
 
 > **🚀 A powerful, fully-featured coding agent that you can use for free. No API key and no subscription required!**
