@@ -55,7 +55,7 @@ def make_tool(
 
     def execute_fn(ctx: Context, *args, **kwargs) -> str:  # type: ignore
         mark_used(ctx)
-        tool.apply_ex(*args, log_call=True, catch_exceptions=True, **kwargs)
+        return tool.apply_ex(*args, log_call=True, catch_exceptions=True, **kwargs)
 
     return MCPTool(
         fn=execute_fn,
