@@ -159,18 +159,17 @@ class Tool(Component):
             raise Exception(f"Missing docstring for {self}")
         return docstring
 
-    @staticmethod
-    def _log_tool_application(frame: Any) -> None:
+    def _log_tool_application(self, frame: Any) -> None:
         params = {}
-        tool_name = None
-        for name, value in frame.f_locals.items():
-            if name == "ctx":
+        ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn"}
+        for param, value in frame.f_locals.items():
+            if param in ignored_params:
                 continue
-            if name.endswith("Tool"):
-                tool_name = name
-                continue
-            params[name] = value
-        log.info(f"{tool_name}: {dict_string(params)}")
+            if param == "kwargs":
+                params.update(value)
+            else:
+                params[param] = value
+        log.info(f"{self.get_name()}: {dict_string(params)}")
 
     @staticmethod
     def _limit_length(result: str, max_answer_chars: int) -> str:
@@ -200,7 +199,7 @@ class Tool(Component):
             log.error(f"Error executing tool: {e}", exc_info=e)
             result = msg
         if log_call:
-            log.info("Result: {}")
+            log.info(f"Result: {result}")
         return result
 
 

@@ -6,6 +6,7 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from logging import Formatter, Logger, StreamHandler
 
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
@@ -23,7 +24,10 @@ LOG_LEVEL = logging.INFO
 
 def configure_logging(*args, **kwargs) -> None:  # type: ignore
     # configure logging to stderr (will be captured by Claude Desktop); stdio is the MCP communication stream and cannot be used!
-    logging.basicConfig(level=LOG_LEVEL, stream=sys.stderr, format=LOG_FORMAT)
+    Logger.root.setLevel(LOG_LEVEL)
+    handler = StreamHandler(stream=sys.stderr)
+    handler.formatter = Formatter(LOG_FORMAT)
+    Logger.root.addHandler(handler)
 
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
