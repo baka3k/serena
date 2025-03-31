@@ -81,6 +81,7 @@ class SerenaAgent:
         self.language_server = SyncLanguageServer.create(config, logger, self.project_root)
 
         self.prompt_factory = PromptFactory()
+        self.symbol_manager = SymbolManager(self.language_server)
 
         memories_dir = os.path.join(self.get_serena_managed_dir(), "memories")
         self.memories_manager = MemoriesManager(memories_dir)
@@ -167,11 +168,12 @@ class MemoriesManager:
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
-        self.langsrv = agent.language_server
+        self.language_server = agent.language_server
         self.project_root = agent.project_root
         self.project_config = agent.project_config
         self.prompt_factory = agent.prompt_factory
         self.memories_manager = agent.memories_manager
+        self.symbol_manager = agent.symbol_manager
 
 
 _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
@@ -271,7 +273,7 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        result = self.langsrv.retrieve_full_file_content(relative_path)
+        result = self.language_server.retrieve_full_file_content(relative_path)
         result_lines = result.splitlines()
         if end_line is None:
             result_lines = result_lines[start_line:]
@@ -347,7 +349,7 @@ class GetDirOverviewTool(Tool):
             (e.g. a subdirectory).
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line).
         """
-        result = json.dumps(self.langsrv.request_dir_overview(relative_path))
+        result = json.dumps(self.language_server.request_dir_overview(relative_path))
         return self._limit_length(result, max_answer_chars)
 
 
@@ -368,7 +370,7 @@ class GetDocumentOverviewTool(Tool):
             required for the task.
         :return: a JSON object with the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
-        result = json.dumps(self.langsrv.request_document_overview(relative_path))
+        result = json.dumps(self.language_server.request_document_overview(relative_path))
         return self._limit_length(result, max_answer_chars)
 
 
@@ -422,7 +424,7 @@ class FindSymbolTool(Tool):
         """
         include_kinds = cast(list[SymbolKind] | None, include_kinds)
         exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
-        symbols = SymbolManager(self.langsrv).find_by_name(
+        symbols = self.symbol_manager.find_by_name(
             name,
             include_body=include_body,
             include_kinds=include_kinds,
@@ -475,7 +477,7 @@ class FindReferencingSymbolsTool(Tool):
         """
         include_kinds = cast(list[SymbolKind] | None, include_kinds)
         exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
-        symbols = SymbolManager(self.langsrv).find_referencing_symbols(
+        symbols = self.symbol_manager.find_referencing_symbols(
             SymbolLocation(relative_path, line, column),
             include_body=include_body,
             include_kinds=include_kinds,
@@ -508,7 +510,7 @@ class ReplaceSymbolBodyTool(Tool):
         :param body: the new symbol body. Important: Provide the correct level of indentation
             (as the original body). Note that the first line must not be indented (i.e. no leading spaces).
         """
-        SymbolManager(self.langsrv).replace_body(
+        self.symbol_manager.replace_body(
             SymbolLocation(relative_path, line, column),
             body=body,
         )
@@ -536,7 +538,7 @@ class InsertAfterSymbolTool(Tool):
         :param column: the column
         :param body: the body/content to be inserted
         """
-        SymbolManager(self.langsrv).insert_after(
+        self.symbol_manager.insert_after(
             SymbolLocation(relative_path, line, column),
             body=body,
         )
@@ -565,7 +567,7 @@ class InsertBeforeSymbolTool(Tool):
         :param column: the column
         :param body: the body/content to be inserted
         """
-        SymbolManager(self.langsrv).insert_before(
+        self.symbol_manager.insert_before(
             SymbolLocation(relative_path, line, column),
             body=body,
         )
@@ -591,7 +593,7 @@ class DeleteLinesTool(Tool):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
-        SymbolManager(self.langsrv).delete_lines(relative_path, start_line, end_line)
+        self.symbol_manager.delete_lines(relative_path, start_line, end_line)
         return "OK"
 
 
@@ -615,7 +617,7 @@ class InsertAtLineTool(Tool):
         :param line: the 0-based index of the line to insert content at
         :param content: the body/content to be inserted
         """
-        SymbolManager(self.langsrv).insert_at_line(relative_path, line, content)
+        self.symbol_manager.insert_at_line(relative_path, line, content)
         return "OK"
 
 
@@ -825,7 +827,7 @@ class SearchInAllCodeTool(Tool):
             make a stricter query.
         :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
         """
-        matches = self.langsrv.search_files_for_pattern(
+        matches = self.language_server.search_files_for_pattern(
             pattern=pattern,
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
