@@ -181,7 +181,7 @@ class Tool(Component):
             )
         return result
 
-    def apply_ex(self, *args, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with the given arguments
         """
@@ -192,7 +192,7 @@ class Tool(Component):
         if log_call:
             self._log_tool_application(inspect.currentframe())
         try:
-            result = apply_fn(*args, **kwargs)
+            result = apply_fn(**kwargs)
         except Exception as e:
             if not catch_exceptions:
                 raise

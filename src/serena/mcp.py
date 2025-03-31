@@ -57,9 +57,9 @@ def make_tool(
     func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
 
-    def execute_fn(ctx: Context, *args, **kwargs) -> str:  # type: ignore
+    def execute_fn(ctx: Context, **kwargs) -> str:  # type: ignore
         mark_used(ctx)
-        return tool.apply_ex(*args, log_call=True, catch_exceptions=True, **kwargs)
+        return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
     return MCPTool(
         fn=execute_fn,

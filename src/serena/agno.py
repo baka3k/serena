@@ -4,8 +4,8 @@ from serena.agent import SerenaAgent, Tool
 
 
 def serena_tool_to_agno_function(tool: Tool) -> Function:
-    def entrypoint(*args, tool=tool, **kwargs):  # type: ignore
-        tool.apply_ex(*args, log_call=True, catch_exceptions=True, **kwargs)
+    def entrypoint(tool=tool, **kwargs):  # type: ignore
+        tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
     function = Function.from_callable(tool.get_apply_fn())
     function.name = tool.get_name()
