@@ -122,14 +122,14 @@ class EclipseJDTLS(LanguageServer):
                 "-Xms100m",
                 "-Xlog:disable",
                 "-Dlog.level=ALL",
-                f"-javaagent:{lombok_jar_path}",
-                f"-Djdt.core.sharedIndexLocation={shared_cache_location}",
+                f'"-javaagent:{lombok_jar_path}"',
+                f'"-Djdt.core.sharedIndexLocation={shared_cache_location}"',
                 "-jar",
-                jdtls_launcher_jar,
+                f'"{jdtls_launcher_jar}"',
                 "-configuration",
-                jdtls_config_path,
+                f'"{jdtls_config_path}"',
                 "-data",
-                data_dir,
+                f'"{data_dir}"',
             ]
         )
 
