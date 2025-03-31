@@ -33,9 +33,9 @@ Language servers provide support for a wide range of programming languages.
 With Serena, we provide 
  * direct, out-of-the-box support for:
      * Python 
- * indirect support (requiring separate language server installtion) for:
+     * Java (_Note_: startup is slow, initial startup especially so)
+ * indirect support (requiring separate language server installation) for:
      * TypeScript (untested)
-     * Java (untested)
      * Ruby (untested)
      * Go (untested)
      * C# (untested)
