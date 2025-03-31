@@ -95,6 +95,74 @@ Gemini-2.5-pro.
 
 ...
 
+## Comparison with Other Tools
+
+To our knowledge, Serena is the first fully-featured coding agent where the
+entire functionality
+is available through an MCP server, thus not requiring API keys or
+subscriptions.
+Here a brief comparison with other tools:
+
+### Subscription-Based Coding Agents
+
+The most prominent subscription-based coding agents are parts of IDE's like
+Windsurf, Cursor and VSCode.
+The functionality of Serena is similar to Cursor's Agent, Windsurf's Cascade or
+VSCode's
+upcoming [agent mode](https://code.visualstudio.com/blogs/2025/02/24/introducing-copilot-agent-mode).
+
+The main positive difference is that Serena does not require a subscription, and
+the negative difference is that Serena
+is not directly integrated into an IDE, so the inspection of newly written code
+is not as seamless.
+
+More technical differences are:
+* Serena is an MCP server, so it can be used with any MCP client and is not
+bound to a specific IDE.
+* Serena navigates and edits code using a language server, so it has a symbolic
+understanding of the code.
+IDE-based tools usually use a RAG and text-matching approach, which is often
+less powerful, especially for large codebases.
+* Serena is open-source and has a small codebase, so it can be easily extended
+and modified.
+* Serena is not limited to a specific model or API, but can be used with any LLM
+that supports the MCP.
+
+Note that Serena **can be used with any IDE** that supports including MCP
+Servers (Cursor and Windsurf both do that).
+Then, of course, you are back to paying for the IDE subscription. You might
+still want to use Serena because it's way of parsing code
+may be more efficient than the (usually RAG-based) parsing of the IDE's agent.
+
+### API-Based Coding Agents
+
+An alternative to subscription-based agents are API-based agents like Claude
+Code, Cline, Aider, Roo Code and others.
+Some of them (like Cline) can even be included in IDEs as an extension.
+They are often very powerful and their main downside is the (potentially very
+large) API costs.
+
+Serena itself can be used as an API-based agent, see the section on Agno above.
+We have not yet written a CLI tool or a
+dedicated IDE extension for Serena (there is probably no need for the latter, as
+you can use Serena with any IDE that supports MCP servers).
+If there is a large demand for Serena as a CLI tool like Claude Code, we will
+consider writing one.
+
+The main difference between Serena and other API-based agents is that Serena can
+also be used as an MCP server, thus not requiring
+an API key and bypassing the API costs. This is a unique feature of Serena.
+
+### Other MCP Server Coding Agents
+
+There are other MCP servers meant for coding, like for
+example [DesktopCommander](https://github.com/wonderwhy-er/DesktopCommanderMCP) and
+[codemcp](https://github.com/ezyang/codemcp).
+However, to our knowledge, none of them use a language server for code
+navigation and editing, and are thus limited to just text-based analysis. 
+It is the integration of language servers and the MCP that makes Serena unique and so powerful for hard coding
+tasks on large codebases.
+
 ## Developer Environment Setup
 
 You can have a local setup via `uv` or a docker interpeter-based setup. 
