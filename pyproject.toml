@@ -9,7 +9,7 @@ name = "serena"
 version = "0.1.0"
 description = ""
 authors = [
-  {name = "Oraios AI", email = "michael.panchenko@oraios-ai.de"}
+  {name = "Oraios AI", email = "info@oraios-ai.de"}
 ]
 readme = "README.md"
 requires-python = ">=3.11, <3.12"
