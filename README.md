@@ -34,8 +34,8 @@ With Serena, we provide
  * direct, out-of-the-box support for:
      * Python 
      * Java (_Note_: startup is slow, initial startup especially so)
+     * TypeScript
  * indirect support (requiring separate language server installation) for:
-     * TypeScript (untested)
      * Ruby (untested)
      * Go (untested)
      * C# (untested)
