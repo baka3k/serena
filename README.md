@@ -97,9 +97,7 @@ Agno is a model-agnostic agent framework that allows you to use Serena with a la
 While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
 making it easy to directly use the agent.  
 
-Here's how it works:
-
-(The instructions below are extracted from the [agno docs](https://docs.agno.com/introduction/playground).)
+Here's how it works (see also [Agno's documentation](https://docs.agno.com/introduction/playground)):
 
 1. Download the agent-ui code with npx
    ```shell
