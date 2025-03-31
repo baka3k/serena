@@ -100,6 +100,8 @@ class SerenaAgent:
             log.info("Starting the language server ...")
             self.language_server.start()
 
+        self._is_initialized = True
+
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self.tools[tool_class]  # type: ignore
 
@@ -110,6 +112,8 @@ class SerenaAgent:
         """
         Destructor to clean up the language server instance and GUI logger
         """
+        if not hasattr(self, "_is_initialized"):
+            return
         log.info("SerenaAgent is shutting down ...")
         if self._start_language_server:
             log.info("Stopping the language server ...")
@@ -189,7 +193,13 @@ class Tool(Component):
             raise Exception(f"{self} does not define method apply")
         return apply_fn
 
-    def get_description(self) -> str:
+    def get_tool_description(self) -> str:
+        docstring = self.__class__.__doc__
+        if docstring is None:
+            return ""
+        return docstring.strip()
+
+    def get_function_description(self) -> str:
         apply_fn = self.get_apply_fn()
         docstring = apply_fn.__doc__
         if docstring is None:
@@ -241,11 +251,15 @@ class Tool(Component):
 
 
 class ReadFileTool(Tool):
+    """
+    Reads a file within the project directory.
+    """
+
     def apply(
         self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH
     ) -> str:
         """
-        Read the given file or a chunk of it (between start_line and end_line). Generally, symbolic operations
+        Reads the given file or a chunk of it (between start_line and end_line). Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
         Reading the entire file is only recommended if there is no other way to get the content required for the task.
 
@@ -269,6 +283,10 @@ class ReadFileTool(Tool):
 
 
 class CreateTextFileTool(Tool):
+    """
+    Creates/overwrites a file in the project directory.
+    """
+
     def apply(self, relative_path: str, content: str) -> str:
         """
         Write a new file (or overwrite an existing file). For existing files, it is strongly recommended
@@ -288,6 +306,10 @@ class CreateTextFileTool(Tool):
 
 
 class ListDirTool(Tool):
+    """
+    Lists files and directories in the given directory (optionally with recursion).
+    """
+
     def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
@@ -308,9 +330,13 @@ class ListDirTool(Tool):
 
 
 class GetDirOverviewTool(Tool):
+    """
+    Gets an overview of the top-level symbols defined in all files within a given directory.
+    """
+
     def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Get an overview of the given directory.
+        Gets an overview of the given directory.
         For each file in the directory, we list the top-level symbols in the file (name, kind, line).
         Use this tool to get a high-level understanding of the code symbols inside a directory.
 
@@ -326,6 +352,10 @@ class GetDirOverviewTool(Tool):
 
 
 class GetDocumentOverviewTool(Tool):
+    """
+    Gets an overview of the top-level symbols defined in a given file.
+    """
+
     def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Use this tool to get a high-level understanding of the code symbols in a file. It often makes sense
@@ -343,6 +373,10 @@ class GetDocumentOverviewTool(Tool):
 
 
 class FindSymbolTool(Tool):
+    """
+    Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+    """
+
     def apply(
         self,
         name: str,
@@ -402,6 +436,10 @@ class FindSymbolTool(Tool):
 
 
 class FindReferencingSymbolsTool(Tool):
+    """
+    Finds symbols that reference the symbol at the given location (optionally filtered by type).
+    """
+
     def apply(
         self,
         relative_path: str,
@@ -449,6 +487,10 @@ class FindReferencingSymbolsTool(Tool):
 
 
 class ReplaceSymbolBodyTool(Tool):
+    """
+    Replaces the full definition of a symbol.
+    """
+
     def apply(
         self,
         relative_path: str,
@@ -474,6 +516,10 @@ class ReplaceSymbolBodyTool(Tool):
 
 
 class InsertAfterSymbolTool(Tool):
+    """
+    Inserts content after the end of the definition of a given symbol.
+    """
+
     def apply(
         self,
         relative_path: str,
@@ -498,6 +544,10 @@ class InsertAfterSymbolTool(Tool):
 
 
 class InsertBeforeSymbolTool(Tool):
+    """
+    Inserts content before the beginning of the definition of a given symbol.
+    """
+
     def apply(
         self,
         relative_path: str,
@@ -523,6 +573,10 @@ class InsertBeforeSymbolTool(Tool):
 
 
 class DeleteLinesTool(Tool):
+    """
+    Deletes a range of lines within a file.
+    """
+
     def apply(
         self,
         relative_path: str,
@@ -542,6 +596,10 @@ class DeleteLinesTool(Tool):
 
 
 class InsertAtLineTool(Tool):
+    """
+    Inserts content at a given line in a file.
+    """
+
     def apply(
         self,
         relative_path: str,
@@ -562,6 +620,10 @@ class InsertAtLineTool(Tool):
 
 
 class CheckOnboardingPerformedTool(Tool):
+    """
+    Checks whether the onboarding was already performed.
+    """
+
     def apply(self) -> str:
         """
         Check if onboarding was performed yet.
@@ -581,6 +643,10 @@ class CheckOnboardingPerformedTool(Tool):
 
 
 class OnboardingTool(Tool):
+    """
+    Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
+    """
+
     def apply(self) -> str:
         """
         Call this tool if onboarding was not performed yet.
@@ -593,6 +659,10 @@ class OnboardingTool(Tool):
 
 
 class WriteMemoryTool(Tool):
+    """
+    Writes a named memory (for future reference) to Serena's project-specific memory store.
+    """
+
     def apply(self, memory_file_name: str, content: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Write some general information about this project that can be useful for future tasks to a memory file.
@@ -614,6 +684,10 @@ class WriteMemoryTool(Tool):
 
 
 class ReadMemoryTool(Tool):
+    """
+    Reads the memory with the given name from Serena's project-specific memory store.
+    """
+
     def apply(self, memory_file_name: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Read the content of a memory file. This tool should only be used if the information
@@ -625,6 +699,10 @@ class ReadMemoryTool(Tool):
 
 
 class ListMemoriesTool(Tool):
+    """
+    Lists memories in Serena's project-specific memory store.
+    """
+
     def apply(self) -> str:
         """
         List available memories. Any memory can be read using the `read_memory` tool.
@@ -633,6 +711,10 @@ class ListMemoriesTool(Tool):
 
 
 class DeleteMemoryTool(Tool):
+    """
+    Deletes a memory from Serena's project-specific memory store.
+    """
+
     def apply(self, memory_file_name: str) -> str:
         """
         Delete a memory file. Should only happen if a user asks for it explicitly,
@@ -643,6 +725,10 @@ class DeleteMemoryTool(Tool):
 
 
 class ThinkAboutCollectedInformationTool(Tool):
+    """
+    Thinking tool for pondering the completeness of collected information.
+    """
+
     def apply(self) -> str:
         """
         Think about the collected information and whether it is sufficient and relevant.
@@ -653,6 +739,10 @@ class ThinkAboutCollectedInformationTool(Tool):
 
 
 class ThinkAboutTaskAdherenceTool(Tool):
+    """
+    Thinking tool for determining whether the agent is still on track with the current task.
+    """
+
     def apply(self) -> str:
         """
         Think about the task at hand and whether you are still on track.
@@ -665,6 +755,10 @@ class ThinkAboutTaskAdherenceTool(Tool):
 
 
 class ThinkAboutWhetherYouAreDoneTool(Tool):
+    """
+    Thinking tool for determining whether the task is truly completed.
+    """
+
     def apply(self) -> str:
         """
         Think about whether you are done with the task.
@@ -675,6 +769,10 @@ class ThinkAboutWhetherYouAreDoneTool(Tool):
 
 
 class SummarizeChangesTool(Tool):
+    """
+    Provides instructions for summarizing the changes made to the codebase.
+    """
+
     def apply(self) -> str:
         """
         Summarize the changes you have made to the codebase.
@@ -685,6 +783,10 @@ class SummarizeChangesTool(Tool):
 
 
 class PrepareForNewConversationTool(Tool):
+    """
+    Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
+    """
+
     def apply(self) -> str:
         """
         Instructions for preparing for a new conversation. This tool should only be called on explicit user request.
@@ -693,6 +795,10 @@ class PrepareForNewConversationTool(Tool):
 
 
 class SearchInAllCodeTool(Tool):
+    """
+    Performs a search for a pattern in all code files (and only in code files) in the project.
+    """
+
     def apply(
         self,
         pattern: str,
@@ -736,6 +842,10 @@ class SearchInAllCodeTool(Tool):
 
 
 class ExecuteShellCommandTool(Tool):
+    """
+    Executes a shell command.
+    """
+
     def apply(
         self,
         command: str,
