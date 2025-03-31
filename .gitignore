@@ -140,6 +140,8 @@ pylint.html
 /*.yml
 !myproject.demo.yml
 /agent-ui
+# dynamic LS installations
+/src/multilspy/language_servers/*/static
 
 # Cache is in .multilspy 
 **/.multilspy/**
