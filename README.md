@@ -16,7 +16,8 @@ to perform coding tasks directly on your codebase.
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
    Serena provides an MCP server which integrates with Claude (and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)).
- * by using **Agno – the model-agnostic agent framework**.  
+ * by incorporating Serena's tools into an agent of your choice.
+   We provide a reference implementation for using Serena with Agno, see [below](#as-agno-agent).
    Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or DeepSeek (with a paid API key)
    or a free model provided by Ollama, Together or Anyscale.
 
@@ -88,16 +89,84 @@ write a new configuration file and adjust the config in the MCP client.
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
-### Agno
+## Serena Beyond the MCP Server
 
-With Agno, Serena can be used with any model, including the currently popular (and SOTA in coding)
-Gemini-2.5-pro.
+Serena is not only an MCP server. We put particular effort into decoupling the
+core functionality from the MCP server implementation. As a result,
+Serena's tools can easily be adapted to be used with any model and any agent
+framework. If you prefer to incorporate Serena into your own agent code, you can
+do so by writing a small adaptor.
 
-...
+### As Agno Agent
 
-## Serena's Tools
+For demo purposes, and to immediately allow using other models apart from Claude, we provide
+an [Agno](https://github.com/agno-agi/agno)-based implementation of
+Serena as an agent.
+
+We chose Agno as a reference because it comes with its own open-source UI, 
+making it easy to directly use the agent. Here's how it works:
+
+(The instructions below are extracted from the [agno docs](https://docs.agno.com/introduction/playground).)
+
+1. Download the agent-ui code with 
+```shell
+# Create a new Agent UI project, install the dependencies by pressing y
+npx create-agent-ui@latest
+```
+
+```shell
+# Or clone and run manually
+git clone https://github.com/agno-agi/agent-ui.git
+cd agent-ui && pnpm install && pnpm dev
+```
+2. Install serena with the optional requirements:
+```shell
+# You can also only select agno,google or agno,anthropic instead of all-extras
+uv pip install --all-extras -e .
+```
+3. Set up the `.env` file by filling in the API keys after copying the example:
+```shell
+cp .env.example .env
+```
+4. Start the agno agent app with
+```shell
+uv run python scripts/agno_agent.py
+```
+By default the script uses Claude as the model, but you can choose any model
+supported by agno (which is essentially any existing model).
+
+5. In a new terminal, start the agno UI with
+```shell
+cd agent-ui && pnpm dev
+```
+Connect the UI to the agent you started above and start chatting. You will have
+the same tools as in the MCP server version.
+
+IMPORTANT: Contrary to the MCP server approach, the tool execution in Agno UI is
+always automatic and you will not be asked for permission. Note that the shell
+tool can perform arbitrary code execution. We have never seen any issues with
+this in our testing, but please be aware of this, and decide for yourself
+whether you want to enable it for your setup.
+
+## Serena's Tools and Configuration
 
 Serena combines tools for semantic code retrieval with editing capabilities and shell execution.
+We recommend you to use all tools, as in this way Serena can provide the most value.
+By executing shell commands (in particular tests), Serena can identify and correct mistakes autonomously.
+
+However, the `execute_shell_command` tool allows for arbitrary code execution. 
+If you use Serena as MCP Server, most MCP clients will ask you for permission 
+before executing a tool, so there is not much danger of problematic commands.
+We recommend that you always inspect the shell commands before permitting their execution.
+During the [onboarding phase](#onboarding-and-memories), Serena
+will also extract a memory file for suggested shell commands, which you can review
+and adjust if needed. We have not seen any issues with the shell tool in our testing,
+but if you have concerns, you can disable it in the configuration.
+
+If you only want to use Serena for analyzing code and not for editing, 
+you can also disable the `edit` tools in the configuration.
+
+Here a complete list of Serena's tools:
 
 * `check_onboarding_performed`: Checks whether the onboarding was already performed.
 * `create_text_file`: Creates/overwrites a file in the project directory.
@@ -189,6 +258,29 @@ It is the integration of language servers and the MCP that makes Serena unique
 and so powerful for challenging coding tasks, especially in the context of
 larger codebases.
 
+## Onboarding and Memories
+
+By default, Serena will perform an onboarding process when 
+it is started for the first time for a project. It will save some information
+as memories to `.serena/memories/` in the project directory.
+
+The memories are human-readable and will be used as references for further tasks.
+Feel free to read and adjust them as needed, you can also add new ones manually.
+Every file in the `.serena/memories/` directory is a memory file.
+
+We found the memories to significantly improve the user experience with Serena.
+By itself, Serena is instructed to create new memories whenever appropriate.
+
+## Recommendations on Using Serena
+
+### Before Editing Code
+
+### Running Out of Context
+
+### Controlling Tool Execution
+
+### Structuring the Codebase
+
 ## Developer Environment Setup
 
 You can have a local setup via `uv` or a docker interpreter-based setup. 
@@ -235,11 +327,18 @@ volume.
 We built Serena on top of multiple existing open-source technologies, to which we are very grateful.
 Here a short list of the most important ones:
 
-1. [Multilspy](https://github.com/microsoft/multilspy). 
-   A beautifully designed wrapper around language servers which we copied and extended with symbolic operations for Serena.
+1. [Multilspy](https://github.com/microsoft/multilspy).
+   A beautifully designed wrapper around language servers following the LSP. It
+   was not easily extendable with the symbolic
+   logic that Serena required, so instead of incorporating it as dependency, we
+   copied the source code
+   and adapted it to our needs.
 2. [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)
-3. [Agno](https://github.com/agno-agi/agno) and agno's [agent-ui](https://github.com/agno-agi/agent-ui), which we use to allow Serena to work with any model.
-4. All the language servers that we use through multilspy
+3. [Agno](https://github.com/agno-agi/agno) and
+   agno's [agent-ui](https://github.com/agno-agi/agent-ui),
+   which we use to allow Serena to work with any model, not just those that
+   support the MCP.
+4. All the language servers that we use through multilspy.
 
 Without these projects, Serena would not have been possible, or would at least much more difficult to build.
 
