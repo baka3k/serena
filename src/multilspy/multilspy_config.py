@@ -41,6 +41,20 @@ class Language(str, Enum):
         match self:
             case self.PYTHON:
                 return FilenameMatcher("*.py")
+            case self.JAVA:
+                return FilenameMatcher("*.java")
+            case self.TYPESCRIPT:
+                return FilenameMatcher("*.ts", "*.js")
+            case self.JAVASCRIPT:
+                return FilenameMatcher("*.js")
+            case self.CSHARP:
+                return FilenameMatcher("*.cs")
+            case self.RUST:
+                return FilenameMatcher("*.rs")
+            case self.GO:
+                return FilenameMatcher("*.go")
+            case self.RUBY:
+                return FilenameMatcher("*.rb")
             case _:
                 raise ValueError
 
