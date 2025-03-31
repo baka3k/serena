@@ -37,7 +37,14 @@ TTool = TypeVar("TTool", bound="Tool")
 
 
 class SerenaAgent:
-    def __init__(self, project_file_path: str):
+    def __init__(self, project_file_path: str, start_language_server: bool = False):
+        """
+        :param project_file_path: the project configuration file path (.yml)
+        :param start_language_server: whether to start the language server immediately and manage its
+            lifecycle internally
+        """
+        self._start_language_server = start_language_server
+
         if not os.path.exists(project_file_path):
             print(f"Project file not found: {project_file_path}", file=sys.stderr)
             sys.exit(1)
@@ -51,12 +58,13 @@ class SerenaAgent:
 
         # enable GUI log window
         enable_gui_log = project_config.get("gui_log_window", True)
+        self._gui_log_handler = None
         if enable_gui_log:
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
             else:
-                log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=LOG_LEVEL, format_string=LOG_FORMAT)
-                Logger.root.addHandler(log_handler)
+                self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=LOG_LEVEL, format_string=LOG_FORMAT)
+                Logger.root.addHandler(self._gui_log_handler)
 
         log.info(
             f"Starting serena server for project {project_file_path} (language={self.language}, root={self.project_root}); "
@@ -83,14 +91,37 @@ class SerenaAgent:
             self.tools[tool_class] = tool_instance
         log.info(f"Loaded tools: {', '.join([tool.get_name() for tool in self.tools.values()])}")
 
+        # start the language server if requested
+        if self._start_language_server:
+            log.info("Starting the language server ...")
+            self.language_server.start()
+
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self.tools[tool_class]  # type: ignore
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, ".serena")
 
+    def __del__(self) -> None:
+        """
+        Destructor to clean up the language server instance and GUI logger
+        """
+        log.info("SerenaAgent is shutting down ...")
+        if self._start_language_server:
+            log.info("Stopping the language server ...")
+            self.language_server.stop()
+        if self._gui_log_handler:
+            log.info("Stopping the GUI log window ...")
+            self._gui_log_handler.stop_viewer()
+            Logger.root.removeHandler(self._gui_log_handler)
+
     @contextmanager
-    def start_server(self) -> Iterator[None]:
+    def language_server_lifecycle_context(self) -> Iterator[None]:
+        """
+        Context manager for the language server's lifecycle
+        """
+        if self._start_language_server:
+            raise Exception("This context manager can only be used if the instance is created with start_language_server=True")
         with self.language_server.start_server():
             yield
 
@@ -139,8 +170,9 @@ _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
 class Tool(Component):
-    def get_name(self) -> str:
-        name = self.__class__.__name__
+    @classmethod
+    def get_name(cls) -> str:
+        name = cls.__name__
         if name.endswith("Tool"):
             name = name[:-4]
         # convert to snake_case
@@ -232,7 +264,7 @@ class ReadFileTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateFileTool(Tool):
+class CreateTextFileTool(Tool):
     def apply(self, relative_path: str, content: str) -> str:
         """
         Write a new file (or overwrite an existing file). For existing files, it is strongly recommended

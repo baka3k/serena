@@ -84,7 +84,7 @@ def create_mcp_server() -> FastMCP:
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequestContext]:
         """Manage server startup and shutdown lifecycle."""
-        with agent.start_server():
+        with agent.language_server_lifecycle_context():
             yield SerenaMCPRequestContext(agent=agent)
 
     mcp_settings = Settings(lifespan=server_lifespan)
