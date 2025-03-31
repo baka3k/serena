@@ -12,8 +12,11 @@ from sensai.util.helper import mark_used
 from serena.agent import SerenaAgent
 from serena.agno import SerenaAgnoToolkit
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
 mark_used(Gemini, Claude)
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+Logger.root.setLevel(logging.INFO)
+
 load_dotenv()
 
 project_file_path = "../myproject.yml"
@@ -38,5 +41,4 @@ agno_agent = Agent(
 app = Playground(agents=[agno_agent]).get_app()
 
 if __name__ == "__main__":
-    Logger.root.setLevel(logging.INFO)
     serve_playground_app("agno_agent:app", reload=False)

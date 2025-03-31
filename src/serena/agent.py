@@ -8,6 +8,7 @@ import os
 import platform
 import sys
 import traceback
+import warnings
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Callable, Iterator
@@ -32,7 +33,6 @@ from serena.util.shell import execute_shell_command
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
-LOG_LEVEL = logging.INFO
 TTool = TypeVar("TTool", bound="Tool")
 
 
@@ -63,7 +63,11 @@ class SerenaAgent:
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
             else:
-                self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=LOG_LEVEL, format_string=LOG_FORMAT)
+                log_level = project_config.get("gui_log_level", logging.INFO)
+                if Logger.root.level > log_level:
+                    warnings.warn(f"Root logger level is higher than GUI log level; changing the root logger level to {log_level}")
+                    Logger.root.setLevel(log_level)
+                self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=log_level, format_string=LOG_FORMAT)
                 Logger.root.addHandler(self._gui_log_handler)
 
         log.info(
