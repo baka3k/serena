@@ -98,11 +98,13 @@ class Symbol(ToStringMixin):
         result = []
 
         def should_include(s: "Symbol") -> bool:
-            name_match = (substring_matching and name in s.name) or name == s.name
-            kind_include_match = include_kinds is None or s.symbol_kind in include_kinds
-            kind_exclude_match = exclude_kinds is None or s.symbol_kind not in exclude_kinds
-
-            return name_match and kind_include_match and kind_exclude_match
+            if not ((substring_matching and name in s.name) or name == s.name):
+                return False
+            if include_kinds is not None and s.symbol_kind not in include_kinds:
+                return False
+            if exclude_kinds is not None and s.symbol_kind in exclude_kinds:
+                return False
+            return True
 
         def traverse(s: "Symbol") -> None:
             if should_include(s):
