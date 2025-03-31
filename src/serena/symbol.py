@@ -21,14 +21,28 @@ class SymbolLocation:
     """
 
     relative_path: str
-    line: int
-    column: int
+    """
+    the relative path of the file containing the symbol
+    """
+    line: int | None
+    """
+    the line number in which the symbol identifier is defined (if the symbol is a function, class, etc.);
+    may be None for some types of symbols (e.g. SymbolKind.File)
+    """
+    column: int | None
+    """
+    the column number in which the symbol identifier is defined (if the symbol is a function, class, etc.);
+    may be None for some types of symbols (e.g. SymbolKind.File)
+    """
 
     def __post_init__(self) -> None:
         self.relative_path = self.relative_path.replace("/", os.path.sep)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def has_position_in_file(self) -> bool:
+        return self.line is not None and self.column is not None
 
 
 class Symbol(ToStringMixin):
@@ -73,12 +87,20 @@ class Symbol(ToStringMixin):
         return self.s["location"]["range"]["end"]
 
     @property
-    def line(self) -> int:
-        return self.s["selectionRange"]["start"]["line"]
+    def line(self) -> int | None:
+        if "selectionRange" in self.s:
+            return self.s["selectionRange"]["start"]["line"]
+        else:
+            # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
+            return None
 
     @property
-    def column(self) -> int:
-        return self.s["selectionRange"]["start"]["character"]
+    def column(self) -> int | None:
+        if "selectionRange" in self.s:
+            return self.s["selectionRange"]["start"]["character"]
+        else:
+            # precise location is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
+            return None
 
     @property
     def body(self) -> str | None:
@@ -238,6 +260,10 @@ class SymbolManager:
             Takes precedence over include_kinds.
         :return: a list of symbols that reference the given symbol
         """
+        if not symbol_location.has_position_in_file():
+            raise ValueError("Symbol location does not contain a valid position in a file")
+        assert symbol_location.line is not None
+        assert symbol_location.column is not None
         symbol_dicts = self.lang_server.request_referencing_symbols(
             relative_file_path=symbol_location.relative_path,
             line=symbol_location.line,
