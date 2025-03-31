@@ -208,7 +208,7 @@ You can install a virtual environment with the required as follows
 2. Activate the environment:
     * On Linux/Unix/macOS: `source .venv/bin/activate`
     * On Windows: `.venv\Scripts\activate.bat`
-3. Install the required packages: `uv pip install -e ".[dev]"`
+3. Install the required packages: `uv pip install --all-extras -r pyproject.toml -e .`
 
 ### Docker setup
 
@@ -229,6 +229,20 @@ for you.
 
 Note: For the Windows subsystem for Linux (WSL), you may need to adjust the path for the
 volume.
+
+## Acknowledgements
+
+We built Serena on top of multiple existing open-source technologies, to which we are very grateful.
+Here a short list of the most important ones:
+
+1. [Multilspy](https://github.com/microsoft/multilspy). 
+   A beautifully designed wrapper around language servers which we copied and extended with symbolic operations for Serena.
+2. [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)
+3. [Agno](https://github.com/agno-agi/agno) and agno's [agent-ui](https://github.com/agno-agi/agent-ui), which we use to allow Serena to work with any model.
+4. All the language servers that we use through multilspy
+
+Without these projects, Serena would not have been possible, or would at least much more difficult to build.
+
 
 ## Contributing
 

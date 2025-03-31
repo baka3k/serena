@@ -31,7 +31,8 @@ COPY pyproject.toml /workspaces/serena/
 
 # Create virtual environment and install dependencies
 RUN uv venv
-RUN uv pip install -e ".[dev]"
+RUN source .venv/bin/activate
+RUN uv pip install --all-extras -r pyproject.toml -e .
 ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
 
 # Entrypoint to ensure environment is activated
