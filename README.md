@@ -129,6 +129,15 @@ You should then see the Serena MCP tools in your chat interface (notice the smal
 Note that Serena is always configured *for a single project*. To use it for another, you will have to
 write a new configuration file and adjust the config in the MCP client.
 
+Here you see Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
+Note the smart usage in finding and editing the right symbols.
+
+<video width="640" height="360" controls>
+  <source src="https://raw.githubusercontent.com/oraios/videos/main/serena_add_logo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
 ### Agno
@@ -175,6 +184,15 @@ Here's how it works (see also [Agno's documentation](https://docs.agno.com/intro
    ```
    Connect the UI to the agent you started above and start chatting. You will have
    the same tools as in the MCP server version.
+
+
+Here Serena performing a small analysis task in the Agno UI with the newest Gemini:
+
+<video width="640" height="360" controls>
+  <source src="https://raw.githubusercontent.com/oraios/videos/main/serena_analyze_ls.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 
 IMPORTANT: Contrary to the MCP server approach, tool execution in the Agno UI does
 not ask for the user's permission. Note that the shell
