@@ -115,7 +115,7 @@ class SerenaAgent:
                 continue
             self.tools[tool_class] = tool_instance
         log.info(f"Loaded tools: {', '.join([tool.get_name() for tool in self.tools.values()])}")
-        
+
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
             tool_names = [tool.get_name() for tool in self.tools.values()]
