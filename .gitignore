@@ -145,3 +145,7 @@ pylint.html
 
 # Cache is in .multilspy 
 **/.multilspy/**
+
+tmp/
+
+.serena/

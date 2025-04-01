@@ -74,7 +74,7 @@ We thus built Serena with the prospect of being able to cancel most other subscr
     "mcpServers": {
         "serena": {
             "command": "/abs/path/to/uv",
-            "args": ["run", "--directory", "/abs/path/to/serena", "serena", "/abs/path/to/myproject.yml"]
+            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "/abs/path/to/myproject.yml"]
         }
     }
 }
@@ -169,7 +169,8 @@ without modifying the codebase, you can consider disabling the editing tools in 
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.
 
-Here a complete list of Serena's tools:
+Here a complete list of Serena's tools
+(you can get an up-to-date list by running `uv run serena-list-tools`)
 
 * `check_onboarding_performed`: Checks whether the onboarding was already performed.
 * `create_text_file`: Creates/overwrites a file in the project directory.

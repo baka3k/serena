@@ -11,7 +11,7 @@ import traceback
 import warnings
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import contextmanager
 from logging import Logger
 from pathlib import Path
@@ -29,6 +29,7 @@ from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.util.file_system import scan_directory
+from serena.util.inspection import iter_subclasses
 from serena.util.shell import execute_shell_command
 
 log = logging.getLogger(__name__)
@@ -101,11 +102,12 @@ class SerenaAgent:
         self.lines_read = LinesRead()
 
         # find all tool classes and instantiate them
+        excluded_tools = project_config.get("excluded_tools", [])
         self.tools: dict[type[Tool], Tool] = {}
-        tool_classes = [
-            cls for name, cls in inspect.getmembers(sys.modules[__name__], inspect.isclass) if issubclass(cls, Tool) and cls is not Tool
-        ]
-        for tool_class in tool_classes:
+        for tool_class in iter_tool_classes():
+            if (tool_name := tool_class.get_name()) in excluded_tools:
+                log.info(f"Skipping tool {tool_name} because it is in the exclude list")
+                continue
             tool_instance = tool_class(self)
             self.tools[tool_class] = tool_instance
         log.info(f"Loaded tools: {', '.join([tool.get_name() for tool in self.tools.values()])}")
@@ -115,10 +117,11 @@ class SerenaAgent:
             log.info("Starting the language server ...")
             self.language_server.start()
 
-        self._is_initialized = True
-
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self.tools[tool_class]  # type: ignore
+
+    def print_tool_overview(self) -> None:
+        _print_tool_overview(self.tools.values())
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, ".serena")
@@ -212,8 +215,9 @@ class Tool(Component):
             raise Exception(f"{self} does not define method apply")
         return apply_fn
 
-    def get_tool_description(self) -> str:
-        docstring = self.__class__.__doc__
+    @classmethod
+    def get_tool_description(cls) -> str:
+        docstring = cls.__doc__
         if docstring is None:
             return ""
         return docstring.strip()
@@ -928,3 +932,20 @@ class ExecuteShellCommandTool(Tool):
         result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
         result = result.json()
         return self._limit_length(result, max_answer_chars)
+
+
+def iter_tool_classes() -> Generator[type[Tool], None, None]:
+    return iter_subclasses(Tool)
+
+
+def print_tool_overview() -> None:
+    _print_tool_overview(iter_tool_classes())
+
+
+def _print_tool_overview(tools: Iterable[type[Tool] | Tool]) -> None:
+    tool_dict: dict[str, type[Tool] | Tool] = {}
+    for tool in tools:
+        tool_dict[tool.get_name()] = tool
+    for tool_name in sorted(tool_dict.keys()):
+        tool = tool_dict[tool_name]
+        print(f" * `{tool_name}`: {tool.get_tool_description().strip()}")

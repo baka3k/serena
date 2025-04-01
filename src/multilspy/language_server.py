@@ -6,37 +6,36 @@ The details of Language Specific configuration are not exposed to the user.
 """
 
 import asyncio
-from collections import defaultdict
-from copy import copy
 import dataclasses
-from fnmatch import fnmatch
 import hashlib
 import json
-import pickle
 import logging
 import os
 import pathlib
+import pickle
 import re
 import threading
+from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
+from copy import copy
+from fnmatch import fnmatch
+from pathlib import Path, PurePath
+from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
-from serena.text_utils import MatchedConsecutiveLines, LineType, TextLine, search_text
-from .lsp_protocol_handler.lsp_constants import LSPConstants
-from  .lsp_protocol_handler import lsp_types as LSPTypes
-
+from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_text
 from . import multilspy_types
-from .multilspy_logger import MultilspyLogger
+from .lsp_protocol_handler import lsp_types as LSPTypes
+from .lsp_protocol_handler.lsp_constants import LSPConstants
+from .lsp_protocol_handler.lsp_types import SymbolKind
 from .lsp_protocol_handler.server import (
     LanguageServerHandler,
     ProcessLaunchInfo,
 )
-from .multilspy_config import MultilspyConfig, Language
+from .multilspy_config import Language, MultilspyConfig
 from .multilspy_exceptions import MultilspyException
-from .multilspy_utils import PathUtils, FileUtils, TextUtils
-from pathlib import Path, PurePath
-from typing import AsyncIterator, Iterator, List, Dict, Optional, TypedDict, Union, Tuple, cast
+from .multilspy_logger import MultilspyLogger
+from .multilspy_utils import FileUtils, PathUtils, TextUtils
 from .type_helpers import ensure_all_methods_implemented
-
 
 # Serena dependencies
 # We will need to watch out for circular imports, but it's probably better to not
@@ -664,7 +663,7 @@ class LanguageServer:
 
         :param relative_file_path: The relative path of the file that has the symbols
         :param include_body: whether to include the body of the symbols in the result.
-        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols. 
+        :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols.
             Each symbol in hierarchy starting from the roots has a children attribute.
             All symbols will have a location and a children attribute.
         """
@@ -712,6 +711,10 @@ class LanguageServer:
         assert isinstance(response, list)
         root_nodes: List[multilspy_types.UnifiedSymbolInformation] = []
         for item in response:
+            if "range" not in item and "location" not in item:
+                if item["kind"] in [SymbolKind.File, SymbolKind.Module]:
+                    ...
+
             turn_item_into_symbol_with_children(item)
             item = cast(multilspy_types.UnifiedSymbolInformation, item)
             root_nodes.append(item)
@@ -753,7 +756,7 @@ class LanguageServer:
         Will ignore all directories that start with a dot (.) and __pycache__ directories.
         
         Args:
-            start_package_relative_path: if passed, only the symbols within this directory will be considered.
+            start_dir_relative_path: if passed, only the symbols within this directory will be considered.
             include_body: whether to include the body of the symbols in the result.
 
         Returns:
@@ -829,12 +832,17 @@ class LanguageServer:
                     fix_relative_path(root_nodes)
 
                     # Create file symbol
+                    file_rel_path = str(Path(abs_item_path).resolve().relative_to(self.repository_root_path))
+                    with self.open_file(file_rel_path) as file_data:
+                        fileRange = self._get_range_from_file_content(file_data.contents)
                     file_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
                         name=os.path.splitext(item)[0],
                         kind=multilspy_types.SymbolKind.File,
+                        range=fileRange,
+                        selectionRange=fileRange,
                         location=multilspy_types.Location(
                             uri=str(pathlib.Path(abs_item_path).as_uri()),
-                            range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
+                            range=fileRange,
                             absolutePath=str(abs_item_path),
                             relativePath=str(Path(abs_item_path).resolve().relative_to(self.repository_root_path)),
                         ),
@@ -848,7 +856,20 @@ class LanguageServer:
         # Start from the root or the specified directory
         start_path = start_dir_relative_path or "."
         return await process_directory(start_path)
-    
+
+    @staticmethod
+    def _get_range_from_file_content(file_content: str) -> multilspy_types.Range:
+        """
+        Get the range for the given file.
+        """
+        lines = file_content.split("\n")
+        end_line = len(lines)
+        end_column = len(lines[-1])
+        return multilspy_types.Range(
+            start=multilspy_types.Position(line=0, character=0),
+            end=multilspy_types.Position(line=end_line, character=end_column)
+        )
+
     async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
         An overview of the given directory. 
@@ -1049,6 +1070,7 @@ class LanguageServer:
         include_imports: bool = True,
         include_self: bool = False,
         include_body: bool = False,
+        include_file_symbols: bool = False,
     ) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds all symbols that reference the symbol at the given location.
@@ -1064,6 +1086,8 @@ class LanguageServer:
         :param include_self: whether to include the references that is the "input symbol" itself. 
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
         :param include_body: whether to include the body of the symbols in the result.
+        :param include_file_symbols: whether to include references that are file symbols. This
+            is often a fallback mechanism for when the reference cannot be resolved to a symbol.
         :return: List of symbols that reference the target symbol.
         """
         if not self.server_started:
@@ -1115,9 +1139,41 @@ class LanguageServer:
                                 containing_symbol["location"] = ref
                                 containing_symbol["range"] = ref["range"]
                                 break
-                if containing_symbol is None:
-                    self.logger.log(f"Could not find containing symbol for {ref_path}:{ref_line}:{ref_col}", logging.WARNING)
+
+                # We failed retrieving the symbol, falling back to creating a file symbol
+                if containing_symbol is None and include_file_symbols:
+                    self.logger.log(
+                        f"Could not find containing symbol for {ref_path}:{ref_line}:{ref_col}. Returning file symbol instead",
+                        logging.WARNING
+                    )
+                    fileRange = self._get_range_from_file_content(file_data.contents)
+                    location = multilspy_types.Location(
+                        uri=str(pathlib.Path(os.path.join(self.repository_root_path, ref_path)).as_uri()),
+                        range=fileRange,
+                        absolutePath=str(os.path.join(self.repository_root_path, ref_path)),
+                        relativePath=ref_path,
+                    )
+                    name = os.path.splitext(os.path.basename(ref_path))[0]
+
+                    if include_body:
+                        body = self.retrieve_full_file_content(ref_path)
+                    else:
+                        body = ""
+
+                    containing_symbol = multilspy_types.UnifiedSymbolInformation(
+                        kind=multilspy_types.SymbolKind.File,
+                        range=fileRange,
+                        selectionRange=fileRange,
+                        location=location,
+                        name=name,
+                        children=[],
+                        body=body,
+                    )
+                if containing_symbol is None or not include_file_symbols and containing_symbol["kind"] == multilspy_types.SymbolKind.File:
                     continue
+                
+                assert "location" in containing_symbol
+                assert "selectionRange" in containing_symbol
 
                 # Checking for self-reference
                 if (
@@ -1198,7 +1254,7 @@ class LanguageServer:
                     f"Passing empty lines to request_container_symbol is currently not supported, {relative_file_path=}, {line=}",
                     logging.ERROR,
                 )
-                return
+                return None
 
         symbols, _ = await self.request_document_symbols(relative_file_path)
         
@@ -1220,7 +1276,7 @@ class LanguageServer:
                 assert "range" in location
                 location["absolutePath"] = absolute_file_path
                 location["relativePath"] = relative_file_path
-                location["uri"] = f"file:/{absolute_file_path}"
+                location["uri"] = Path(absolute_file_path).as_uri()
 
         # Allowed container kinds, currently only for Python
         container_symbol_kinds = {
@@ -1610,6 +1666,7 @@ class SyncLanguageServer:
         self, relative_file_path: str, line: int, column: int,
         include_imports: bool = True, include_self: bool = False,
         include_body: bool = False,
+        include_file_symbols: bool = False,
     ) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Finds all symbols that reference the symbol at the given location.
@@ -1625,6 +1682,8 @@ class SyncLanguageServer:
         :param include_self: whether to include the references that is the "input symbol" itself. 
             Only has an effect if the relative_file_path, line and column point to a symbol, for example a definition.
         :param include_body: whether to include the body of the symbols in the result.
+        :param include_file_symbols: whether to include references that are file symbols. This
+            is often a fallback mechanism for when the reference cannot be resolved to a symbol.
         :return: List of symbols that reference the target symbol.
         """
         assert self.loop
@@ -1636,6 +1695,7 @@ class SyncLanguageServer:
                 include_imports=include_imports, 
                 include_self=include_self,
                 include_body=include_body,
+                include_file_symbols=include_file_symbols,
             ), 
             self.loop
         ).result()

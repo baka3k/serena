@@ -1,7 +1,8 @@
 import logging
 from typing import Any
 
-from agno.tools import Function, Toolkit
+from agno.tools.function import Function
+from agno.tools.toolkit import Toolkit
 
 from serena.agent import SerenaAgent, Tool
 
