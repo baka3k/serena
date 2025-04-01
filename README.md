@@ -17,7 +17,7 @@ to perform coding tasks directly on your codebase.
 Here you see Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
 Note the smart usage in finding and editing the right symbols.
 
-
+https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
