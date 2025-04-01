@@ -117,6 +117,12 @@ class GuiLogViewer:
                     self.root.quit()
                     return
 
+                # Check if scrollbar is at the bottom before adding new text
+                # Get current scroll position
+                current_position = self.text_widget.yview()
+                # If near the bottom (allowing for small floating point differences)
+                was_at_bottom = current_position[1] > 0.99
+
                 log_level = self._determine_log_level(message)
 
                 # Insert the message at the end of the text
@@ -124,8 +130,9 @@ class GuiLogViewer:
                 self.text_widget.insert(tk.END, message + "\n", log_level.name)
                 self.text_widget.configure(state=tk.DISABLED)
 
-                # Auto-scroll to the bottom
-                self.text_widget.see(tk.END)
+                # Auto-scroll to the bottom only if it was already at the bottom
+                if was_at_bottom:
+                    self.text_widget.see(tk.END)
 
             # Schedule to check the queue again
             if self.running:
