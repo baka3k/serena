@@ -19,6 +19,7 @@ class GuiLogViewer:
     """
     A class that creates a Tkinter GUI for displaying log messages in a separate thread.
     The log viewer supports coloring based on log levels (DEBUG, INFO, WARNING, ERROR).
+    It can also highlight tool names in boldface when they appear in log messages.
     """
 
     def __init__(self, title="Log Viewer", width=800, height=600):
@@ -37,6 +38,7 @@ class GuiLogViewer:
         self.message_queue = queue.Queue()
         self.running = False
         self.log_thread = None
+        self.tool_names = []  # List to store tool names for highlighting
 
         # Define colors for different log levels
         self.log_colors = {
@@ -69,6 +71,15 @@ class GuiLogViewer:
             self.message_queue.put(None)
             return True
         return False
+        
+    def set_tool_names(self, tool_names):
+        """
+        Set or update the list of tool names to be highlighted in log messages.
+        
+        Args:
+            tool_names (list): A list of tool name strings to highlight
+        """
+        self.tool_names = tool_names
 
     def add_log(self, message):
         """
@@ -79,6 +90,7 @@ class GuiLogViewer:
 
         """
         if self.running:
+            # Add the original message so we can determine log level correctly
             self.message_queue.put(message)
             return True
         return False
@@ -125,9 +137,40 @@ class GuiLogViewer:
 
                 log_level = self._determine_log_level(message)
 
-                # Insert the message at the end of the text
+                # Insert the message at the end of the text with appropriate log level tag
                 self.text_widget.configure(state=tk.NORMAL)
-                self.text_widget.insert(tk.END, message + "\n", log_level.name)
+                
+                # Find tool names in the message and highlight them
+                if self.tool_names:
+                    # Start position for insertion
+                    start_pos = self.text_widget.index(tk.END)
+                    # Insert the message
+                    self.text_widget.insert(tk.END, message + "\n", log_level.name)
+                    # End position after insertion
+                    end_pos = self.text_widget.index(tk.END)
+                    
+                    # Apply bold tag to tool names
+                    for tool_name in self.tool_names:
+                        # Find all occurrences of the tool name
+                        start_search = start_pos
+                        while True:
+                            # Find the next occurrence
+                            pos = self.text_widget.search(tool_name, start_search, end_pos, nocase=False)
+                            if not pos:
+                                break  # No more occurrences
+                                
+                            # Calculate the end position of this occurrence
+                            tool_end = f"{pos}+{len(tool_name)}c"
+                            
+                            # Apply the bold tag
+                            self.text_widget.tag_add("BOLD", pos, tool_end)
+                            
+                            # Move the search start position
+                            start_search = tool_end
+                else:
+                    # No tool names to highlight, just insert the message
+                    self.text_widget.insert(tk.END, message + "\n", log_level.name)
+                
                 self.text_widget.configure(state=tk.DISABLED)
 
                 # Auto-scroll to the bottom only if it was already at the bottom
@@ -182,6 +225,9 @@ class GuiLogViewer:
             # Configure tags for different log levels with appropriate colors
             for level, color in self.log_colors.items():
                 self.text_widget.tag_configure(level.name, foreground=color)
+                
+            # Configure bold tag for tool names
+            self.text_widget.tag_configure("BOLD", font=("TkDefaultFont", 0, "bold"))
 
             # Set up the queue processing
             self.root.after(100, self._process_queue)
