@@ -47,7 +47,6 @@ class LinesRead:
 
     def were_lines_read(self, relative_path: str, lines: tuple[int, int]) -> bool:
         lines_read_in_file = self.files[relative_path]
-        log.warning(f"Lines read in {relative_path}: {lines_read_in_file}; requested: {lines}")
         return lines in lines_read_in_file
 
     def invalidate_lines_read(self, relative_path: str) -> None:
