@@ -36,6 +36,21 @@ LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - 
 TTool = TypeVar("TTool", bound="Tool")
 
 
+class LinesRead:
+    def __init__(self) -> None:
+        self.files = defaultdict(lambda: set())
+
+    def add_lines_read(self, relative_path: str, lines: tuple[int, int]) -> None:
+        self.files[relative_path].add(lines)
+
+    def were_lines_read(self, relative_path: str, lines: tuple[int, int]) -> bool:
+        return lines in self.files[relative_path]
+
+    def invalidate_lines_read(self, relative_path: str) -> None:
+        if relative_path in self.files:
+            del self.files[relative_path]
+
+
 class SerenaAgent:
     def __init__(self, project_file_path: str, start_language_server: bool = False):
         """
@@ -81,10 +96,9 @@ class SerenaAgent:
         self.language_server = SyncLanguageServer.create(config, logger, self.project_root)
 
         self.prompt_factory = PromptFactory()
-        self.symbol_manager = SymbolManager(self.language_server)
-
-        memories_dir = os.path.join(self.get_serena_managed_dir(), "memories")
-        self.memories_manager = MemoriesManager(memories_dir)
+        self.symbol_manager = SymbolManager(self.language_server, self)
+        self.memories_manager = MemoriesManager(os.path.join(self.get_serena_managed_dir(), "memories"))
+        self.lines_read = LinesRead()
 
         # find all tool classes and instantiate them
         self.tools: dict[type[Tool], Tool] = {}
@@ -108,6 +122,9 @@ class SerenaAgent:
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, ".serena")
+
+    def mark_file_modified(self, relativ_path: str) -> None:
+        self.lines_read.invalidate_lines_read(relativ_path)
 
     def __del__(self) -> None:
         """
@@ -538,8 +555,9 @@ class InsertAfterSymbolTool(Tool):
         :param column: the column
         :param body: the body/content to be inserted
         """
+        location = SymbolLocation(relative_path, line, column)
         self.symbol_manager.insert_after(
-            SymbolLocation(relative_path, line, column),
+            location,
             body=body,
         )
         return "OK"
@@ -593,7 +611,36 @@ class DeleteLinesTool(Tool):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
+        if not self.agent.lines_read.were_lines_read(relative_path, (start_line, end_line)):
+            read_lines_tool = self.agent.get_tool(ReadFileTool)
+            return f"Error: Must call `{read_lines_tool.get_name()}` first to read exactly the affected lines."
         self.symbol_manager.delete_lines(relative_path, start_line, end_line)
+        return "OK"
+
+
+class ReplaceLinesTool(Tool):
+    """
+    Replaces a range of lines within a file with new content.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        start_line: int,
+        end_line: int,
+        content: str,
+    ) -> str:
+        """
+        Deletes the given lines in the file. An editing operation, rarely used alone but can be useful in combination with
+        other tools.
+
+        :param relative_path: the relative path to the file
+        :param start_line: the 0-based index of the first line to be deleted
+        :param end_line: the 0-based index of the last line to be deleted
+        :param content: the content to insert
+        """
+        self.agent.get_tool(DeleteLinesTool).apply(relative_path, start_line, end_line)
+        self.agent.get_tool(InsertAtLineTool).apply(relative_path, start_line, content)
         return "OK"
 
 
@@ -609,14 +656,17 @@ class InsertAtLineTool(Tool):
         content: str,
     ) -> str:
         """
-        Inserts the given content at the given line in the file. In general, symbolic insert operations like
-        insert_after_symbol or insert_before_symbol should be preferred if you know which symbol you are looking for.
+        Inserts the given content at the given line in the file, pushing existing content of the line down.
+        In general, symbolic insert operations like insert_after_symbol or insert_before_symbol should be preferred if you know which
+        symbol you are looking for.
         However, this can also be useful for small targeted edits of the body of a longer symbol (without replacing the entire body).
 
         :param relative_path: the relative path to the file
         :param line: the 0-based index of the line to insert content at
-        :param content: the body/content to be inserted
+        :param content: the content to be inserted
         """
+        if not content.endswith("\n"):
+            content += "\n"
         self.symbol_manager.insert_at_line(relative_path, line, content)
         return "OK"
 
