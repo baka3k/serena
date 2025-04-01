@@ -7,7 +7,6 @@ These tests focus on the following methods:
 """
 
 import os
-from pathlib import Path
 
 from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_types import SymbolKind
@@ -16,10 +15,10 @@ from multilspy.multilspy_types import SymbolKind
 class TestLanguageServerSymbols:
     """Test the language server's symbol-related functionality."""
 
-    def test_request_containing_symbol_function(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_containing_symbol_function(self, language_server: SyncLanguageServer):
         """Test request_containing_symbol for a function."""
         # Test for a position inside the create_user method
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 17 is inside the create_user method body
         containing_symbol = language_server.request_containing_symbol(file_path, 17, 20, include_body=True)
 
@@ -30,9 +29,9 @@ class TestLanguageServerSymbols:
         if "body" in containing_symbol:
             assert containing_symbol["body"].strip().startswith("def create_user(self")
 
-    def test_references_to_variables(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_references_to_variables(self, language_server: SyncLanguageServer):
         """Test request_referencing_symbols for a variable."""
-        file_path = str(repo_path / "test_repo" / "variables.py")
+        file_path = os.path.join("test_repo", "variables.py")
         # Line 75 contains the field status that is later modified
         ref_symbols = language_server.request_referencing_symbols(file_path, 74, 4)
 
@@ -44,10 +43,10 @@ class TestLanguageServerSymbols:
         assert "dataclass_instance" in ref_names
         assert "second_dataclass" in ref_names
 
-    def test_request_containing_symbol_class(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_containing_symbol_class(self, language_server: SyncLanguageServer):
         """Test request_containing_symbol for a class."""
         # Test for a position inside the UserService class but outside any method
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 9 is the class definition line for UserService
         containing_symbol = language_server.request_containing_symbol(file_path, 9, 7)
 
@@ -56,10 +55,10 @@ class TestLanguageServerSymbols:
         assert containing_symbol["name"] == "UserService"
         assert containing_symbol["kind"] == SymbolKind.Class
 
-    def test_request_containing_symbol_nested(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_containing_symbol_nested(self, language_server: SyncLanguageServer):
         """Test request_containing_symbol with nested scopes."""
         # Test for a position inside a method which is inside a class
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 18 is inside the create_user method inside UserService class
         containing_symbol = language_server.request_containing_symbol(file_path, 18, 25)
 
@@ -81,20 +80,20 @@ class TestLanguageServerSymbols:
             assert parent_symbol["name"] == "UserService"
             assert parent_symbol["kind"] == SymbolKind.Class
 
-    def test_request_containing_symbol_none(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_containing_symbol_none(self, language_server: SyncLanguageServer):
         """Test request_containing_symbol for a position with no containing symbol."""
         # Test for a position outside any function/class (e.g., in imports)
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 1 is in imports, not inside any function or class
         containing_symbol = language_server.request_containing_symbol(file_path, 1, 10)
 
         # Should return None or an empty dictionary
         assert containing_symbol is None or containing_symbol == {}
 
-    def test_request_referencing_symbols_function(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_referencing_symbols_function(self, language_server: SyncLanguageServer):
         """Test request_referencing_symbols for a function."""
         # Test referencing symbols for create_user function
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 15 contains the create_user function definition
         ref_symbols = language_server.request_referencing_symbols(file_path, 15, 9)
 
@@ -109,10 +108,10 @@ class TestLanguageServerSymbols:
                 assert "start" in symbol["location"]["range"]
                 assert "end" in symbol["location"]["range"]
 
-    def test_request_referencing_symbols_class(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_referencing_symbols_class(self, language_server: SyncLanguageServer):
         """Test request_referencing_symbols for a class."""
         # Test referencing symbols for User class
-        file_path = str(repo_path / "test_repo" / "models.py")
+        file_path = os.path.join("test_repo", "models.py")
         # Line 31 contains the User class definition
         ref_symbols = language_server.request_referencing_symbols(file_path, 31, 6)
 
@@ -128,10 +127,10 @@ class TestLanguageServerSymbols:
 
         assert len(services_references) > 0
 
-    def test_request_referencing_symbols_parameter(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_referencing_symbols_parameter(self, language_server: SyncLanguageServer):
         """Test request_referencing_symbols for a function parameter."""
         # Test referencing symbols for id parameter in get_user
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 24 contains the get_user method with id parameter
         ref_symbols = language_server.request_referencing_symbols(file_path, 24, 16)
 
@@ -147,12 +146,12 @@ class TestLanguageServerSymbols:
 
         assert len(method_refs) > 0
 
-    def test_request_referencing_symbols_none(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_referencing_symbols_none(self, language_server: SyncLanguageServer):
         """Test request_referencing_symbols for a position with no symbol."""
         # For positions with no symbol, the method might throw an error or return None/empty list
         # We'll modify our test to handle this by using a try-except block
 
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 3 is a blank line or comment
         try:
             ref_symbols = language_server.request_referencing_symbols(file_path, 3, 0)
@@ -164,10 +163,10 @@ class TestLanguageServerSymbols:
             pass
 
     # Tests for request_defining_symbol
-    def test_request_defining_symbol_variable(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_defining_symbol_variable(self, language_server: SyncLanguageServer):
         """Test request_defining_symbol for a variable usage."""
         # Test finding the definition of a symbol in the create_user method
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 21 contains self.users[id] = user
         defining_symbol = language_server.request_defining_symbol(file_path, 21, 10)
 
@@ -182,10 +181,10 @@ class TestLanguageServerSymbols:
         if "location" in defining_symbol and "uri" in defining_symbol["location"]:
             assert "services.py" in defining_symbol["location"]["uri"]
 
-    def test_request_defining_symbol_imported_class(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_defining_symbol_imported_class(self, language_server: SyncLanguageServer):
         """Test request_defining_symbol for an imported class."""
         # Test finding the definition of the 'User' class used in the UserService.create_user method
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 20 references 'User' which was imported from models
         defining_symbol = language_server.request_defining_symbol(file_path, 20, 15)
 
@@ -193,10 +192,10 @@ class TestLanguageServerSymbols:
         assert defining_symbol is not None
         assert defining_symbol.get("name") == "User"
 
-    def test_request_defining_symbol_method_call(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_defining_symbol_method_call(self, language_server: SyncLanguageServer):
         """Test request_defining_symbol for a method call."""
         # Create an example file path for a file that calls UserService.create_user
-        examples_file_path = str(repo_path / "examples" / "user_management.py")
+        examples_file_path = os.path.join("examples", "user_management.py")
 
         # Find the line number where create_user is called
         # This could vary, so we'll use a relative position that makes sense
@@ -217,20 +216,20 @@ class TestLanguageServerSymbols:
 
             warnings.warn("Could not verify method call definition - file structure may differ from expected")
 
-    def test_request_defining_symbol_none(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_defining_symbol_none(self, language_server: SyncLanguageServer):
         """Test request_defining_symbol for a position with no symbol."""
         # Test for a position with no symbol (e.g., whitespace or comment)
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 3 is a blank line
         defining_symbol = language_server.request_defining_symbol(file_path, 3, 0)
 
         # Should return None for positions with no symbol
         assert defining_symbol is None
 
-    def test_request_containing_symbol_variable(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_containing_symbol_variable(self, language_server: SyncLanguageServer):
         """Test request_containing_symbol where the symbol is a variable."""
         # Test for a position inside a variable definition
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 74 defines the 'user' variable
         containing_symbol = language_server.request_containing_symbol(file_path, 73, 1)
 
@@ -239,10 +238,10 @@ class TestLanguageServerSymbols:
         assert containing_symbol["name"] == "user_var_str"
         assert containing_symbol["kind"] == SymbolKind.Variable
 
-    def test_request_defining_symbol_nested_function(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_defining_symbol_nested_function(self, language_server: SyncLanguageServer):
         """Test request_defining_symbol for a nested function or closure."""
         # Use the existing nested.py file which contains nested classes and methods
-        file_path = str(repo_path / "test_repo" / "nested.py")
+        file_path = os.path.join("test_repo", "nested.py")
 
         # Test 1: Find definition of nested method - line with 'b = OuterClass().NestedClass().find_me()'
         defining_symbol = language_server.request_defining_symbol(file_path, 15, 35)  # Position of find_me() call
@@ -289,12 +288,12 @@ class TestLanguageServerSymbols:
         assert defining_symbol.get("name") == "func_within_func"
         assert defining_symbol.get("kind") == SymbolKind.Function.value
 
-    def test_symbol_methods_integration(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_symbol_methods_integration(self, language_server: SyncLanguageServer):
         """Test the integration between different symbol-related methods."""
         # This test demonstrates using the various symbol methods together
         # by finding a symbol and then checking its definition
 
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
 
         # First approach: Use a method from the UserService class
         # Step 1: Find a method we know exists
@@ -337,7 +336,7 @@ class TestLanguageServerSymbols:
 
                 warnings.warn("Could not verify container hierarchy - implementation detail")
 
-    def test_symbol_tree_structure(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_symbol_tree_structure(self, language_server: SyncLanguageServer):
         """Test that the symbol tree structure is correctly built."""
         # Get all symbols in the test file
         repo_structure = language_server.request_full_symbol_tree()
@@ -361,13 +360,13 @@ class TestLanguageServerSymbols:
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
-            _, user_management_roots = language_server.request_document_symbols(str(repo_path / "examples" / "user_management.py"))
+            _, user_management_roots = language_server.request_document_symbols(os.path.join("examples", "user_management.py"))
             assert user_management_roots == user_management_node["children"]
 
-    def test_symbol_tree_structure_subdir(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_symbol_tree_structure_subdir(self, language_server: SyncLanguageServer):
         """Test that the symbol tree structure is correctly built."""
         # Get all symbols in the test file
-        examples_package_roots = language_server.request_full_symbol_tree(start_package_relative_path=str(repo_path / "examples"))
+        examples_package_roots = language_server.request_full_symbol_tree(start_package_relative_path="examples")
         assert len(examples_package_roots) == 1
         examples_package = examples_package_roots[0]
         assert examples_package["name"] == "examples"
@@ -381,10 +380,10 @@ class TestLanguageServerSymbols:
         if "location" in user_management_node and "relativePath" in user_management_node["location"]:
             user_management_rel_path = user_management_node["location"]["relativePath"]
             assert user_management_rel_path == os.path.join("examples", "user_management.py")
-            _, user_management_roots = language_server.request_document_symbols(str(repo_path / "examples" / "user_management.py"))
+            _, user_management_roots = language_server.request_document_symbols(os.path.join("examples", "user_management.py"))
             assert user_management_roots == user_management_node["children"]
 
-    def test_request_dir_overview(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_dir_overview(self, language_server: SyncLanguageServer):
         """Test that request_dir_overview returns correct symbol information for files in a directory."""
         # Get overview of the examples directory
         overview = language_server.request_dir_overview("test_repo")
@@ -408,7 +407,7 @@ class TestLanguageServerSymbols:
         for symbol in expected_symbols:
             assert symbol in services_symbols
 
-    def test_request_document_overview(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_document_overview(self, language_server: SyncLanguageServer):
         """Test that request_document_overview returns correct symbol information for a file."""
         # Get overview of the user_management.py file
         overview = language_server.request_document_overview(os.path.join("examples", "user_management.py"))
@@ -416,3 +415,21 @@ class TestLanguageServerSymbols:
         # Verify that we have entries for both files
         symbol_names = {s_info[0] for s_info in overview}
         assert {"UserStats", "UserManager", "process_user_data", "main"}.issubset(symbol_names)
+
+    def test_containing_symbol_of_var_is_file(self, language_server: SyncLanguageServer):
+        """Test that the containing symbol of a variable is the file itself."""
+        # Get the containing symbol of a variable in a file
+        file_path = os.path.join("test_repo", "services.py")
+        # import of typing
+        references_to_typing = language_server.request_referencing_symbols(
+            file_path, 4, 6, include_imports=False, include_file_symbols=True
+        )
+        assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
+        assert {ref["body"] for ref in references_to_typing} == {""}
+
+        # now include bodies
+        references_to_typing = language_server.request_referencing_symbols(
+            file_path, 4, 6, include_imports=False, include_file_symbols=True, include_body=True
+        )
+        assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
+        assert references_to_typing[0]["body"]

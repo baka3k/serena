@@ -5,6 +5,7 @@ These tests validate the functionality of the language server APIs
 like request_references using the test repository.
 """
 
+import os
 from pathlib import Path
 
 from multilspy.language_server import SyncLanguageServer
@@ -17,7 +18,7 @@ class TestLanguageServerBasics:
     def test_request_references_user_class(self, language_server: SyncLanguageServer, repo_path: Path):
         """Test request_references on the User class."""
         # Get references to the User class in models.py
-        file_path = str(repo_path / "test_repo" / "models.py")
+        file_path = os.path.join("test_repo", "models.py")
         # Line 31 contains the User class definition
         references = language_server.request_references(file_path, 31, 6)
 
@@ -30,7 +31,7 @@ class TestLanguageServerBasics:
     def test_request_references_item_class(self, language_server: SyncLanguageServer, repo_path: Path):
         """Test request_references on the Item class."""
         # Get references to the Item class in models.py
-        file_path = str(repo_path / "test_repo" / "models.py")
+        file_path = os.path.join("test_repo", "models.py")
         # Line 56 contains the Item class definition
         references = language_server.request_references(file_path, 56, 6)
 
@@ -44,7 +45,7 @@ class TestLanguageServerBasics:
     def test_request_references_function_parameter(self, language_server: SyncLanguageServer, repo_path: Path):
         """Test request_references on a function parameter."""
         # Get references to the id parameter in get_user method
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 24 contains the get_user method with id parameter
         references = language_server.request_references(file_path, 24, 16)
 
@@ -53,7 +54,7 @@ class TestLanguageServerBasics:
 
     def test_request_references_create_user_method(self, language_server: SyncLanguageServer, repo_path: Path):
         # Get references to the create_user method in UserService
-        file_path = str(repo_path / "test_repo" / "services.py")
+        file_path = os.path.join("test_repo", "services.py")
         # Line 15 contains the create_user method definition
         references = language_server.request_references(file_path, 15, 9)
 
@@ -62,7 +63,7 @@ class TestLanguageServerBasics:
 
     def test_retrieve_content_around_line(self, language_server: SyncLanguageServer, repo_path: Path):
         """Test retrieve_content_around_line functionality with various scenarios."""
-        file_path = str(repo_path / "test_repo" / "models.py")
+        file_path = os.path.join("test_repo", "models.py")
 
         # Scenario 1: Just a single line (User class definition)
         line_31 = language_server.retrieve_content_around_line(file_path, 31)
