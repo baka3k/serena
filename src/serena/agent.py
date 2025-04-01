@@ -103,12 +103,14 @@ class SerenaAgent:
 
         # find all tool classes and instantiate them
         excluded_tools = project_config.get("excluded_tools", [])
+        self._all_tools: dict[type[Tool], Tool] = {}
         self.tools: dict[type[Tool], Tool] = {}
         for tool_class in iter_tool_classes():
+            tool_instance = tool_class(self)
+            self._all_tools[tool_class] = tool_instance
             if (tool_name := tool_class.get_name()) in excluded_tools:
                 log.info(f"Skipping tool {tool_name} because it is in the exclude list")
                 continue
-            tool_instance = tool_class(self)
             self.tools[tool_class] = tool_instance
         log.info(f"Loaded tools: {', '.join([tool.get_name() for tool in self.tools.values()])}")
 
@@ -118,7 +120,7 @@ class SerenaAgent:
             self.language_server.start()
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
-        return self.tools[tool_class]  # type: ignore
+        return self._all_tools[tool_class]  # type: ignore
 
     def print_tool_overview(self) -> None:
         _print_tool_overview(self.tools.values())
