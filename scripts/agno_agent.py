@@ -2,6 +2,7 @@ import os
 from logging import Logger
 
 from agno.agent import Agent
+from agno.memory import AgentMemory
 from agno.models.anthropic import Claude
 from agno.models.google import Gemini
 from agno.playground import Playground, serve_playground_app
@@ -32,9 +33,12 @@ agno_agent = Agent(
     tools=[SerenaAgnoToolkit(serena_agent)],  # type: ignore
     show_tool_calls=False,
     markdown=True,
-    system_message="",  # Todo
+    system_message=serena_agent.prompt_factory.create_system_prompt(),
     read_tool_call_history=False,
     telemetry=False,
+    memory=AgentMemory(),
+    add_history_to_messages=True,
+    num_history_responses=100,  # you might want to adjust this (expense vs. history awareness)
 )
 
 # The app object must be in the module scope so that the server can access it for hot reloading
