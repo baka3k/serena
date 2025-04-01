@@ -44,6 +44,8 @@ With Serena, we provide
 Further languages can easily be supported by providing a shallow adapter for a new language server
 implementation.
 
+## Table of Contents
+
 <!-- Created with  markdown-toc -i README.md -->
 <!-- Install it with npm install -g markdown-toc -->
 <!-- toc -->
