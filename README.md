@@ -13,6 +13,12 @@ A: Yes, you can!
 By integrating Serena with your favourite (even free) LLM and thereby enabling it
 to perform coding tasks directly on your codebase.
 
+
+Here you see Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
+Note the smart usage in finding and editing the right symbols.
+
+
+
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
    Serena provides an MCP server which integrates with Claude (and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)).
@@ -130,12 +136,6 @@ You should then see the Serena MCP tools in your chat interface (notice the smal
 
 Note that Serena is always configured *for a single project*. To use it for another, you will have to
 write a new configuration file and adjust the config in the MCP client.
-
-Here you see Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
-Note the smart usage in finding and editing the right symbols.
-
-<video src="https://raw.githubusercontent.com/oraios/videos/master/serena_add_logo.mp4"  width="640" controls/>
-
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
