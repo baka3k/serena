@@ -35,6 +35,7 @@ from serena.util.shell import execute_shell_command
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 TTool = TypeVar("TTool", bound="Tool")
+SUCCESS_RESULT = "OK"
 
 
 class LinesRead:
@@ -45,7 +46,9 @@ class LinesRead:
         self.files[relative_path].add(lines)
 
     def were_lines_read(self, relative_path: str, lines: tuple[int, int]) -> bool:
-        return lines in self.files[relative_path]
+        lines_read_in_file = self.files[relative_path]
+        log.warning(f"Lines read in {relative_path}: {lines_read_in_file}; requested: {lines}")
+        return lines in lines_read_in_file
 
     def invalidate_lines_read(self, relative_path: str) -> None:
         if relative_path in self.files:
@@ -284,13 +287,13 @@ class ReadFileTool(Tool):
         self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH
     ) -> str:
         """
-        Reads the given file or a chunk of it (between start_line and end_line). Generally, symbolic operations
+        Reads the given file or a chunk of it. Generally, symbolic operations
         like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
         Reading the entire file is only recommended if there is no other way to get the content required for the task.
 
         :param relative_path: the relative path to the file to read
-        :param start_line: the start line of the range to read
-        :param end_line: the end line of the range to read. If None, the entire file will be read.
+        :param start_line: the 0-based index of the first line to be retrieved.
+        :param end_line: the 0-based index of the last line to be retrieved (inclusive). If None, read until the end of the file.
         :param max_answer_chars: if the file (chunk) is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task.
@@ -301,7 +304,8 @@ class ReadFileTool(Tool):
         if end_line is None:
             result_lines = result_lines[start_line:]
         else:
-            result_lines = result_lines[start_line:end_line]
+            self.agent.lines_read.add_lines_read(relative_path, (start_line, end_line))
+            result_lines = result_lines[start_line:end_line+1]
         result = "\n".join(result_lines)
 
         return self._limit_length(result, max_answer_chars)
@@ -537,7 +541,7 @@ class ReplaceSymbolBodyTool(Tool):
             SymbolLocation(relative_path, line, column),
             body=body,
         )
-        return "OK"
+        return SUCCESS_RESULT
 
 
 class InsertAfterSymbolTool(Tool):
@@ -566,7 +570,7 @@ class InsertAfterSymbolTool(Tool):
             location,
             body=body,
         )
-        return "OK"
+        return SUCCESS_RESULT
 
 
 class InsertBeforeSymbolTool(Tool):
@@ -595,7 +599,7 @@ class InsertBeforeSymbolTool(Tool):
             SymbolLocation(relative_path, line, column),
             body=body,
         )
-        return "OK"
+        return SUCCESS_RESULT
 
 
 class DeleteLinesTool(Tool):
@@ -610,8 +614,9 @@ class DeleteLinesTool(Tool):
         end_line: int,
     ) -> str:
         """
-        Deletes the given lines in the file. An editing operation, rarely used alone but can be useful in combination with
-        other tools.
+        Deletes the given lines in the file.
+        Requires that the same range of lines was previously read using the `read_file` tool to verify correctness
+        of the operation.
 
         :param relative_path: the relative path to the file
         :param start_line: the 0-based index of the first line to be deleted
@@ -621,7 +626,7 @@ class DeleteLinesTool(Tool):
             read_lines_tool = self.agent.get_tool(ReadFileTool)
             return f"Error: Must call `{read_lines_tool.get_name()}` first to read exactly the affected lines."
         self.symbol_manager.delete_lines(relative_path, start_line, end_line)
-        return "OK"
+        return SUCCESS_RESULT
 
 
 class ReplaceLinesTool(Tool):
@@ -637,17 +642,22 @@ class ReplaceLinesTool(Tool):
         content: str,
     ) -> str:
         """
-        Deletes the given lines in the file. An editing operation, rarely used alone but can be useful in combination with
-        other tools.
+        Replaces the given range of lines in the given file.
+        Requires that the same range of lines was previously read using the `read_file` tool to verify correctness
+        of the operation.
 
         :param relative_path: the relative path to the file
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         :param content: the content to insert
         """
-        self.agent.get_tool(DeleteLinesTool).apply(relative_path, start_line, end_line)
+        if not content.endswith("\n"):
+            content += "\n"
+        result = self.agent.get_tool(DeleteLinesTool).apply(relative_path, start_line, end_line)
+        if result != SUCCESS_RESULT:
+            return result
         self.agent.get_tool(InsertAtLineTool).apply(relative_path, start_line, content)
-        return "OK"
+        return SUCCESS_RESULT
 
 
 class InsertAtLineTool(Tool):
@@ -674,7 +684,7 @@ class InsertAtLineTool(Tool):
         if not content.endswith("\n"):
             content += "\n"
         self.symbol_manager.insert_at_line(relative_path, line, content)
-        return "OK"
+        return SUCCESS_RESULT
 
 
 class CheckOnboardingPerformedTool(Tool):
