@@ -253,11 +253,15 @@ and we found them to be flaky. Sometimes Claude Desktop will crash on a tool exe
 something else of this kind). It can show error messages which have no effect, and on the contrary, fail to
 show error messages when things go wrong. The working configuration of an MCP server may vary from platform to
 platform and from client to client (we recommend always using absolute paths, as relative paths may be sources of
-errors). We expect these stability issues to improve over time.
+errors). The language server is running in a separate thread and is called with asyncio - sometimes
+Claude Desktop lets it crash.
+We expect these stability issues to improve over time.
 
-For now, you may have to restart Claude Desktop multiple times, and you may experiences freezes in conversations.
-Just try again in that case (or switch to the API-key based agent mode if you are willing to pay for a potentially 
-smoother experience). Feel free to open issues if you encounter setup problems that you cannot solve.
+For now, you may have to restart Claude Desktop multiple times, may have to manually cleanup python processes,
+and you may experiences freezes in conversations.
+Just try again in the latter case. You can also switch to the API-key based agent mode if you are willing to pay for a potentially 
+smoother experience (see [section on Agno](#agno)). 
+Feel free to open issues if you encounter setup problems that you cannot solve.
 
 ### Serena Logging
 
