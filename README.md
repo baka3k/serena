@@ -44,7 +44,40 @@ With Serena, we provide
 Further languages can easily be supported by providing a shallow adapter for a new language server
 implementation.
 
-## Is It Really Free?
+<!-- Created with  markdown-toc -i README.md -->
+<!-- Install it with npm install -g markdown-toc -->
+<!-- toc -->
+
+- [Is It Really Free to Use?](#is-it-really-free-to-use)
+- [What Can I Use Serena For?](#what-can-i-use-serena-for)
+- [Quick Start](#quick-start)
+  * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
+  * [Agno](#agno)
+- [Serena's Tools and Configuration](#serenas-tools-and-configuration)
+- [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
+  * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
+  * [API-Based Coding Agents](#api-based-coding-agents)
+  * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
+- [Limitations of MCP Servers](#limitations-of-mcp-servers)
+  * [Serena Logging](#serena-logging)
+- [Onboarding and Memories](#onboarding-and-memories)
+- [Recommendations on Using Serena](#recommendations-on-using-serena)
+  * [Which Model to Choose?](#which-model-to-choose)
+  * [Onboarding](#onboarding)
+  * [Before Editing Code](#before-editing-code)
+  * [Potential Issues in Code Editing](#potential-issues-in-code-editing)
+  * [Running Out of Context](#running-out-of-context)
+  * [Controlling Tool Execution](#controlling-tool-execution)
+  * [Structuring Your Codebase](#structuring-your-codebase)
+  * [Logging, Linting, and Testing](#logging-linting-and-testing)
+  * [General Advice](#general-advice)
+- [Acknowledgements](#acknowledgements)
+- [Customizing Serena](#customizing-serena)
+- [Full List of Tools](#full-list-of-tools)
+
+<!-- tocstop -->
+
+## Is It Really Free to Use?
 
 Yes! Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
 Presumably, the same will soon be possible with ChatGPT Desktop once support for MCP servers is added.  
@@ -61,6 +94,7 @@ We thus built Serena with the prospect of being able to cancel most other subscr
 ## What Can I Use Serena For?
 
 You can use Serena for any coding tasks - analyzing, planning, editing and so on.
+Serena can read, write and execute code, read logs and the terminal output. 
 Vibe coding is possible, and if you want to almost feel like "the code no longer exists"
  you may find Serena even more adequate for vibing than an agent inside an IDE
 (since you will have a separate GUI that really lets you forget).
