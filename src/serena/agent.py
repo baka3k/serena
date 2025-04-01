@@ -40,7 +40,7 @@ SUCCESS_RESULT = "OK"
 
 class LinesRead:
     def __init__(self) -> None:
-        self.files = defaultdict(lambda: set())
+        self.files: dict[str, set[tuple[int, int]]] = defaultdict(lambda: set())
 
     def add_lines_read(self, relative_path: str, lines: tuple[int, int]) -> None:
         self.files[relative_path].add(lines)
@@ -304,7 +304,7 @@ class ReadFileTool(Tool):
             result_lines = result_lines[start_line:]
         else:
             self.agent.lines_read.add_lines_read(relative_path, (start_line, end_line))
-            result_lines = result_lines[start_line:end_line+1]
+            result_lines = result_lines[start_line : end_line + 1]
         result = "\n".join(result_lines)
 
         return self._limit_length(result, max_answer_chars)
