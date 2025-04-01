@@ -134,10 +134,7 @@ write a new configuration file and adjust the config in the MCP client.
 Here you see Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
 Note the smart usage in finding and editing the right symbols.
 
-<video width="640" height="360" controls>
-  <source src="https://raw.githubusercontent.com/oraios/videos/master/serena_add_logo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+<video src="https://raw.githubusercontent.com/oraios/videos/master/serena_add_logo.mp4"  width="640" controls/>
 
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
