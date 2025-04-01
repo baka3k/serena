@@ -11,6 +11,8 @@ prompts:
     You need to identify at least the following information:
     * the project's purpose
     * the tech stack used
+    * the code style and conventions used (including naming, type hints, docstrings, etc.)
+    * which commands to run when a task is completed (linting, formatting, testing, etc.)
     * the rough structure of the codebase
     * the commands for testing, formatting, and linting
     * the commands for running the entrypoints of the project
@@ -26,7 +28,9 @@ prompts:
 
     After collecting all the information, you will use the `write_memory` tool (in multiple calls) to save it to various memory files.
     A particularly important memory file will be the `suggested_commands.md` file, which should contain
-    a list of commands that the user should know about to develop code in this project. 
+    a list of commands that the user should know about to develop code in this project.
+    Moreover, you should create memory files for the style and conventions and a dedicated memory file for
+    what should be done when a task is completed.
     **Important**: after done with the onboarding task, remember to call the `write_memory` to save the collected information!
 
   think_about_collected_information: |
@@ -36,7 +40,7 @@ prompts:
 
   think_about_task_adherence: |
     Are you deviating from the task at hand? Do you need any additional information to proceed?
-    Have you loaded the relevant memory file to see whether your implementation is fully aligned with the
+    Have you loaded all relevant memory files to see whether your implementation is fully aligned with the
     code style, conventions, and guidelines of the project? If not, adjust your implementation accordingly
     before modifying any code into the codebase.
     Note that it is better to stop and ask the user for clarification
@@ -49,6 +53,7 @@ prompts:
     Have you already performed all the steps required by the task? Is it appropriate to run tests and linting, and if so,
     have you done that already? Should new tests be written to cover the changes?
     Note that a task that is just about exploring the codebase does not require running tests or linting.
+    Read the corresponding memory files to see what should be done when a task is completed. You might need to list them first.
 
   summarize_changes: |
     Summarize all the changes you have made to the codebase over the course of the conversation.
