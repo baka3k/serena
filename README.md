@@ -176,11 +176,8 @@ without modifying the codebase, you can consider disabling the editing tools in 
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.
 
-To see the complete list of Serena's tools run 
+Find the complete list of tools [here](#serenas-tools-and-configuration).
 
-```shell
-uv run serena-list-tools
-```
 
 ## Comparison with Other Coding Agents
 
@@ -323,6 +320,16 @@ this make it easier for you to inspect the changes, but also the model itself wi
 have a chance of seeing what it has changed by calling `git diff` and thereby
 correct itself or continue working in a followup conversation if needed.
 
+**Important**: since Serena will write to files using the system-native line endings
+and it might want to look at the git diff, it is important to
+set `git config core.autocrlf` to `true` on Windows.
+With `git config core.autocrlf` set to `false` on Windows you may end up with huge diffs
+only due to line endings. It is generally a good idea to do this on Windows
+
+```shell
+git config --global core.autocrlf true
+```
+
 ### Potential Issues in Code Editing
 
 In our experience, LLMs are really bad at counting, which means they have problems
@@ -410,3 +417,35 @@ Without these projects, Serena would not have been possible, or would at least m
 It is very easy to extend Serena with your own ideas. Just implement a new Tool by subclassing from
 `serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it. We look forward
 to seeing what the community will come up with! For details on contributing, see [here](/CONTRIBUTING.md).
+
+## Full List of Tools
+
+Here the full list of Serena's default tools with a short description (the output of `uv run serena-list-tools`)
+
+```
+ * `check_onboarding_performed`: Checks whether the onboarding was already performed.
+ * `create_text_file`: Creates/overwrites a file in the project directory.
+ * `delete_lines`: Deletes a range of lines within a file.
+ * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
+ * `execute_shell_command`: Executes a shell command.
+ * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
+ * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+ * `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
+ * `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
+ * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
+ * `insert_at_line`: Inserts content at a given line in a file.
+ * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
+ * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
+ * `list_memories`: Lists memories in Serena's project-specific memory store.
+ * `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
+ * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
+ * `read_file`: Reads a file within the project directory.
+ * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+ * `replace_symbol_body`: Replaces the full definition of a symbol.
+ * `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
+ * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
+ * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
+ * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
+ * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
+ * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
+```
