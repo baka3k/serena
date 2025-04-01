@@ -186,12 +186,12 @@ Here's how it works (see also [Agno's documentation](https://docs.agno.com/intro
    the same tools as in the MCP server version.
 
 
-Here Serena performing a small analysis task in the Agno UI with the newest Gemini:
+<!-- Here Serena performing a small analysis task in the Agno UI with the newest Gemini:
 
 <video width="640" height="360" controls>
   <source src="https://raw.githubusercontent.com/oraios/videos/main/serena_analyze_ls.mp4" type="video/mp4">
   Your browser does not support the video tag.
-</video>
+</video> -->
 
 
 IMPORTANT: Contrary to the MCP server approach, tool execution in the Agno UI does
