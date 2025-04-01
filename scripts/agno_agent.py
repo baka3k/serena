@@ -1,11 +1,12 @@
 import os
 from logging import Logger
 
-from agno.agent import Agent
-from agno.memory import AgentMemory
-from agno.models.anthropic import Claude
-from agno.models.google import Gemini
-from agno.playground import Playground, serve_playground_app
+from agno.agent.agent import Agent
+from agno.memory.agent import AgentMemory
+from agno.models.anthropic.claude import Claude
+from agno.models.google.gemini import Gemini
+from agno.playground.playground import Playground
+from agno.playground.serve import serve_playground_app
 from dotenv import load_dotenv
 from sensai.util import logging
 from sensai.util.helper import mark_used
