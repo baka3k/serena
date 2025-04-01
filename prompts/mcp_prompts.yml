@@ -40,7 +40,7 @@ prompts:
 
   think_about_task_adherence: |
     Are you deviating from the task at hand? Do you need any additional information to proceed?
-    Have you loaded the relevant memory file to see whether your implementation is fully aligned with the
+    Have you loaded all relevant memory files to see whether your implementation is fully aligned with the
     code style, conventions, and guidelines of the project? If not, adjust your implementation accordingly
     before modifying any code into the codebase.
     Note that it is better to stop and ask the user for clarification

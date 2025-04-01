@@ -437,7 +437,9 @@ class FindSymbolTool(Tool):
             retrieved symbol.
         :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
             If None, the entire codebase will be considered.
-        :param include_body: whether to include the body of all symbols in the result.
+        :param include_body: whether to include the body of all symbols in the result. You should only use this
+            if you actually need the body of the symbol for the task at hand (for example, for a deep analysis
+            of the functionality or for an editing task).
         :param include_kinds: an optional list of ints representing the LSP symbol kind.
             If provided, only symbols of the given kinds will be included in the result.
             Valid kinds:
@@ -492,7 +494,11 @@ class FindReferencingSymbolsTool(Tool):
         :param relative_path: the relative path to the file containing the symbol
         :param line: the line number
         :param column: the column
-        :param include_body: whether to include the body of the symbols in the result
+        :param include_body: whether to include the body of the symbols in the result.
+            Note that this might lead to a very long output, so you should only use this if you actually need the body
+            of the referencing symbols for the task at hand. Usually it is a better idea to find
+            the referencing symbols without the body and then use the find_symbol tool to get the body of 
+            specific symbols if needed.
         :param include_kinds: an optional list of integers representing the LSP symbol kinds to include.
             If provided, only symbols of the given kinds will be included in the result.
             Valid kinds:
@@ -738,7 +744,7 @@ class WriteMemoryTool(Tool):
 
     def apply(self, memory_file_name: str, content: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Write some general information about this project that can be useful for future tasks to a memory file.
+        Write some information about this project that can be useful for future tasks to a memory file.
         The information should be short and to the point.
         The memory file name should be meaningful, such that from the name you can infer what the information is about.
         It is better to have multiple small memory files than to have a single large one because
@@ -764,7 +770,7 @@ class ReadMemoryTool(Tool):
     def apply(self, memory_file_name: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Read the content of a memory file. This tool should only be used if the information
-        is relevant to the current task. You should be able to infer whether the information
+        is relevant to the current task. You can infer whether the information
         is relevant from the memory file name.
         You should not read the same memory file multiple times in the same conversation.
         """
