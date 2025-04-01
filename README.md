@@ -58,6 +58,13 @@ IDE-based subscriptions (such as Windsurf or Cursor) that forced us to keep purc
 The substantial API costs incurred by tools like Claude Code, Cline, Aider and other API-based tools are similarly unattractive.
 We thus built Serena with the prospect of being able to cancel most other subscriptions.
 
+## What Can I Use Serena For?
+
+You can use Serena for any coding tasks - analyzing, planning, editing and so on.
+Vibe coding is possible, and if you want to almost feel like "the code no longer exists"
+ you may find Serena even more adequate for vibing than an agent inside an IDE
+(since you will have a separate GUI that really lets you forget).
+
 ## Quick Start
 
 ### MCP Server (Claude Desktop)
@@ -169,34 +176,8 @@ without modifying the codebase, you can consider disabling the editing tools in 
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.
 
-Here a complete list of Serena's tools
-(you can get an up-to-date list by running `uv run serena-list-tools`)
+Find the complete list of tools [here](#serenas-tools-and-configuration).
 
-* `check_onboarding_performed`: Checks whether the onboarding was already performed.
-* `create_text_file`: Creates/overwrites a file in the project directory.
-* `delete_lines`: Deletes a range of lines within a file.
-* `delete_memory`: Deletes a memory from Serena's project-specific memory store.
-* `execute_shell_command`: Executes a shell command.
-* `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
-* `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
-* `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
-* `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
-* `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
-* `insert_at_line`: Inserts content at a given line in a file.
-* `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
-* `list_dir`: Lists files and directories in the given directory (optionally with recursion).
-* `list_memories`: Lists memories in Serena's project-specific memory store.
-* `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
-* `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
-* `read_file`: Reads a file within the project directory.
-* `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
-* `replace_symbol_body`: Replaces the full definition of a symbol.
-* `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
-* `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
-* `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
-* `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
-* `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
-* `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
 
 ## Comparison with Other Coding Agents
 
@@ -262,6 +243,29 @@ It is the integration of language servers and the MCP that makes Serena unique
 and so powerful for challenging coding tasks, especially in the context of
 larger codebases.
 
+## Limitations of MCP Servers
+
+The support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new technologies,
+and we found them to be flaky. Sometimes Claude Desktop will crash on a tool execution (with an asyncio error or
+something else of this kind). It can show error messages which have no effect, and on the contrary, fail to
+show error messages when things go wrong. The working configuration of an MCP server may vary from platform to
+platform and from client to client (we recommend always using absolute paths, as relative paths may be sources of
+errors). The language server is running in a separate thread and is called with asyncio - sometimes
+Claude Desktop lets it crash.
+We expect these stability issues to improve over time.
+
+For now, you may have to restart Claude Desktop multiple times, may have to manually cleanup python processes,
+and you may experiences freezes in conversations.
+Just try again in the latter case. You can also switch to the API-key based agent mode if you are willing to pay for a potentially 
+smoother experience (see [section on Agno](#agno)). 
+Feel free to open issues if you encounter setup problems that you cannot solve.
+
+### Serena Logging
+
+To help with troubleshooting, we have written a small GUI utility for logging. We recommend that you enable it
+through the `myproject.yml` if you encounter problems. For Claude Desktop, there are also the MCP logs that can help
+identify issues.
+
 ## Onboarding and Memories
 
 By default, Serena will perform an onboarding process when 
@@ -277,54 +281,115 @@ By itself, Serena is instructed to create new memories whenever appropriate.
 
 ## Recommendations on Using Serena
 
+We will continue to collect best practices as the Serena community grows. Below a
+short overview of things that we learned when using Serena internally.
+
+Most of these recommendations are true for any coding agent, including all agents
+mentioned above.
+
+### Which Model to Choose?
+
+To our surprise, Serena seemed to work best with the non-thinking version
+of Claude 3.7 vs its thinking version (we haven't yet made extensive comparisons to Gemini).
+The thinking version took longer, had more difficulties in using the tools, and often would
+just write code without reading enough context.
+
+In our initial experiments, Gemini seemed to work very well. Unfortunately, Gemini does
+not support the MCP (yet?), so the only way to use it is through an API-key. On the bright side,
+Gemini is comparatively cheap and can handle huge context lengths. 
+
+
+### Onboarding
+
+In the very first interaction, Serena is instructed to perform an onboarding and
+write the first memory files. Sometimes (depending on the LLM), the files are not
+written to disk. In that case, just as Serena to write the memories.
+
+In this phase Serena will usually read and write quite a lot of text and thereby fill
+up the context. We recommend that you switch to another conversation 
+once the onboarding is performed in order to not run out of tokens. The onboarding will 
+only be performed once, unless you explicitly trigger it.
+
+After the onboarding we recommend that you have a quick look at the memories and
+if desired edit them or add new ones.
+
 ### Before Editing Code
+
+It is best to start a code generation task from a clean git state. Not only will
+this make it easier for you to inspect the changes, but also the model itself will
+have a chance of seeing what it has changed by calling `git diff` and thereby
+correct itself or continue working in a followup conversation if needed.
+
+**Important**: since Serena will write to files using the system-native line endings
+and it might want to look at the git diff, it is important to
+set `git config core.autocrlf` to `true` on Windows.
+With `git config core.autocrlf` set to `false` on Windows you may end up with huge diffs
+only due to line endings. It is generally a good idea to do this on Windows
+
+```shell
+git config --global core.autocrlf true
+```
+
+### Potential Issues in Code Editing
+
+In our experience, LLMs are really bad at counting, which means they have problems
+inserting blocks of code at the right place. Most editing operations can be performed
+on a symbolic level, through which this problem is overcome. However, sometimes
+insertions beyond that are useful.
+
+Serena is instructed to double-check the line numbers and any code blocks that it will
+edit, but you may find it useful to explicitly tell it how to edit code if you run into
+problems.
 
 ### Running Out of Context
 
+For long and complicated tasks, or tasks where Serena has read a lot of content, you
+may come close to the limits of context tokens. In that case it is often a good idea to continue
+in a new conversation. Serena has a dedicated tool to create a summary of the current state
+of the progress and all relevant info for continuing it. You can request to create this summary and
+write it to a memory. Then, in a new conversation, you can just ask Serena to read the memory and
+continue with the task. In our experience, this worked really well. On the up-side, since in a 
+single session there is no summarization involved, Serena does not usually get lost (unlike some
+other agents that summarize under the hood), and it is also instructed to occasionally check whether
+it's on the right track.
+
+Moreover, Serena is instructed to be frugal with context 
+(e.g., to not read bodies of code symbols unnecessarily),
+but we found that Claude is not always very good in being frugal (Gemini seemed better at it).
+You can explicitly instruct it to not read the bodies if you know that it's not needed.
+
 ### Controlling Tool Execution
 
-### Structuring the Codebase
+Claude Desktop will ask you before executing a tool. For most tools you can just safely 
+click on "Allow for this Chat", especially if all your files are under
+version control. One exception is the `execute_shell_command` tool - there you might want
+to inspect each call individually. We recommend reviewing each call to this command and
+not enabling it for the whole chat.
 
-## Developer Environment Setup
+### Structuring Your Codebase
 
-You can have a local setup via `uv` or a docker interpreter-based setup. 
-The repository is also configured to seamlessly work within a GitHub Codespace. See the instructions
-for the various setup scenarios below.
+Serena uses the code structure for finding, reading and editing code. This means that it will
+work well with well-structured code but may fail with fully unstructured one (like a God-class
+with enormous, non-modular functions). Type annotations also help a lot here. The better your code,
+the better Serena will work. So we generally recommend you to write well-structured, modular and
+typed code - it will not only help you but also help your AI ;).
 
-Independently of how the setup was done, the virtual environment can be 
-created and activated via `uv` (see below), and the various tasks like formatting, testing, and documentation building
-can be executed using `poe`. For example, `poe format` will format the code, including the 
-notebooks. Just run `poe` to see the available commands.
+### Logging, Linting, and Testing
 
-### Python (uv) setup
+Serena cannot debug (no coding assistant can do that at the moment, to our knowledge). This means
+that for improving the results within an "agent-loop", Serena needs to acquire information by
+executing tests, running scripts, linting and so on. It is often very helpful to include many log
+messages with explicit information and to have good tests. Especially the latter often help the agent
+to self-correct.
 
-You can install a virtual environment with the required as follows
+### General Advice
 
-1. Create a new virtual environment: `uv venv`
-2. Activate the environment:
-    * On Linux/Unix/macOS: `source .venv/bin/activate`
-    * On Windows: `.venv\Scripts\activate.bat`
-3. Install the required packages: `uv pip install --all-extras -r pyproject.toml -e .`
+We found that it is often a good idea to spend some time conceptualizing and planning a task
+before actually implementing it, especially for non-trivial task. This helps both in achieving
+better results and in increasing the feeling of control and staying in the loop. You can
+make a detailed plan in one session, where Serena may read a lot of your code to build up the context,
+and then continue with the implementation in another (potentially after creating suitable memories).
 
-### Docker setup
-
-Build the docker image with
-
-```shell
-docker build -t serena .
-```
-
-and run it with the repository mounted as a volume:
-
-```shell
-docker run -it --rm -v "$(pwd)":/workspace serena
-```
-
-You can also just run `bash docker_build_and_run.sh`, which will do both things
-for you.
-
-Note: For the Windows subsystem for Linux (WSL), you may need to adjust the path for the
-volume.
 
 ## Acknowledgements
 
@@ -347,7 +412,40 @@ Here a short list of the most important ones:
 Without these projects, Serena would not have been possible, or would at least much more difficult to build.
 
 
-## Contributing
+## Customizing Serena
 
-Please open new issues for bugs, feature requests and extensions. See more details about the structure and
-workflow in the [contributing page](docs/04_contributing/04_contributing.rst).
+It is very easy to extend Serena with your own ideas. Just implement a new Tool by subclassing from
+`serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it. We look forward
+to seeing what the community will come up with! For details on contributing, see [here](/CONTRIBUTING.md).
+
+## Full List of Tools
+
+Here the full list of Serena's default tools with a short description (the output of `uv run serena-list-tools`)
+
+```
+ * `check_onboarding_performed`: Checks whether the onboarding was already performed.
+ * `create_text_file`: Creates/overwrites a file in the project directory.
+ * `delete_lines`: Deletes a range of lines within a file.
+ * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
+ * `execute_shell_command`: Executes a shell command.
+ * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
+ * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+ * `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
+ * `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
+ * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
+ * `insert_at_line`: Inserts content at a given line in a file.
+ * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
+ * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
+ * `list_memories`: Lists memories in Serena's project-specific memory store.
+ * `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
+ * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
+ * `read_file`: Reads a file within the project directory.
+ * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+ * `replace_symbol_body`: Replaces the full definition of a symbol.
+ * `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
+ * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
+ * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
+ * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
+ * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
+ * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
+```
