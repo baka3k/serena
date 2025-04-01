@@ -33,7 +33,8 @@ dependencies = [
 ]
 
 [project.scripts]
-serena = "serena.mcp:start_mcp_server"
+serena-mcp-server = "serena.mcp:start_mcp_server"
+serena-list-tools = "serena.agent:print_tool_overview"
 
 [project.license]
 text = "MIT"

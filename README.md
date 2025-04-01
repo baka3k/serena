@@ -74,7 +74,7 @@ We thus built Serena with the prospect of being able to cancel most other subscr
     "mcpServers": {
         "serena": {
             "command": "/abs/path/to/uv",
-            "args": ["run", "--directory", "/abs/path/to/serena", "serena", "/abs/path/to/myproject.yml"]
+            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "/abs/path/to/myproject.yml"]
         }
     }
 }

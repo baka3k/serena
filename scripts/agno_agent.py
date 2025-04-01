@@ -1,19 +1,13 @@
 import os
 from logging import Logger
 
-from agno.agent.agent import Agent
-from agno.memory.agent import AgentMemory
 from agno.models.anthropic.claude import Claude
 from agno.models.google.gemini import Gemini
-from agno.playground.playground import Playground
-from agno.playground.serve import serve_playground_app
-from agno.storage.agent.sqlite import SqliteAgentStorage
 from dotenv import load_dotenv
 from sensai.util import logging
 from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent
-from serena.agno import SerenaAgnoToolkit
 
 mark_used(Gemini, Claude)
 
@@ -36,27 +30,30 @@ os.makedirs(os.path.dirname(sql_db_path), exist_ok=True)
 if os.path.exists(sql_db_path):
     os.remove(sql_db_path)
 
-model = Claude(id="claude-3-7-sonnet-20250219")
-# model = Gemini(id="gemini-2.5-pro-exp-03-25")
+for tool_name in serena_agent.list_tool_names():
+    print(tool_name)
 
-agno_agent = Agent(
-    name="Serena",
-    model=model,
-    storage=SqliteAgentStorage(table_name="serena_agent_sessions", db_file=sql_db_path),
-    description="A fully-featured coding assistant",
-    tools=[SerenaAgnoToolkit(serena_agent)],  # type: ignore
-    show_tool_calls=False,
-    markdown=True,
-    system_message=serena_agent.prompt_factory.create_system_prompt(),
-    read_tool_call_history=False,
-    telemetry=False,
-    memory=AgentMemory(),
-    add_history_to_messages=True,
-    num_history_responses=100,  # you might want to adjust this (expense vs. history awareness)
-)
+# model = Claude(id="claude-3-7-sonnet-20250219")
+# # model = Gemini(id="gemini-2.5-pro-exp-03-25")
 
-# The app object must be in the module scope so that the server can access it for hot reloading
-app = Playground(agents=[agno_agent]).get_app()
+# agno_agent = Agent(
+#     name="Serena",
+#     model=model,
+#     storage=SqliteAgentStorage(table_name="serena_agent_sessions", db_file=sql_db_path),
+#     description="A fully-featured coding assistant",
+#     tools=[SerenaAgnoToolkit(serena_agent)],  # type: ignore
+#     show_tool_calls=False,
+#     markdown=True,
+#     system_message=serena_agent.prompt_factory.create_system_prompt(),
+#     read_tool_call_history=False,
+#     telemetry=False,
+#     memory=AgentMemory(),
+#     add_history_to_messages=True,
+#     num_history_responses=100,  # you might want to adjust this (expense vs. history awareness)
+# )
 
-if __name__ == "__main__":
-    serve_playground_app("agno_agent:app", reload=False)
+# # The app object must be in the module scope so that the server can access it for hot reloading
+# app = Playground(agents=[agno_agent]).get_app()
+
+# if __name__ == "__main__":
+#     serve_playground_app("agno_agent:app", reload=False)
