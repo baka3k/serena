@@ -207,11 +207,23 @@ class GuiLogViewer:
 
             # Make the window resizable
             self.root.columnconfigure(0, weight=1)
-            self.root.rowconfigure(0, weight=1)
+            # We now have two rows - one for logo and one for text
+            self.root.rowconfigure(0, weight=0)  # Logo row
+            self.root.rowconfigure(1, weight=1)  # Text content row
+
+            # Load and display the logo image
+            try:
+                self.logo_image = tk.PhotoImage(file="resources/serena-logs.png")
+                
+                # Create a label to display the logo
+                self.logo_label = tk.Label(self.root, image=self.logo_image)
+                self.logo_label.grid(row=0, column=0, sticky="ew")
+            except Exception as e:
+                print(f"Error loading logo image: {e}", file=sys.stderr)
 
             # Create frame to hold text widget and scrollbars
             frame = tk.Frame(self.root)
-            frame.grid(row=0, column=0, sticky="nsew")
+            frame.grid(row=1, column=0, sticky="nsew")
             frame.columnconfigure(0, weight=1)
             frame.rowconfigure(0, weight=1)
 
