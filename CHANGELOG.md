@@ -1,10 +1,3 @@
 # Changelog
 
-## 0.1.0 - Initial Release
-
-### Features:
-
-### Development:
-
-- Initial setup by pymetrius
-
+## 01.04.2025: Initial Release
