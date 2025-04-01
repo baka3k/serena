@@ -416,6 +416,9 @@ executing tests, running scripts, linting and so on. It is often very helpful to
 messages with explicit information and to have good tests. Especially the latter often help the agent
 to self-correct.
 
+We generally recommend to start an editing task from a state where all linting checks and tests pass, this
+way the info extracted from running these commands is of most use to the agent.
+
 ### General Advice
 
 We found that it is often a good idea to spend some time conceptualizing and planning a task
