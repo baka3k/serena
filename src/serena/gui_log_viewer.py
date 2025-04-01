@@ -71,13 +71,14 @@ class GuiLogViewer:
             self.message_queue.put(None)
             return True
         return False
-        
+
     def set_tool_names(self, tool_names):
         """
         Set or update the list of tool names to be highlighted in log messages.
-        
+
         Args:
             tool_names (list): A list of tool name strings to highlight
+
         """
         self.tool_names = tool_names
 
@@ -139,38 +140,49 @@ class GuiLogViewer:
 
                 # Insert the message at the end of the text with appropriate log level tag
                 self.text_widget.configure(state=tk.NORMAL)
-                
+
                 # Find tool names in the message and highlight them
                 if self.tool_names:
-                    # Start position for insertion
-                    start_pos = self.text_widget.index(tk.END)
+                    # Capture start position (before insertion)
+                    start_index = self.text_widget.index("end-1c")
+
                     # Insert the message
-                    self.text_widget.insert(tk.END, message + "\n", log_level.name)
-                    # End position after insertion
-                    end_pos = self.text_widget.index(tk.END)
-                    
-                    # Apply bold tag to tool names
+                    self.text_widget.insert(tk.END, message + "\n")
+
+                    # Convert start index to line/char format
+                    line, char = map(int, start_index.split("."))
+
+                    # Search for tool names in the message string directly
                     for tool_name in self.tool_names:
-                        # Find all occurrences of the tool name
-                        start_search = start_pos
+                        start_offset = 0
                         while True:
-                            # Find the next occurrence
-                            pos = self.text_widget.search(tool_name, start_search, end_pos, nocase=False)
-                            if not pos:
-                                break  # No more occurrences
-                                
-                            # Calculate the end position of this occurrence
-                            tool_end = f"{pos}+{len(tool_name)}c"
-                            
-                            # Apply the bold tag
-                            self.text_widget.tag_add("BOLD", pos, tool_end)
-                            
-                            # Move the search start position
-                            start_search = tool_end
+                            found_at = message.find(tool_name, start_offset)
+                            if found_at == -1:
+                                break
+
+                            # Calculate line/column from offset
+                            offset_line = line
+                            offset_char = char
+                            for c in message[:found_at]:
+                                if c == "\n":
+                                    offset_line += 1
+                                    offset_char = 0
+                                else:
+                                    offset_char += 1
+
+                            # Construct index positions
+                            start_pos = f"{offset_line}.{offset_char}"
+                            end_pos = f"{offset_line}.{offset_char + len(tool_name)}"
+
+                            # Add tag to highlight the tool name
+                            self.text_widget.tag_add("TOOL_NAME", start_pos, end_pos)
+
+                            start_offset = found_at + len(tool_name)
+
                 else:
                     # No tool names to highlight, just insert the message
                     self.text_widget.insert(tk.END, message + "\n", log_level.name)
-                
+
                 self.text_widget.configure(state=tk.DISABLED)
 
                 # Auto-scroll to the bottom only if it was already at the bottom
@@ -225,9 +237,9 @@ class GuiLogViewer:
             # Configure tags for different log levels with appropriate colors
             for level, color in self.log_colors.items():
                 self.text_widget.tag_configure(level.name, foreground=color)
-                
-            # Configure bold tag for tool names
-            self.text_widget.tag_configure("BOLD", font=("TkDefaultFont", 0, "bold"))
+
+            # Configure tag for tool names
+            self.text_widget.tag_configure("TOOL_NAME", background="#ffff00")
 
             # Set up the queue processing
             self.root.after(100, self._process_queue)
