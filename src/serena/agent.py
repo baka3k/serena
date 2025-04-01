@@ -351,10 +351,15 @@ class GetDirOverviewTool(Tool):
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. If the overview is too long, you should use a smaller directory instead,
             (e.g. a subdirectory).
-        :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line).
+        :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line, column).
         """
-        result = json.dumps(self.language_server.request_dir_overview(relative_path))
-        return self._limit_length(result, max_answer_chars)
+        path_to_symbol_infos = self.language_server.request_dir_overview(relative_path)
+        result = {}
+        for file_path, symbols in path_to_symbol_infos.items():
+            result[file_path] = [_tuple_to_info(*symbol_info) for symbol_info in symbols]
+
+        result_json_str = json.dumps(result)
+        return self._limit_length(result_json_str, max_answer_chars)
 
 
 class GetDocumentOverviewTool(Tool):
@@ -372,10 +377,11 @@ class GetDocumentOverviewTool(Tool):
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task.
-        :return: a JSON object with the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+        :return: a JSON object with the info (name, kind, line, column) of all top-level symbols in the file.
         """
-        result = json.dumps(self.language_server.request_document_overview(relative_path))
-        return self._limit_length(result, max_answer_chars)
+        result = self.language_server.request_document_overview(relative_path)
+        result_json_str = json.dumps([_tuple_to_info(*symbol_info) for symbol_info in result])
+        return self._limit_length(result_json_str, max_answer_chars)
 
 
 class FindSymbolTool(Tool):
@@ -899,3 +905,7 @@ def _print_tool_overview(tools: Iterable[type[Tool] | Tool]) -> None:
     for tool_name in sorted(tool_dict.keys()):
         tool = tool_dict[tool_name]
         print(f" * `{tool_name}`: {tool.get_tool_description().strip()}")
+
+
+def _tuple_to_info(name: str, symbol_type: SymbolKind, line: int, column: int) -> dict[str, int | str]:
+    return {"name": name, "symbol_kind": symbol_type, "line": line, "column": column}
