@@ -37,7 +37,7 @@ serena-mcp-server = "serena.mcp:start_mcp_server"
 serena-list-tools = "serena.agent:print_tool_overview"
 
 [project.license]
-text = "MIT"
+text = "GPL-2.0"
 
 [project.optional-dependencies]
 dev = [
