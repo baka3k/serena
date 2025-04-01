@@ -7,6 +7,7 @@ from agno.models.anthropic.claude import Claude
 from agno.models.google.gemini import Gemini
 from agno.playground.playground import Playground
 from agno.playground.serve import serve_playground_app
+from agno.storage.agent.sqlite import SqliteAgentStorage
 from dotenv import load_dotenv
 from sensai.util import logging
 from sensai.util.helper import mark_used
@@ -24,12 +25,24 @@ load_dotenv()
 project_file_path = "../myproject.yml"
 serena_agent = SerenaAgent(project_file_path, start_language_server=True)
 
+# Even though we don't want to keep history between sessions,
+# for the agno ui to work as a conversation, we a persistent storage on disk
+# This storage should be deleted between sessions.
+# Note that this might collide with custom options for the agent, like adding vector-search based tools.
+# See here for an explanation: https://www.reddit.com/r/agno/comments/1jk6qea/regarding_the_built_in_memory/
+sql_db_path = os.path.join("tmp", "agent_storage.db")
+os.makedirs(os.path.dirname(sql_db_path), exist_ok=True)
+# delete the db file if it exists
+if os.path.exists(sql_db_path):
+    os.remove(sql_db_path)
+
 model = Claude(id="claude-3-7-sonnet-20250219")
 # model = Gemini(id="gemini-2.5-pro-exp-03-25")
 
 agno_agent = Agent(
     name="Serena",
     model=model,
+    storage=SqliteAgentStorage(table_name="serena_agent_sessions", db_file=sql_db_path),
     description="A fully-featured coding assistant",
     tools=[SerenaAgnoToolkit(serena_agent)],  # type: ignore
     show_tool_calls=False,
