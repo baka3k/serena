@@ -4,12 +4,15 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
 from dataclasses import asdict, dataclass
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from sensai.util.string import ToStringMixin
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
+
+if TYPE_CHECKING:
+    from .agent import SerenaAgent
 
 log = logging.getLogger(__name__)
 
@@ -187,8 +190,9 @@ class Symbol(ToStringMixin):
 
 
 class SymbolManager:
-    def __init__(self, lang_server: SyncLanguageServer) -> None:
+    def __init__(self, lang_server: SyncLanguageServer, agent: "SerenaAgent") -> None:
         self.lang_server = lang_server
+        self.agent = agent
 
     def _to_symbols(self, items: list[UnifiedSymbolInformation]) -> list[Symbol]:
         return [Symbol(s) for s in items]
@@ -289,6 +293,7 @@ class SymbolManager:
             abs_path = os.path.join(root_path, relative_path)
             with open(abs_path, "w") as f:
                 f.write(file_buffer.contents)
+            self.agent.mark_file_modified(relative_path)
 
     @contextmanager
     def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
