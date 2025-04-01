@@ -501,7 +501,7 @@ class FindReferencingSymbolsTool(Tool):
         :param include_body: whether to include the body of the symbols in the result.
             Note that this might lead to a very long output, so you should only use this if you actually need the body
             of the referencing symbols for the task at hand. Usually it is a better idea to find
-            the referencing symbols without the body and then use the find_symbol tool to get the body of 
+            the referencing symbols without the body and then use the find_symbol tool to get the body of
             specific symbols if needed.
         :param include_kinds: an optional list of integers representing the LSP symbol kinds to include.
             If provided, only symbols of the given kinds will be included in the result.
