@@ -132,8 +132,10 @@ Serena can read, write and execute code, read logs and the terminal output.
 
    When using paths containing backslashes on Windows, be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop (⚠️ be sure to fully quit the application, as closing Claude will just minimize it to the system tray – at least on Windows).
-You should then see the Serena MCP tools in your chat interface (notice the small hammer icon).
+That's it! Save the config and then restart Claude Desktop.  
+⚠️ Be sure to fully quit the application, as closing Claude will just minimize it to the system tray – at least on Windows.  
+
+After restarting, you should Serena's tools in your chat interface (notice the small hammer icon).
 
 Note that Serena is always configured *for a single project*. To use it for another, you will have to
 write a new configuration file, adjust the configuration to point to it and then restart the client.
