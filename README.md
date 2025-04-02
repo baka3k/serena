@@ -102,9 +102,9 @@ We thus built Serena with the prospect of being able to cancel most other subscr
 
 ## What Can I Use Serena For?
 
-You can use Serena for any coding tasks - analyzing, planning, editing and so on.
+You can use Serena for any coding tasks – analyzing, planning, editing and so on.
 Serena can read, write and execute code, read logs and the terminal output. 
-Vibe coding is possible, and if you want to almost feel like "the code no longer exists"
+"Vibe coding" is possible, and if you want to almost feel like "the code no longer exists",
  you may find Serena even more adequate for vibing than an agent inside an IDE
 (since you will have a separate GUI that really lets you forget).
 
@@ -119,24 +119,24 @@ Vibe coding is possible, and if you want to almost feel like "the code no longer
    For Claude Desktop, go to File / Settings / Developer / MCP Servers / Edit Config,
    which will let you open the json file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
 
-```json
-{
-    "mcpServers": {
-        "serena": {
-            "command": "/abs/path/to/uv",
-            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "/abs/path/to/myproject.yml"]
-        }
-    }
-}
-```
+   ```json
+   {
+       "mcpServers": {
+           "serena": {
+               "command": "/abs/path/to/uv",
+               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "/abs/path/to/myproject.yml"]
+           }
+       }
+   }
+   ```
 
-When using paths containing backslashes on Windows, be sure to escape them correctly (`\\`).
+   When using paths containing backslashes on Windows, be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop (be sure to fully quit the application, as closing Claude will just minimize it to the system tray).
+That's it! Save the config and then restart Claude Desktop (⚠️ be sure to fully quit the application, as closing Claude will just minimize it to the system tray – at least on Windows).
 You should then see the Serena MCP tools in your chat interface (notice the small hammer icon).
 
 Note that Serena is always configured *for a single project*. To use it for another, you will have to
-write a new configuration file and adjust the config in the MCP client.
+write a new configuration file, adjust the configuration to point to it and then restart the client.
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
@@ -145,7 +145,7 @@ For more information on MCP servers with Claude Desktop, see [the official quick
 Agno is a model-agnostic agent framework that allows you to use Serena with a large number of underlying LLMs.
 
 While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
-making it easy to directly use the agent.  
+making it easy to directly use the agent using a chat interface.  
 
 Here's how it works (see also [Agno's documentation](https://docs.agno.com/introduction/playground)):
 
@@ -194,16 +194,17 @@ Here's how it works (see also [Agno's documentation](https://docs.agno.com/intro
 </video> -->
 
 
-IMPORTANT: Contrary to the MCP server approach, tool execution in the Agno UI does
-not ask for the user's permission. Note that the shell
-tool can perform arbitrary code execution. While we have never encountered any issues with
-this in our testing with Claude, this may not be entirely safe. 
+⚠️ IMPORTANT: In contrast to the MCP server approach, tool execution in the Agno UI does
+not ask for the user's permission. The shell tool is particularly critical, as it can perform arbitrary code execution. 
+While we have never encountered any issues with
+this in our testing with Claude, allowing this may not be entirely safe. 
 You may choose to disable certain tools for your setup in your Serena project's
-configuration file (`myproject.yml`).
+configuration file (`.yml`).
 
 ## Serena's Tools and Configuration
 
 Serena combines tools for semantic code retrieval with editing capabilities and shell execution.
+Find the complete list of tools [below](#serenas-tools-and-configuration).
 
 The use of all tools is generally recommended, as this allows Serena to provide the most value:
 Only by executing shell commands (in particular, tests) can Serena identify and correct mistakes 
@@ -228,8 +229,6 @@ without modifying the codebase, you can consider disabling the editing tools in 
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.
 
-Find the complete list of tools [here](#serenas-tools-and-configuration).
-
 
 ## Comparison with Other Coding Agents
 
@@ -237,7 +236,6 @@ To our knowledge, Serena is the first fully-featured coding agent where the
 entire functionality
 is available through an MCP server, thus not requiring API keys or
 subscriptions.
-Here a brief comparison with other tools:
 
 ### Subscription-Based Coding Agents
 
@@ -286,8 +284,7 @@ an API key and bypassing the API costs. This is a unique feature of Serena.
 
 ### Other MCP-Based Coding Agents
 
-There are other MCP servers meant for coding, like for
-example [DesktopCommander](https://github.com/wonderwhy-er/DesktopCommanderMCP) and
+There are other MCP servers designed for coding, like [DesktopCommander](https://github.com/wonderwhy-er/DesktopCommanderMCP) and
 [codemcp](https://github.com/ezyang/codemcp).
 However, to the best of our knowledge, none of them provide semantic code
 retrieval and editing tools; they rely purely on text-based analysis. 
@@ -295,37 +292,40 @@ It is the integration of language servers and the MCP that makes Serena unique
 and so powerful for challenging coding tasks, especially in the context of
 larger codebases.
 
-## Limitations of MCP Servers
+## Stability Issues in MCP Client-Server Interactions
 
-The support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new technologies,
-and we found them to be flaky. Sometimes Claude Desktop will crash on a tool execution (with an asyncio error or
-something else of this kind). It can show error messages which have no effect, and on the contrary, fail to
-show error messages when things go wrong. The working configuration of an MCP server may vary from platform to
-platform and from client to client (we recommend always using absolute paths, as relative paths may be sources of
-errors). The language server is running in a separate thread and is called with asyncio - sometimes
-Claude Desktop lets it crash.
-We expect these stability issues to improve over time.
+The support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new developments,
+and we found them to be somewhat unstable. Sometimes, Claude Desktop will crash on a tool execution (with an asyncio error or
+something else of this kind). On the one hand, it can display show error messages that are no of consequence, and on the other, it can fail to
+show error messages when things fail irrecoverably. 
+Yet we expect these stability issues to improve over time.
 
-For now, you may have to restart Claude Desktop multiple times, may have to manually cleanup python processes,
+The working configuration of an MCP server may vary from platform to
+platform and from client to client. We recommend always using absolute paths, as relative paths may be sources of
+errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
+Claude Desktop lets it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
+
+For now, you may have to restart Claude Desktop multiple times, may have to manually cleanup lingering processes,
 and you may experiences freezes in conversations.
-Just try again in the latter case. You can also switch to the API-key based agent mode if you are willing to pay for a potentially 
-smoother experience (see [section on Agno](#agno)). 
+Just try again in the latter case. 
 Feel free to open issues if you encounter setup problems that you cannot solve.
 
 ### Serena Logging
 
 To help with troubleshooting, we have written a small GUI utility for logging. We recommend that you enable it
-through the `myproject.yml` if you encounter problems. For Claude Desktop, there are also the MCP logs that can help
+through the project configuration (`myproject.yml`) if you encounter problems. For Claude Desktop, there are also the MCP logs that can help
 identify issues.
 
 ## Onboarding and Memories
 
 By default, Serena will perform an onboarding process when 
-it is started for the first time for a project. It will save some information
-as memories to `.serena/memories/` in the project directory.
+it is started for the first time for a project. 
+The goal of the process is for Serena to get familiar with the project
+and to store memories, which it can then draw upon in future interactions.
 
-The memories are human-readable and will be used as references for further tasks.
-Feel free to read and adjust them as needed, you can also add new ones manually.
+Memroies are files stored in `.serena/memories/` in the project directory,
+which the agent can choose to read.
+Feel free to read and adjust them as needed; you can also add new ones manually.
 Every file in the `.serena/memories/` directory is a memory file.
 
 We found the memories to significantly improve the user experience with Serena.
@@ -362,8 +362,8 @@ up the context. We recommend that you switch to another conversation
 once the onboarding is performed in order to not run out of tokens. The onboarding will 
 only be performed once, unless you explicitly trigger it.
 
-After the onboarding we recommend that you have a quick look at the memories and
-if desired edit them or add new ones.
+After the onboarding, we recommend that you have a quick look at the memories and,
+if necessary, edit them or add additional ones.
 
 ### Before Editing Code
 
@@ -372,11 +372,11 @@ this make it easier for you to inspect the changes, but also the model itself wi
 have a chance of seeing what it has changed by calling `git diff` and thereby
 correct itself or continue working in a followup conversation if needed.
 
-**Important**: since Serena will write to files using the system-native line endings
+:warning: **Important**: since Serena will write to files using the system-native line endings
 and it might want to look at the git diff, it is important to
 set `git config core.autocrlf` to `true` on Windows.
-With `git config core.autocrlf` set to `false` on Windows you may end up with huge diffs
-only due to line endings. It is generally a good idea to do this on Windows
+With `git config core.autocrlf` set to `false` on Windows, you may end up with huge diffs
+only due to line endings. It is generally a good idea to enable this git setting on Windows:
 
 ```shell
 git config --global core.autocrlf true
@@ -384,10 +384,10 @@ git config --global core.autocrlf true
 
 ### Potential Issues in Code Editing
 
-In our experience, LLMs are really bad at counting, which means they have problems
-inserting blocks of code at the right place. Most editing operations can be performed
-on a symbolic level, through which this problem is overcome. However, sometimes
-insertions beyond that are useful.
+In our experience, LLMs are really bad at counting, i.e. they have problems
+inserting blocks of code in the right place. Most editing operations can be performed
+on a symbolic level, allowing this problem is overcome. However, sometimes,
+line-level insertions are useful.
 
 Serena is instructed to double-check the line numbers and any code blocks that it will
 edit, but you may find it useful to explicitly tell it how to edit code if you run into
@@ -396,7 +396,7 @@ problems.
 ### Running Out of Context
 
 For long and complicated tasks, or tasks where Serena has read a lot of content, you
-may come close to the limits of context tokens. In that case it is often a good idea to continue
+may come close to the limits of context tokens. In that case, it is often a good idea to continue
 in a new conversation. Serena has a dedicated tool to create a summary of the current state
 of the progress and all relevant info for continuing it. You can request to create this summary and
 write it to a memory. Then, in a new conversation, you can just ask Serena to read the memory and
@@ -428,14 +428,13 @@ typed code - it will not only help you but also help your AI ;).
 
 ### Logging, Linting, and Testing
 
-Serena cannot debug (no coding assistant can do that at the moment, to our knowledge). This means
-that for improving the results within an "agent-loop", Serena needs to acquire information by
-executing tests, running scripts, linting and so on. It is often very helpful to include many log
-messages with explicit information and to have good tests. Especially the latter often help the agent
+Serena cannot debug (no coding assistant can do this at the moment, to our knowledge). This means
+that for improving the results within an _agent loop_, Serena needs to acquire information by
+executing tests, running scripts, performing linting and so on. It is often very helpful to include many log
+messages with explicit information and to have meaningful tests. Especially the latter often help the agent
 to self-correct.
 
-We generally recommend to start an editing task from a state where all linting checks and tests pass, this
-way the info extracted from running these commands is of most use to the agent.
+We generally recommend to start an editing task from a state where all linting checks and tests pass.
 
 ### General Advice
 
@@ -451,7 +450,7 @@ and then continue with the implementation in another (potentially after creating
 We built Serena on top of multiple existing open-source technologies, to which we are very grateful.
 Here a short list of the most important ones:
 
-1. [Multilspy](https://github.com/microsoft/multilspy).
+1. [multilspy](https://github.com/microsoft/multilspy).
    A beautifully designed wrapper around language servers following the LSP. It
    was not easily extendable with the symbolic
    logic that Serena required, so instead of incorporating it as dependency, we
@@ -459,12 +458,12 @@ Here a short list of the most important ones:
    and adapted it to our needs.
 2. [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)
 3. [Agno](https://github.com/agno-agi/agno) and
-   agno's [agent-ui](https://github.com/agno-agi/agent-ui),
-   which we use to allow Serena to work with any model, not just those that
-   support the MCP.
+   the associated [agent-ui](https://github.com/agno-agi/agent-ui),
+   which we use to allow Serena to work with any model, beyond the ones
+   supporting the MCP.
 4. All the language servers that we use through multilspy.
 
-Without these projects, Serena would not have been possible, or would at least much more difficult to build.
+Without these projects, Serena would not have been possible (or would have been siginificantly more difficult to build).
 
 
 ## Customizing Serena
