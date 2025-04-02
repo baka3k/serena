@@ -449,8 +449,7 @@ and then continue with the implementation in another (potentially after creating
 
 ## Acknowledgements
 
-We built Serena on top of multiple existing open-source technologies, to which we are very grateful.
-Here a short list of the most important ones:
+We built Serena on top of multiple existing open-source technologies, the most important ones being:
 
 1. [multilspy](https://github.com/microsoft/multilspy).
    A beautifully designed wrapper around language servers following the LSP. It
@@ -465,7 +464,7 @@ Here a short list of the most important ones:
    supporting the MCP.
 4. All the language servers that we use through multilspy.
 
-Without these projects, Serena would not have been possible (or would have been siginificantly more difficult to build).
+Without these projects, Serena would not have been possible (or would have been significantly more difficult to build).
 
 
 ## Customizing Serena
@@ -478,7 +477,6 @@ to seeing what the community will come up with! For details on contributing, see
 
 Here the full list of Serena's default tools with a short description (the output of `uv run serena-list-tools`)
 
-```
  * `check_onboarding_performed`: Checks whether the onboarding was already performed.
  * `create_text_file`: Creates/overwrites a file in the project directory.
  * `delete_lines`: Deletes a range of lines within a file.
@@ -504,4 +502,4 @@ Here the full list of Serena's default tools with a short description (the outpu
  * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
  * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
-```
+
