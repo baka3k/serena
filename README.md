@@ -5,7 +5,7 @@
 
 * :rocket: Serena is a powerful, fully-featured **coding agent that works directly on your codebase**.
 * :wrench: Serena **integrates with existing LLMs**, providing them with essential **semantic code retrieval and editing tools!**
-* :free: Serena is **free to use**. No additional API keys or subscriptions required!
+* :free: Serena is **free to use**. No API keys or subscriptions required!
 
 Q: Can I have a state-of-the-art coding agent without paying (enormous) API costs 
 or constantly purchasing tokens?  
