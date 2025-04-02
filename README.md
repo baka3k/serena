@@ -13,11 +13,17 @@ A: Yes, you can!
 By integrating Serena with your favourite (even free) LLM and thereby enabling it
 to perform coding tasks directly on your codebase.
 
+### Demonstration
 
-Here you see Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
-Note the smart usage in finding and editing the right symbols.
+Here is a demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
+Note how Serena's tools enable Claude to find and edit the right symbols.
 
 https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
+
+### LLM Integration
+
+Serena provides the necessary [tools](#full-list-of-tools) for coding workflows, but an LLM is required to do the actual work,
+orchestrating tool use.
 
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
@@ -27,6 +33,8 @@ Serena can be integrated with an LLM in several ways:
    or a free model provided by Ollama, Together or Anyscale.
  * by incorporating Serena's tools into an agent framework of your choice.  
    Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
+
+### Programming Language Support & Semantic Analysis
 
 Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
 language server protocol (LSP). The LSP provides a set of versatile code querying
@@ -47,8 +55,10 @@ With Serena, we provide
      * Ruby (untested)
      * Go (untested)
      * C# (untested)
+   These languages are supported by the language server library [multilspy](https://github.com/microsoft/multilspy), which Serena uses under the hood.
+   But we did not explicitly test whether the support for these languages actually works.
        
-Further languages can easily be supported by providing a shallow adapter for a new language server
+Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
 implementation.
 
 ## Table of Contents
@@ -116,8 +126,8 @@ Serena can read, write and execute code, read logs and the terminal output.
 2. Clone the repository to `/path/to/serena`.
 3. Create a configuration file for your project, say `myproject.yml` based on the template in [myproject.demo.yml](myproject.demo.yml).
 4. Configure the MCP server in your client.  
-   For Claude Desktop, go to File / Settings / Developer / MCP Servers / Edit Config,
-   which will let you open the json file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
+   For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
+   which will let you open the JSON file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
 
    ```json
    {
@@ -133,11 +143,17 @@ Serena can read, write and execute code, read logs and the terminal output.
    When using paths containing backslashes on Windows, be sure to escape them correctly (`\\`).
 
 That's it! Save the config and then restart Claude Desktop.  
-⚠️ Be sure to fully quit the application, as closing Claude will just minimize it to the system tray – at least on Windows.  
+
+⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
 
 After restarting, you should Serena's tools in your chat interface (notice the small hammer icon).
 
-Note that Serena is always configured *for a single project*. To use it for another, you will have to
+ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
+necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
+In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and 
+therefore needs to be configured with a launch command.
+
+ℹ️ Furthermore note that Serena is always configured *for a single project*. To use it for another, you will have to
 write a new configuration file, adjust the configuration to point to it and then restart the client.
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
