@@ -907,7 +907,7 @@ class LanguageServer:
     async def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
         """
         An overview of the given file. 
-        Returns the the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+        Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
         _, document_roots = await self.request_document_symbols(relative_file_path)
         return [
@@ -1617,7 +1617,7 @@ class SyncLanguageServer:
         """
         An overview of the given file. 
         
-        Returns the the list of tuples (name, kind, line, column) of all top-level symbols in the file.
+        Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
