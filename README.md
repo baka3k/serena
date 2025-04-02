@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
    Serena provides an MCP server which integrates with Claude (and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)).
- * by using **Agno – the model-agnostic agent framework**.
+ * by using **Agno – the model-agnostic agent framework**.  
    Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or DeepSeek (with a paid API key)
    or a free model provided by Ollama, Together or Anyscale.
  * by incorporating Serena's tools into an agent framework of your choice.  
@@ -47,6 +47,7 @@ With Serena, we provide
      * Ruby (untested)
      * Go (untested)
      * C# (untested)
+       
 Further languages can easily be supported by providing a shallow adapter for a new language server
 implementation.
 
