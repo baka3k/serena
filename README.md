@@ -140,7 +140,8 @@ Serena can read, write and execute code, read logs and the terminal output.
    }
    ```
 
-   When using paths containing backslashes on Windows, be sure to escape them correctly (`\\`).
+   If you are using paths containing backslashes for paths on Windows 
+   (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
 That's it! Save the config and then restart Claude Desktop.  
 
