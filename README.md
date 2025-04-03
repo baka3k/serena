@@ -140,7 +140,8 @@ Serena can read, write and execute code, read logs and the terminal output.
    }
    ```
 
-   When using paths containing backslashes on Windows, be sure to escape them correctly (`\\`).
+   If you are using paths containing backslashes for paths on Windows 
+   (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
 That's it! Save the config and then restart Claude Desktop.  
 
@@ -482,9 +483,12 @@ Without these projects, Serena would not have been possible (or would have been 
 
 ## Customizing Serena
 
-It is very easy to extend Serena with your own ideas. Just implement a new Tool by subclassing from
-`serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it. We look forward
-to seeing what the community will come up with! For details on contributing, see [here](/CONTRIBUTING.md).
+It is very easy to extend Serena's AI functionality with your own ideas. 
+Just implement a new Tool by subclassing from
+`serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it.
+
+It is also relatively straightforward to add [support for a new language](/CONTRIBUTING.md#adding-a-new-supported-language). We look forward to seeing what the community will come up with! 
+For details on contributing, see [here](/CONTRIBUTING.md).
 
 ## Full List of Tools
 

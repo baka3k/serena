@@ -15,7 +15,7 @@ from serena.text_utils import LineType
 class TestLanguageServerBasics:
     """Test basic functionality of the language server."""
 
-    def test_request_references_user_class(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_references_user_class(self, language_server: SyncLanguageServer):
         """Test request_references on the User class."""
         # Get references to the User class in models.py
         file_path = os.path.join("test_repo", "models.py")
@@ -28,7 +28,7 @@ class TestLanguageServerBasics:
         # At least two references should be found (one for the class definition itself)
         assert len(references) > 1
 
-    def test_request_references_item_class(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_references_item_class(self, language_server: SyncLanguageServer):
         """Test request_references on the Item class."""
         # Get references to the Item class in models.py
         file_path = os.path.join("test_repo", "models.py")
@@ -42,7 +42,7 @@ class TestLanguageServerBasics:
         services_references = [ref for ref in references if "services.py" in ref["uri"]]
         assert len(services_references) > 0
 
-    def test_request_references_function_parameter(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_references_function_parameter(self, language_server: SyncLanguageServer):
         """Test request_references on a function parameter."""
         # Get references to the id parameter in get_user method
         file_path = os.path.join("test_repo", "services.py")
@@ -52,7 +52,7 @@ class TestLanguageServerBasics:
         # id parameter should be referenced within the method
         assert len(references) > 0
 
-    def test_request_references_create_user_method(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_request_references_create_user_method(self, language_server: SyncLanguageServer):
         # Get references to the create_user method in UserService
         file_path = os.path.join("test_repo", "services.py")
         # Line 15 contains the create_user method definition
@@ -61,7 +61,7 @@ class TestLanguageServerBasics:
         # Verify that we get valid references
         assert len(references) > 1
 
-    def test_retrieve_content_around_line(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_retrieve_content_around_line(self, language_server: SyncLanguageServer):
         """Test retrieve_content_around_line functionality with various scenarios."""
         file_path = os.path.join("test_repo", "models.py")
 
@@ -167,7 +167,7 @@ class TestLanguageServerBasics:
             else:
                 assert line.match_type == LineType.AFTER_MATCH
 
-    def test_search_files_for_pattern(self, language_server: SyncLanguageServer, repo_path: Path):
+    def test_search_files_for_pattern(self, language_server: SyncLanguageServer):
         """Test search_files_for_pattern with various patterns and glob filters."""
         # Test 1: Search for class definitions across all files
         class_pattern = r"class\s+\w+\s*(?:\([^{]*\)|:)"
