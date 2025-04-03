@@ -5,6 +5,7 @@ import sys
 import threading
 import tkinter as tk
 from enum import Enum, auto
+from pathlib import Path
 
 
 class LogLevel(Enum):
@@ -213,8 +214,10 @@ class GuiLogViewer:
 
             # Load and display the logo image
             try:
-                self.logo_image = tk.PhotoImage(file="resources/serena-logs.png")
-                
+                # construct path relative to path of this file
+                image_path = Path(__file__).parent.parent.parent / "resources" / "serena-logs.png"
+                self.logo_image = tk.PhotoImage(file=image_path)
+
                 # Create a label to display the logo
                 self.logo_label = tk.Label(self.root, image=self.logo_image)
                 self.logo_label.grid(row=0, column=0, sticky="ew")
