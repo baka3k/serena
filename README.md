@@ -146,7 +146,7 @@ That's it! Save the config and then restart Claude Desktop.
 
 ⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
 
-After restarting, you should Serena's tools in your chat interface (notice the small hammer icon).
+After restarting, you should see Serena's tools in your chat interface (notice the small hammer icon).
 
 ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
 necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
@@ -338,7 +338,7 @@ it is started for the first time for a project.
 The goal of the process is for Serena to get familiar with the project
 and to store memories, which it can then draw upon in future interactions.
 
-Memroies are files stored in `.serena/memories/` in the project directory,
+Memories are files stored in `.serena/memories/` in the project directory,
 which the agent can choose to read.
 Feel free to read and adjust them as needed; you can also add new ones manually.
 Every file in the `.serena/memories/` directory is a memory file.
@@ -370,7 +370,7 @@ Gemini is comparatively cheap and can handle huge context lengths.
 
 In the very first interaction, Serena is instructed to perform an onboarding and
 write the first memory files. Sometimes (depending on the LLM), the files are not
-written to disk. In that case, just as Serena to write the memories.
+written to disk. In that case, just ask Serena to write the memories.
 
 In this phase Serena will usually read and write quite a lot of text and thereby fill
 up the context. We recommend that you switch to another conversation 
