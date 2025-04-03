@@ -44,3 +44,24 @@ for you.
 
 Note: For the Windows subsystem for Linux (WSL), you may need to adjust the path for the
 volume.
+
+## Adding a New Supported Language
+
+Serena interacts with code through language servers which are included in
+the `multilspy` package. It is rather easy to include a new supported language
+if an LSP implementation for it exists. You just need to:
+
+1. create a new subclass of `LanguageServer`
+2. add a new value to the `Language` enum
+3. make a new `elif` case in the `LanguageServer.create` method
+4. write minor tests
+
+The subclasses are typically easy to write, have a look at the 
+[PyrightLanguageServer](src/multilspy/language_servers/pyright_language_server/pyright_server.py) 
+for an example, or at any other implementation to see how non-python
+dependencies for language servers are handled there.
+
+⚠️ Important: The LSP allows for lot of optional fields and symbols, so the language servers may differ
+in some details, even if they follow the LSP. Therefore you should include some code of the new
+language in `test/resources` and add tests for symbolic read operations on that code. Have a look
+at `test/multilspy/test_symbol_retrieval.py` for an example of such tests for the python LS.

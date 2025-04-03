@@ -482,9 +482,12 @@ Without these projects, Serena would not have been possible (or would have been 
 
 ## Customizing Serena
 
-It is very easy to extend Serena with your own ideas. Just implement a new Tool by subclassing from
-`serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it. We look forward
-to seeing what the community will come up with! For details on contributing, see [here](/CONTRIBUTING.md).
+It is very easy to extend Serena's AI functionality with your own ideas. 
+Just implement a new Tool by subclassing from
+`serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it.
+
+It is also relatively straightforward to add [support for a new language](/CONTRIBUTING.md#adding-a-new-supported-language). We look forward to seeing what the community will come up with! 
+For details on contributing, see [here](/CONTRIBUTING.md).
 
 ## Full List of Tools
 
