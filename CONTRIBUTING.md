@@ -60,6 +60,7 @@ The subclasses are typically easy to write, have a look at the
 [PyrightLanguageServer](src/multilspy/language_servers/pyright_language_server/pyright_server.py) 
 for an example, or at any other implementation to see how non-python
 dependencies for language servers are handled there.
+There are also some tips from the multilspy admin [here](https://github.com/microsoft/multilspy/issues/5).
 
 ⚠️ Important: The LSP allows for lot of optional fields and symbols, so the language servers may differ
 in some details, even if they follow the LSP. Therefore you should include some code of the new
