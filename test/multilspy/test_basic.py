@@ -6,7 +6,6 @@ like request_references using the test repository.
 """
 
 import os
-from pathlib import Path
 
 from multilspy.language_server import SyncLanguageServer
 from serena.text_utils import LineType

@@ -213,7 +213,7 @@ class PlatformUtils:
                     platform_id += "-" + libc
             return PlatformId(platform_id)
         else:
-            raise MultilspyException("Unknown platform: " + system + " " + machine + " " + bitness)
+            raise MultilspyException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
 
     @staticmethod
     def get_dotnet_version() -> DotnetVersion:

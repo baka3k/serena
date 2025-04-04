@@ -77,7 +77,7 @@ class OmniSharp(LanguageServer):
                 "ascii",
                 "-z",
                 "-s",
-                slnfilename,
+                f'"{slnfilename}"',
                 "--hostPID",
                 str(os.getpid()),
                 "DotNet:enablePackageRestore=false",
