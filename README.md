@@ -183,7 +183,7 @@ Here's how it works (see also [Agno's documentation](https://docs.agno.com/intro
 2. Install serena with the optional requirements:
    ```shell
    # You can also only select agno,google or agno,anthropic instead of all-extras
-   uv pip install --all-extras -e .
+   uv pip install --all-extras -r pyproject.toml -e .
    ```
    
 3. Copy `.env.example` to `.env` and fill in the API keys for the provider(s) you
