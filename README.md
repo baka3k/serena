@@ -55,11 +55,14 @@ With Serena, we provide
      * Ruby (untested)
      * Go (untested)
      * C# (untested)
+     * Rust (untested)
    These languages are supported by the language server library [multilspy](https://github.com/microsoft/multilspy), which Serena uses under the hood.
    But we did not explicitly test whether the support for these languages actually works.
        
 Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
 implementation.
+
+Coming soon: Kotlin and Dart.
 
 ## Table of Contents
 
