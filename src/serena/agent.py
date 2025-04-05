@@ -553,10 +553,10 @@ class GetReferencingCodeExtractsTool(Tool):
         """
         Returns short code extracts where the symbol at the given location is referenced.
 
-        Contrary to the find_referencing_symbols tool, this tool returns references that are not symbols but instead
+        Contrary to the `find_referencing_symbols` tool, this tool returns references that are not symbols but instead
         code extracts that may or may not be contained in a symbol (for example, file-level calls).
         It may make sense to use this tool if you want to get a quick and dirty overview of the code that references
-        the symbol. Usually just looking at the code extracts is not enough to understand the context,
+        the symbol. Usually, just looking at the code extracts is not enough to understand the context,
         unless the case you are investigating is very simple,
         or you already have read the relevant symbols using the find_referencing_symbols tool and
         now want to get an overview of how the referenced symbol (at the given location) is used in them.
@@ -564,8 +564,12 @@ class GetReferencingCodeExtractsTool(Tool):
         :param relative_path: the relative path to the file containing the symbol
         :param line: the line number
         :param column: the column
-        :param context_lines_before: the number of lines to include before the reference
-        :param context_lines_after: the number of lines to include after the reference
+        :param context_lines_before: the number of lines to include before the line containing the reference
+        :param context_lines_after: the number of lines to include after the line containing the reference
+        :param max_answer_chars: if the output is longer than this number of characters,
+            no content will be returned. Don't adjust unless there is really no other way to get the content
+            required for the task. Instead, if the output is too long, you should
+            make a stricter query.
         """
         matches = self.language_server.request_references_with_content(
             relative_path, line, column, context_lines_before, context_lines_after
