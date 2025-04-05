@@ -1827,7 +1827,13 @@ class SyncLanguageServer:
         self._server_context = self.language_server.start_server()
         asyncio.run_coroutine_threadsafe(self._server_context.__aenter__(), loop=self.loop).result()
         return self
-
+    
+    def is_running(self) -> bool:
+        """
+        Check if the language server is running.
+        """
+        return self.loop is not None and self.loop_thread is not None and self.loop_thread.is_alive()
+    
     def stop(self) -> None:
         """
         Shuts down the language server process and cleans up resources.
