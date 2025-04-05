@@ -207,6 +207,16 @@ _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
 class Tool(Component):
+    # NOTE: each tool should implement the apply method, which is then used in
+    # the central method of the Tool class `apply_ex`.
+    # Failure to do so will result in an exception at runtime.
+    # The apply method is not declared as part of the base Tool interface since we cannot
+    # know the signature of the (input parameters of the) method in advance.
+    # 
+    # The docstring and types of the apply method are used to generate the tool description
+    # (which is use by the LLM, so a good description is important)
+    # and to validate the tool call arguments.
+    
     @classmethod
     def get_name(cls) -> str:
         name = cls.__name__
@@ -263,7 +273,7 @@ class Tool(Component):
         """
         apply_fn = getattr(self, "apply")
         if apply_fn is None:
-            raise ValueError(f"apply not defined in {self}")
+            raise ValueError(f"apply not defined in {self}. Did you forget to implement it?")
 
         if log_call:
             self._log_tool_application(inspect.currentframe())

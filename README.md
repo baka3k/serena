@@ -541,7 +541,8 @@ Without these projects, Serena would not have been possible (or would have been 
 
 It is very easy to extend Serena's AI functionality with your own ideas. 
 Just implement a new Tool by subclassing from
-`serena.agent.Tool`. By default, the `SerenaAgent` will immediately have access to it.
+`serena.agent.Tool` and implement the `apply` method (not part of the interface, see
+comment in `Tool`). By default, the `SerenaAgent` will immediately have access to it.
 
 It is also relatively straightforward to add [support for a new language](/CONTRIBUTING.md#adding-a-new-supported-language). We look forward to seeing what the community will come up with! 
 For details on contributing, see [here](/CONTRIBUTING.md).
