@@ -1397,8 +1397,14 @@ class LanguageServer:
         if self._cache_has_changed:
             self.logger.log(f"Saving updated document symbols cache to {self._cache_path}", logging.INFO)
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._cache_path, "wb") as f:
-                pickle.dump(self._document_symbols_cache, f)
+            try:
+                with open(self._cache_path, "wb") as f:
+                    pickle.dump(self._document_symbols_cache, f)
+            except Exception as e:
+                self.logger.log(
+                        f"Failed to save document symbols cache to {self._cache_path}: {e}. "
+                        "Note: this may have resulted in a corrupted cache file.", logging.ERROR
+                    )
             
     def load_cache(self):
         if not self._cache_path.exists():
@@ -1407,9 +1413,13 @@ class LanguageServer:
         with open(self._cache_path, "rb") as f:
             try:
                 self._document_symbols_cache = pickle.load(f)
-            except:
+            except Exception as e:
                 # cache often becomes corrupt, so just skip loading it
-                pass
+                self.logger.log(
+                        f"Failed to load document symbols cache from {self._cache_path}: {e}. Possible cause: the cache file is corrupted. " 
+                        "Check for any errors related to saving the cache in the logs.", 
+                        logging.ERROR
+                    )
 
 
 @ensure_all_methods_implemented(LanguageServer)
@@ -1847,6 +1857,7 @@ class SyncLanguageServer:
         self.loop_thread.join()
         self.loop = None
         self.loop_thread = None
+        self.save_cache()
         
     def save_cache(self):
         """
