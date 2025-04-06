@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import time
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,8 +14,10 @@ from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 from sensai.util import logging
+from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent, Tool
+from serena.gui_log_viewer import GuiLogViewerHandler
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -41,7 +44,6 @@ class SerenaMCPRequestContext:
 def make_tool(
     tool: Tool,
 ) -> MCPTool:
-    """Create a Tool from a function."""
     func_name = tool.get_name()
 
     apply_fn = getattr(tool, "apply")
@@ -68,42 +70,55 @@ def make_tool(
     )
 
 
-_SERENA_AGENT_REGISTRY: dict[str, SerenaAgent] = {}
-"""Map of project file paths to their corresponding SerenaAgent instances."""
-
-
-def _get_create_serena_agent(project_file_path: str) -> SerenaAgent:
-    if project_file_path not in _SERENA_AGENT_REGISTRY:
-        log.info(f"Creating new SerenaAgent for project file: {project_file_path}")
-        _SERENA_AGENT_REGISTRY[project_file_path] = SerenaAgent(project_file_path, start_language_server=True)
-    else:
-        log.info(f"Reusing existing SerenaAgent for project file: {project_file_path}")
-    return _SERENA_AGENT_REGISTRY[project_file_path]
-
-
 def create_mcp_server() -> FastMCP:
     argv = sys.argv[1:]
-    if len(argv) != 1:
-        print("\nUsage: mcp_server <.yml project file>", file=sys.stderr)
-        sys.exit(1)
 
-    project_file_path = argv[0]
+    if (len(argv) == 1 and argv[0] == "--help") or len(argv) > 1:
+        print("\nUsage: mcp_server [.yml project file]", file=sys.stderr)
+        sys.exit(0)
 
-    agent = _get_create_serena_agent(project_file_path)
+    mcp: FastMCP | None = None
+
+    def update_tools() -> None:
+        """Update the tools in the MCP server."""
+        # Tools may change as a result of project activation.
+        # NOTE: While we could pass updated tool information on to the MCP server via the callback, Claude Desktop does not,
+        # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
+        # so we need to register all tools at startup, unfortunately.
+        nonlocal mcp
+        tools = agent.get_exposed_tools()
+        if mcp is not None:
+            mcp._tool_manager._tools = {}
+            for tool in tools:
+                # noinspection PyProtectedMember
+                mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
+
+    project_file_path = argv[0] if len(argv) == 1 else None
+    try:
+        agent = SerenaAgent(
+            project_file_path,
+            # Callback disabled for the time being (see above)
+            # project_activation_callback=update_tools
+        )
+    except Exception as e:
+        # allow any initialization errors to be viewed for some time in the GUI before exiting
+        if GuiLogViewerHandler.is_instance_registered():
+            log.error(f"Failed to initialize agent: {e}", exc_info=e)
+            time.sleep(60)
+        raise
 
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        try:
-            yield
-        finally:
-            for agent in _SERENA_AGENT_REGISTRY.values():
-                agent.language_server.stop()
+        nonlocal agent
+        mark_used(mcp_server)
+        yield
 
     mcp_settings = Settings(lifespan=server_lifespan)
     mcp = FastMCP(**mcp_settings.model_dump())
-    for tool in agent.tools.values():
-        mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
+
+    update_tools()
+
     return mcp
 
 

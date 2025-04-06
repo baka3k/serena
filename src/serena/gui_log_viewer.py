@@ -301,6 +301,13 @@ class GuiLogViewerHandler(logging.Handler):
         if not self.log_viewer.running:
             self.log_viewer.start()
 
+    @classmethod
+    def is_instance_registered(cls) -> bool:
+        for h in logging.Logger.root.handlers:
+            if isinstance(h, cls):
+                return True
+        return False
+
     def emit(self, record):
         """
         Emit a log record to the ThreadedLogViewer.
