@@ -1847,11 +1847,14 @@ class SyncLanguageServer:
     def stop(self) -> None:
         """
         Shuts down the language server process and cleans up resources.
-        Must be called after start().
+        
+        If the language server is not running, this method will log a warning and do nothing.
         """
-        if not self.loop or not self.loop_thread:
-            raise MultilspyException("Language Server not started")
-            
+        if not self.is_running():
+            self.language_server.logger.log("Language server not running, skipping shutdown.", logging.INFO)
+            return
+        
+        assert self.loop
         asyncio.run_coroutine_threadsafe(self._server_context.__aexit__(None, None, None), loop=self.loop).result()
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.loop_thread.join()
