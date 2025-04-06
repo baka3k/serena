@@ -146,7 +146,7 @@ class GuiLogViewer:
                     start_index = self.text_widget.index("end-1c")
 
                     # Insert the message
-                    self.text_widget.insert(tk.END, message + "\n")
+                    self.text_widget.insert(tk.END, message + "\n", log_level.name)
 
                     # Convert start index to line/char format
                     line, char = map(int, start_index.split("."))
