@@ -430,11 +430,11 @@ class FindSymbolTool(Tool):
         self,
         name: str,
         depth: int = 0,
+        within_relative_path: str | None = None,
         include_body: bool = False,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
-        dir_relative_path: str | None = None,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
@@ -450,7 +450,9 @@ class FindSymbolTool(Tool):
             (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class).
             Provide a non-zero depth if you intend to subsequently query symbols that are contained in the
             retrieved symbol.
-        :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
             If None, the entire codebase will be considered.
         :param include_body: whether to include the body of all symbols in the result. You should only use this
             if you actually need the body of the symbol for the task at hand (for example, for a deep analysis
@@ -479,7 +481,7 @@ class FindSymbolTool(Tool):
             include_kinds=include_kinds,
             exclude_kinds=exclude_kinds,
             substring_matching=substring_matching,
-            dir_relative_path=dir_relative_path,
+            within_relative_path=within_relative_path,
         )
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=depth, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
