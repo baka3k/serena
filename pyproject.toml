@@ -234,6 +234,7 @@ ignore = [
   "B009",
   "SIM103",  # forbids multiple returns
   "SIM110",  # requires use of any(...) instead of for-loop
+  "G001",  # forbids str.format in log statements
 ]
 unfixable = [
   "F841",

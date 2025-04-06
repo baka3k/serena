@@ -39,11 +39,14 @@ SUCCESS_RESULT = "OK"
 
 class ProjectConfig(ToStringMixin):
     SERENA_MANAGED_DIR = ".serena"
+    SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
-    def __init__(self, config_dict: dict[str, Any], project_name: str):
+    def __init__(self, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None):
         self.project_name: str = project_name
         self.language: Language = Language(config_dict["language"])
-        self.project_root: str = str(Path(config_dict["project_root"]).resolve())
+        if project_root is None:
+            project_root = Path(config_dict["project_root"])
+        self.project_root: str = str(project_root.resolve())
         self.ignored_dirs: list[str] = config_dict.get("ignored_dirs", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
 
@@ -51,14 +54,16 @@ class ProjectConfig(ToStringMixin):
         return ["ignored_dirs", "excluded_tools"]
 
     @classmethod
-    def project_name_from_yml_path(cls, yml_file_path: str | Path) -> str:
-        return Path(yml_file_path).stem
-
-    @classmethod
-    def from_yml(cls, yml_path: str | Path) -> Self:
+    def from_yml(cls, yml_path: Path) -> Self:
         with open(yml_path, encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
-        return cls(config_dict, cls.project_name_from_yml_path(yml_path))
+        if yml_path.parent.name == cls.SERENA_MANAGED_DIR:
+            project_root = yml_path.parent.parent
+            project_name = project_root.name
+        else:
+            project_root = None
+            project_name = yml_path.stem
+        return cls(config_dict, project_name=project_name, project_root=project_root)
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
@@ -79,23 +84,28 @@ class SerenaConfig:
         with open(config_file, encoding="utf-8") as f:
             config_yaml = yaml.safe_load(f)
 
-        self.projects: dict[str, Path] = {}
-        for project_yaml_path in config_yaml["projects"]:
-            project_yaml_path = Path(project_yaml_path)
-            if not project_yaml_path.is_absolute():
-                project_yaml_path = Path(serena_root_path()) / project_yaml_path
-            project_name = project_yaml_path.stem
-            self.projects[project_name] = project_yaml_path
+        # read projects
+        self.projects: dict[str, ProjectConfig] = {}
+        for project_config_path in config_yaml["projects"]:
+            project_config_path = Path(project_config_path)
+            if not project_config_path.is_absolute():
+                project_config_path = Path(serena_root_path()) / project_config_path
+            if project_config_path.is_dir():  # assume project file in default location
+                project_config_path = project_config_path / ProjectConfig.SERENA_MANAGED_DIR / ProjectConfig.SERENA_DEFAULT_PROJECT_FILE
+            if not project_config_path.is_file():
+                raise FileNotFoundError(f"Project file not found: {project_config_path}")
+            project_config = ProjectConfig.from_yml(project_config_path)
+            self.projects[project_config.project_name] = project_config
         self.project_names = list(self.projects.keys())
 
         self.gui_log_window_enabled = config_yaml.get("gui_log_window", True)
         self.gui_log_window_level = config_yaml.get("gui_log_level", logging.INFO)
         self.enable_project_activation = config_yaml.get("enable_project_activation", True)
 
-    def read_project_configuration(self, project_name: str) -> ProjectConfig:
+    def get_project_configuration(self, project_name: str) -> ProjectConfig:
         if project_name not in self.projects:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-        return ProjectConfig.from_yml(self.projects[project_name])
+        return self.projects[project_name]
 
 
 class LinesRead:
@@ -139,6 +149,7 @@ class SerenaAgent:
                 Logger.root.addHandler(self._gui_log_handler)
 
         log.info(f"Starting Serena server (process id={os.getpid()}, parent process id={os.getppid()})")
+        log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
         self.prompt_factory = PromptFactory()
         self._project_activation_callback = project_activation_callback
@@ -172,13 +183,13 @@ class SerenaAgent:
         if project_file_path is not None:
             if not os.path.exists(project_file_path):
                 raise FileNotFoundError(f"Project file not found: {project_file_path}")
-            project_config = ProjectConfig.from_yml(project_file_path)
+            project_config = ProjectConfig.from_yml(Path(project_file_path))
         else:
             match len(self.serena_config.projects):
                 case 0:
                     raise RuntimeError(f"No projects found in {SerenaConfig.CONFIG_FILE} and no project file specified.")
                 case 1:
-                    project_config = self.serena_config.read_project_configuration(self.serena_config.project_names[0])
+                    project_config = self.serena_config.get_project_configuration(self.serena_config.project_names[0])
         if project_config is not None:
             self.activate_project(project_config)
         else:
@@ -1168,7 +1179,7 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         :param project_name: the name of the project to activate
         """
         try:
-            project_config = self.agent.serena_config.read_project_configuration(project_name)
+            project_config = self.agent.serena_config.get_project_configuration(project_name)
         except ValueError as e:
             return str(e)
         self.agent.activate_project(project_config)
