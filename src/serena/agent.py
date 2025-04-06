@@ -94,7 +94,7 @@ class SerenaAgent:
         )
 
         # create and start the language server instance
-        config = MultilspyConfig(code_language=self.language)
+        config = MultilspyConfig(code_language=self.language, ignored_paths=project_config.get("ignored_dirs", []))
         logger = MultilspyLogger()
         self.language_server = SyncLanguageServer.create(config, logger, self.project_root)
 
@@ -366,7 +366,7 @@ class ListDirTool(Tool):
             os.path.join(self.project_root, relative_path),
             relative_to=self.project_root,
             recursive=recursive,
-            ignored_dirs=self.project_config["ignored_dirs"],
+            ignored_dirs=self.project_config.get("ignored_dirs", []),
         )
         result = json.dumps({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
