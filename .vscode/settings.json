@@ -3,6 +3,7 @@
         "agno",
         "asyncio",
         "genai",
+        "Gopls",
         "langsrv",
         "multilspy",
         "pixi",

@@ -16,8 +16,10 @@ import pickle
 import re
 import threading
 from collections import defaultdict
+from urllib.parse import urlparse
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
+from typing import Any, AsyncGenerator, Dict, Generator, List, Optional, Set, Tuple, Union
 from fnmatch import fnmatch
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
@@ -78,6 +80,12 @@ class LSPFileBuffer:
 
 
 class LanguageServer:
+    
+    # To be overridden and extended by subclasses
+    def should_always_ignore(self, dirname: str) -> bool:
+        return dirname.startswith('.')
+    
+    
     """
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
@@ -172,6 +180,14 @@ class LanguageServer:
         self.server_started = False
         self.repository_root_path: str = repository_root_path
         self.completions_available = asyncio.Event()
+        
+        # for all absolute paths in ignored_dirs, convert them to relative paths
+        self.ignored_paths = []
+        for path in set(config.ignored_paths):
+            if os.path.isabs(path):
+                path = str(Path(path).resolve().relative_to(self.repository_root_path))
+            self.ignored_paths.append(path)
+        
 
         if config.trace_lsp_communication:
 
@@ -196,6 +212,27 @@ class LanguageServer:
         self.load_cache()
         self._cache_has_changed = bool
         self.language = Language(language_id)
+        
+    # Helper function to check if a relative path should be ignored
+    def should_ignore_path(self, relative_path: str) -> bool:
+        fn_matcher = self.language.get_source_fn_matcher()
+        if os.path.isfile(relative_path) and not fn_matcher.is_relevant_filename(relative_path):
+            return True
+        
+        # Normalize path separators for consistent comparison
+        rel_path = Path(relative_path)
+        for ignored_path in self.ignored_paths:
+            if rel_path.is_relative_to(ignored_path):
+                return True
+        
+        # Check each part of the path against always fulfilled ignore conditions
+        for part in rel_path.parts:
+            if not part: # Skip empty parts (e.g., from leading '/')
+                continue
+            # Check standard ignores
+            if self.should_always_ignore(part):
+                return True
+        return False
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["LanguageServer"]:
@@ -463,20 +500,22 @@ class LanguageServer:
         """
         Raise a [textDocument/references](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references) request to the Language Server
         to find references to the symbol at the given line and column in the given file. Wait for the response and return the result.
+        Filters out references located in ignored directories.
 
         :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
         :param line: The line number of the symbol
         :param column: The column number of the symbol
 
-        :return List[multilspy_types.Location]: A list of locations where the symbol is referenced
+        :return: A list of locations where the symbol is referenced (excluding ignored directories)
         """
 
         if not self.server_started:
             self.logger.log(
-                "find_all_callers_of_function called before Language Server started",
+                "request_references called before Language Server started",
                 logging.ERROR,
             )
             raise MultilspyException("Language Server not started")
+
 
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
@@ -496,13 +535,17 @@ class LanguageServer:
             assert isinstance(item, dict)
             assert LSPConstants.URI in item
             assert LSPConstants.RANGE in item
+            
+            abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])
+            rel_path = Path(abs_path).relative_to(self.repository_root_path)
+            if self.should_ignore_path(str(rel_path)):
+                self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)
+                continue
 
             new_item: multilspy_types.Location = {}
             new_item.update(item)
-            new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-            new_item["relativePath"] = str(
-                PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-            )
+            new_item["absolutePath"] = str(abs_path)
+            new_item["relativePath"] = str(rel_path)
             ret.append(multilspy_types.Location(**new_item))
 
         return ret
@@ -749,12 +792,13 @@ class LanguageServer:
     async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
-        
+
         For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
-        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
         that are within the repository.
-        Will ignore all directories that start with a dot (.) and __pycache__ directories.
-        
+        Will ignore directories starting with '.', '__pycache__', language-specific defaults (self.default_ignored_dirs),
+        and user-configured directories (self.config.ignored_dirs).
+
         :param within_relative_path: pass a relative path to only consider symbols within this path.
                 If a file is passed, only the symbols within this file will be considered.
                 If a directory is passed, all files within this directory will be considered.
@@ -763,22 +807,20 @@ class LanguageServer:
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
         if within_relative_path is not None and os.path.isfile(within_relative_path):
+            if self.should_ignore_path(within_relative_path):
+                self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
+                return []
+            
             _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
             return root_nodes
-
-        # Helper function to check if a path should be ignored
-        def should_ignore_dir(path: str) -> bool:
-            parts = path.split(os.sep)
-            return any(part.startswith('.') or part == '__pycache__' for part in parts)
-
-        fn_matcher = self.language.get_source_fn_matcher()
-
+        
         # Helper function to recursively process directories
         async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
             abs_dir_path = self.repository_root_path if dir_path == "." else os.path.join(self.repository_root_path, dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
-            if should_ignore_dir(abs_dir_path):
+            if self.should_ignore_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
+                self.logger.log(f"Skipping directory: {dir_path}\n(because it should be ignored)", logging.DEBUG)
                 return []
 
             result = []
@@ -804,15 +846,16 @@ class LanguageServer:
             for item in items:
                 item_path = os.path.join(abs_dir_path, item)
                 abs_item_path = os.path.join(self.repository_root_path, item_path)
+                rel_item_path = str(Path(abs_item_path).resolve().relative_to(self.repository_root_path))
+                if self.should_ignore_path(rel_item_path):
+                    self.logger.log(f"Skipping item: {rel_item_path}\n(because it should be ignored)", logging.DEBUG)
+                    continue
 
                 if os.path.isdir(abs_item_path):
                     child_symbols = await process_directory(item_path)
                     package_symbol["children"].extend(child_symbols)
 
                 elif os.path.isfile(abs_item_path):
-                    if not fn_matcher.is_relevant_filename(item):
-                        continue
-
                     _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
 
                     def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
@@ -1851,3 +1894,15 @@ class SyncLanguageServer:
         Load the cache from a file.
         """
         self.language_server.load_cache()
+
+    def should_always_ignore(self, dirname: str) -> bool:
+        """
+        Whether the given directory should be ignored.
+        """
+        return self.language_server.should_always_ignore(dirname)
+    
+    def should_ignore_path(self, relative_path: str) -> bool:
+        """
+        Whether the given path should be ignored.
+        """
+        return self.language_server.should_ignore_path(relative_path)

@@ -3,7 +3,8 @@ Configuration parameters for Multilspy.
 """
 import fnmatch
 from enum import Enum
-from dataclasses import dataclass
+from typing import List
+from dataclasses import dataclass, field
 
 
 class FilenameMatcher:
@@ -66,6 +67,7 @@ class MultilspyConfig:
     """
     code_language: Language
     trace_lsp_communication: bool = False
+    ignored_paths: List[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, env: dict):

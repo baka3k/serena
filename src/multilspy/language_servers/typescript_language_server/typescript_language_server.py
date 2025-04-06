@@ -10,7 +10,9 @@ import os
 import subprocess
 import pathlib
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Tuple
+
+from overrides import override
 
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
@@ -48,6 +50,15 @@ class TypeScriptLanguageServer(LanguageServer):
             "typescript",
         )
         self.server_ready = asyncio.Event()
+        
+    @override
+    def should_always_ignore(self, dirname: str) -> bool:
+        return super().should_always_ignore(dirname) or dirname in [
+            "node_modules",
+            "dist",
+            "build",
+            "coverage",
+        ]
 
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
         """
