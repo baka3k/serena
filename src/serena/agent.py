@@ -50,9 +50,6 @@ class ProjectConfig(ToStringMixin):
         self.ignored_dirs: list[str] = config_dict.get("ignored_dirs", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
 
-    def _tostring_excludes(self) -> list[str]:
-        return ["ignored_dirs", "excluded_tools"]
-
     @classmethod
     def from_yml(cls, yml_path: Path) -> Self:
         with open(yml_path, encoding="utf-8") as f:
