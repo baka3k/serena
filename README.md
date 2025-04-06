@@ -153,7 +153,7 @@ Serena can read, write and execute code, read logs and the terminal output.
 
 That's it! Save the config and then restart Claude Desktop. 
 
-Note: on Windows and MacOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
+Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
 
 ⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
