@@ -75,6 +75,7 @@ Coming soon: Kotlin and Dart.
 - [Is It Really Free to Use?](#is-it-really-free-to-use)
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
 - [Quick Start](#quick-start)
+  * [Setup and Configuration](#setup-and-configuration)
   * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
   * [Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc)
   * [Agno Agent](#agno-agent)
