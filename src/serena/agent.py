@@ -24,6 +24,7 @@ from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
+from serena import __version__
 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
@@ -88,7 +89,7 @@ class SerenaAgent:
                 Logger.root.addHandler(self._gui_log_handler)
 
         log.info(
-            f"Starting serena server for project {project_file_path} (language={self.language}, root={self.project_root}); "
+            f"Starting serena server v{__version__} for project {project_file_path} (language={self.language}, root={self.project_root}); "
             f"process id={os.getpid()}, parent process id={os.getppid()}"
         )
 
