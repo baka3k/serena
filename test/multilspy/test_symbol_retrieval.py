@@ -366,7 +366,7 @@ class TestLanguageServerSymbols:
     def test_symbol_tree_structure_subdir(self, language_server: SyncLanguageServer):
         """Test that the symbol tree structure is correctly built."""
         # Get all symbols in the test file
-        examples_package_roots = language_server.request_full_symbol_tree(start_package_relative_path="examples")
+        examples_package_roots = language_server.request_full_symbol_tree(within_relative_path="examples")
         assert len(examples_package_roots) == 1
         examples_package = examples_package_roots[0]
         assert examples_package["name"] == "examples"

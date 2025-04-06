@@ -200,7 +200,7 @@ class SymbolManager:
     def find_by_name(
         self,
         name: str,
-        dir_relative_path: str | None = None,
+        within_relative_path: str | None = None,
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
@@ -210,7 +210,9 @@ class SymbolManager:
         Find all symbols that match the given name.
 
         :param name: the name of the symbol to find
-        :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
             If None, the entire codebase will be considered.
         :param include_body: whether to include the body of all symbols in the result.
             Note: you can filter out the bodies of the children if you set include_children_body=False
@@ -224,7 +226,7 @@ class SymbolManager:
         :return: a list of symbols that match the given name
         """
         symbols: list[Symbol] = []
-        symbol_roots = self.lang_server.request_full_symbol_tree(start_package_relative_path=dir_relative_path, include_body=include_body)
+        symbol_roots = self.lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
         for root in symbol_roots:
             symbols.extend(
                 Symbol(root).find(name, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching)

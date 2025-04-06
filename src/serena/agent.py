@@ -22,7 +22,7 @@ from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
-from serena import serena_root_path
+from serena import __version__, serena_root_path
 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
@@ -145,7 +145,7 @@ class SerenaAgent:
                 self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=log_level, format_string=LOG_FORMAT)
                 Logger.root.addHandler(self._gui_log_handler)
 
-        log.info(f"Starting Serena server (process id={os.getpid()}, parent process id={os.getppid()})")
+        log.info(f"Starting Serena server (version={__version__}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
         self.prompt_factory = PromptFactory()
@@ -511,6 +511,10 @@ class CreateTextFileTool(Tool):
         You can also use insert_at_line to insert content at a specific line for existing files if the symbolic operations
         are not the right choice for what you want to do.
 
+        If ever used on an existing file, the content has to be the complete content of that file (so it
+        may never end with something like "The remaining content of the file is left unchanged.").
+        For operations that just replace a part of a file, use the replace_lines or the symbolic editing tools instead.
+
         :param relative_path: the relative path to the file to create
         :param content: the (utf-8-encoded) content to write to the file
         :return: a message indicating success or failure
@@ -604,11 +608,11 @@ class FindSymbolTool(Tool):
         self,
         name: str,
         depth: int = 0,
+        within_relative_path: str | None = None,
         include_body: bool = False,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
-        dir_relative_path: str | None = None,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
@@ -624,7 +628,9 @@ class FindSymbolTool(Tool):
             (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class).
             Provide a non-zero depth if you intend to subsequently query symbols that are contained in the
             retrieved symbol.
-        :param dir_relative_path: pass a directory relative path to only consider symbols within this directory.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
             If None, the entire codebase will be considered.
         :param include_body: whether to include the body of all symbols in the result. You should only use this
             if you actually need the body of the symbol for the task at hand (for example, for a deep analysis
@@ -653,7 +659,7 @@ class FindSymbolTool(Tool):
             include_kinds=include_kinds,
             exclude_kinds=exclude_kinds,
             substring_matching=substring_matching,
-            dir_relative_path=dir_relative_path,
+            within_relative_path=within_relative_path,
         )
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=depth, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
@@ -713,6 +719,50 @@ class FindReferencingSymbolsTool(Tool):
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=0, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
+
+
+class FindReferencingCodeSnippetsTool(Tool):
+    """
+    Finds code snippets in which the symbol at the given location is referenced.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        line: int,
+        column: int,
+        context_lines_before: int = 0,
+        context_lines_after: int = 0,
+        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+    ) -> str:
+        """
+        Returns short code snippets where the symbol at the given location is referenced.
+
+        Contrary to the `find_referencing_symbols` tool, this tool returns references that are not symbols but instead
+        code snippets that may or may not be contained in a symbol (for example, file-level calls).
+        It may make sense to use this tool to get a quick overview of the code that references
+        the symbol. Usually, just looking at code snippets is not enough to understand the full context,
+        unless the case you are investigating is very simple,
+        or you already have read the relevant symbols using the find_referencing_symbols tool and
+        now want to get an overview of how the referenced symbol (at the given location) is used in them.
+        The size of the snippets is controlled by the context_lines_before and context_lines_after parameters.
+
+        :param relative_path: the relative path to the file containing the symbol
+        :param line: the line number of the symbol to find references for
+        :param column: the column of the symbol to find references for
+        :param context_lines_before: the number of lines to include before the line containing the reference
+        :param context_lines_after: the number of lines to include after the line containing the reference
+        :param max_answer_chars: if the output is longer than this number of characters,
+            no content will be returned. Don't adjust unless there is really no other way to get the content
+            required for the task. Instead, if the output is too long, you should
+            make a stricter query.
+        """
+        matches = self.language_server.request_references_with_content(
+            relative_path, line, column, context_lines_before, context_lines_after
+        )
+        result = [match.to_display_string() for match in matches]
+        result_json_str = json.dumps(result)
+        return self._limit_length(result_json_str, max_answer_chars)
 
 
 class ReplaceSymbolBodyTool(Tool):

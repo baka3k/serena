@@ -746,7 +746,7 @@ class LanguageServer:
         self._cache_has_changed = True
         return result
     
-    async def request_full_symbol_tree(self, start_dir_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+    async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
         
@@ -755,19 +755,16 @@ class LanguageServer:
         that are within the repository.
         Will ignore all directories that start with a dot (.) and __pycache__ directories.
         
-        Args:
-            start_dir_relative_path: if passed, only the symbols within this directory will be considered.
-            include_body: whether to include the body of the symbols in the result.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+                If a file is passed, only the symbols within this file will be considered.
+                If a directory is passed, all files within this directory will be considered.
+        :param include_body: whether to include the body of the symbols in the result.
 
-        Returns:
-            A list of root symbols representing the top-level packages/modules in the project.
+        :return: A list of root symbols representing the top-level packages/modules in the project.
         """
-        if not self.server_started:
-            self.logger.log(
-                "request_full_symbol_tree called before Language Server started",
-                logging.ERROR,
-            )
-            raise MultilspyException("Language Server not started")
+        if within_relative_path is not None and os.path.isfile(within_relative_path):
+            _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
+            return root_nodes
 
         # Helper function to check if a path should be ignored
         def should_ignore_dir(path: str) -> bool:
@@ -854,7 +851,7 @@ class LanguageServer:
             return result
 
         # Start from the root or the specified directory
-        start_path = start_dir_relative_path or "."
+        start_path = within_relative_path or "."
         return await process_directory(start_path)
 
     @staticmethod
@@ -1589,7 +1586,7 @@ class SyncLanguageServer:
         ).result()
         return result
     
-    def request_full_symbol_tree(self, start_package_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
         
@@ -1598,15 +1595,16 @@ class SyncLanguageServer:
         that are within the repository.
         Will ignore all directories that start with a dot (.) and __pycache__ directories.
         
-        Args:
-            start_package_relative_path: if passed, only the symbols within this directory will be considered.
-            include_body: whether to include the body of the symbols in the result.
+        :param within_relative_path: pass a relative path to only consider symbols within this path.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
+            If None, the entire codebase will be considered.
+        :param include_body: whether to include the body of the symbols in the result.
 
-        Returns:
-            A list of root symbols representing the top-level packages/modules in the project.
+        :return: A list of root symbols representing the top-level packages/modules in the project.
         """
         result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_full_symbol_tree(start_package_relative_path, include_body), self.loop
+            self.language_server.request_full_symbol_tree(within_relative_path, include_body), self.loop
         ).result()
         return result
     

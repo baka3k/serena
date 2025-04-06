@@ -1,12 +1,20 @@
+# Latest
+
+Changes prior to the next official version change will appear here.
+
 # 2025-04-07
 
-* Allow Serena to switch between projects (project activation)
-    * Add central Serena configuration in `serena_config.yml`, which 
-        * contains the list of available projects
-        * allows to configure whether project activation is enabled
-        * now contains the GUI logging configuration (project configurations no longer do)
-    * Add new tools `activate_project` and `get_active_project`
-    * Providing a project configuration file in the launch parameters is now optional
+* Serena core:
+    * New tool: FindReferencingCodeSnippets
+    * Adjusted prompt in CreateTextFileTool to prevent writing partial content (see [here](https://www.reddit.com/r/ClaudeAI/comments/1jpavtm/comment/mloek1x/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)).
+    * FindSymbolTool: allow passing a file for restricting search, not just a directory (Gemini was too dumb to pass directories)
+    * Allow Serena to switch between projects (project activation)
+        * Add central Serena configuration in `serena_config.yml`, which 
+            * contains the list of available projects
+            * allows to configure whether project activation is enabled
+            * now contains the GUI logging configuration (project configurations no longer do)
+        * Add new tools `activate_project` and `get_active_project`
+        * Providing a project configuration file in the launch parameters is now optional
 * Logging:
     * Improve error reporting in case of initialization failure: 
       open a new GUI log window showing the error or ensure that the existing log window remains visible for some time
@@ -19,5 +27,3 @@
 # 2025-04-01
 
 Initial public version
-
-

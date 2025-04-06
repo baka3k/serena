@@ -167,7 +167,7 @@ want to use Serena.
 
 That's it! Save the config and then restart Claude Desktop. 
 
-Note: on Windows and MacOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
+Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
 
 ⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
@@ -571,6 +571,7 @@ Here is the full list of Serena's tools with a short description (output of `uv 
 * `delete_lines`: Deletes a range of lines within a file.
 * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
 * `execute_shell_command`: Executes a shell command.
+* `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
 * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
 * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
 * `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
