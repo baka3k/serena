@@ -16,6 +16,7 @@ from sensai.util.logging import LogTime
 
 from serena import serena_root_path
 from serena.agent import SerenaAgent, Tool
+from serena.gui_log_viewer import show_fatal_exception
 
 log = logging.getLogger(__name__)
 
@@ -146,7 +147,11 @@ class SerenaAgnoAgentProvider:
                 project_file = None
 
             with LogTime("Loading Serena agent"):
-                serena_agent = SerenaAgent(project_file)
+                try:
+                    serena_agent = SerenaAgent(project_file)
+                except Exception as e:
+                    show_fatal_exception(e)
+                    raise
 
             # Even though we don't want to keep history between sessions,
             # for agno-ui to work as a conversation, we use a persistent storage on disk.
