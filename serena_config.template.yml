@@ -28,7 +28,7 @@ projects:
 # previous instances. This leads to multiple log windows being opened, and only the last
 # window being updated. Since we can't control how agno or Claude Desktop start Serena,
 # we have to live with this limitation for now.
-gui_log_window: True
+gui_log_window: False
 
 # minimum log level for the GUI log window (10 = debug, 20 = info, 30 = warning, 40 = error)
 gui_log_level: 20
