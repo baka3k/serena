@@ -56,8 +56,12 @@ class ProjectConfig(ToStringMixin):
 
     @classmethod
     def from_yml(cls, yml_path: Path) -> Self:
-        with open(yml_path, encoding="utf-8") as f:
-            config_dict = yaml.safe_load(f)
+        log.info(f"Loading project configuration from {yml_path}")
+        try:
+            with open(yml_path, encoding="utf-8") as f:
+                config_dict = yaml.safe_load(f)
+        except Exception as e:
+            raise ValueError(f"Error loading project configuration from {yml_path}: {e}") from e
         if yml_path.parent.name == cls.SERENA_MANAGED_DIR:
             project_root = yml_path.parent.parent
             project_name = project_root.name
@@ -101,10 +105,7 @@ class SerenaConfig:
                 raise FileNotFoundError(f"Project file not found: {project_config_path}")
             log.info(f"Loading project configuration from {project_config_path}")
             project_config = ProjectConfig.from_yml(project_config_path)
-            try:
-                self.projects[project_config.project_name] = project_config
-            except Exception as e:
-                raise ValueError(f"Error loading project configuration from {project_config_path}: {e}") from e
+            self.projects[project_config.project_name] = project_config
         self.project_names = list(self.projects.keys())
 
         self.gui_log_window_enabled = config_yaml.get("gui_log_window", False)
@@ -193,10 +194,7 @@ class SerenaAgent:
             if not os.path.exists(project_file_path):
                 raise FileNotFoundError(f"Project file not found: {project_file_path}")
             log.info(f"Loading project configuration from {project_file_path}")
-            try:
-                project_config = ProjectConfig.from_yml(Path(project_file_path))
-            except Exception as e:
-                raise ValueError(f"Error loading project configuration from {project_file_path}: {e}") from e
+            project_config = ProjectConfig.from_yml(Path(project_file_path))
         else:
             match len(self.serena_config.projects):
                 case 0:
