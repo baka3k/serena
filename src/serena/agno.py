@@ -16,6 +16,7 @@ from sensai.util.logging import LogTime
 
 from serena import serena_root_path
 from serena.agent import SerenaAgent, Tool
+from serena.gui_log_viewer import show_fatal_exception
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ _patch_gemini_schema_conversion()
 class SerenaAgnoToolkit(Toolkit):
     def __init__(self, serena_agent: SerenaAgent):
         super().__init__("Serena")
-        for tool in serena_agent.tools.values():
+        for tool in serena_agent.get_exposed_tools():
             self.functions[tool.get_name()] = self._create_agno_function(tool)
         log.info("Agno agent functions: %s", list(self.functions.keys()))
 
@@ -128,22 +129,29 @@ class SerenaAgnoAgentProvider:
 
             parser = argparse.ArgumentParser(description="Serena coding assistant")
             parser.add_argument(
-                "--project-file", required=True, help="Path to the project file, either absolute or relative to the root directory"
+                "--project-file", required=False, help="Path to the project file, either absolute or relative to the root directory"
             )
             args = parser.parse_args()
 
-            project_file = Path(args.project_file).resolve()
-            # If project file path is relative, make it absolute by joining with project root
-            if not project_file.is_absolute():
-                # Get the project root directory (parent of scripts directory)
-                project_root = Path(serena_root_path())
-                project_file = project_root / args.project_file
+            if args.project_file:
+                project_file = Path(args.project_file).resolve()
+                # If project file path is relative, make it absolute by joining with project root
+                if not project_file.is_absolute():
+                    # Get the project root directory (parent of scripts directory)
+                    project_root = Path(serena_root_path())
+                    project_file = project_root / args.project_file
 
-            # Ensure the path is normalized and absolute
-            project_file = project_file.resolve()
+                # Ensure the path is normalized and absolute
+                project_file = str(project_file.resolve())
+            else:
+                project_file = None
 
             with LogTime("Loading Serena agent"):
-                serena_agent = SerenaAgent(str(project_file), start_language_server=True)
+                try:
+                    serena_agent = SerenaAgent(project_file)
+                except Exception as e:
+                    show_fatal_exception(e)
+                    raise
 
             # Even though we don't want to keep history between sessions,
             # for agno-ui to work as a conversation, we use a persistent storage on disk.

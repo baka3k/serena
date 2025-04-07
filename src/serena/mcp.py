@@ -16,6 +16,7 @@ from sensai.util import logging
 from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent, Tool
+from serena.gui_log_viewer import show_fatal_exception
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -42,9 +43,6 @@ class SerenaMCPRequestContext:
 def make_tool(
     tool: Tool,
 ) -> MCPTool:
-    """Create a Tool from a function."""
-    from mcp.server.fastmcp import Context
-
     func_name = tool.get_name()
 
     apply_fn = getattr(tool, "apply")
@@ -57,8 +55,7 @@ def make_tool(
     func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
 
-    def execute_fn(ctx: Context, **kwargs) -> str:  # type: ignore
-        mark_used(ctx)
+    def execute_fn(**kwargs) -> str:  # type: ignore
         return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
     return MCPTool(
@@ -68,29 +65,55 @@ def make_tool(
         parameters=parameters,
         fn_metadata=func_arg_metadata,
         is_async=is_async,
-        context_kwarg="ctx",
+        context_kwarg=None,
     )
 
 
 def create_mcp_server() -> FastMCP:
     argv = sys.argv[1:]
-    if len(argv) != 1:
-        print("\nUsage: mcp_server <.yml project file>", file=sys.stderr)
-        sys.exit(1)
 
-    project_file_path = argv[0]
-    agent = SerenaAgent(project_file_path)
+    if (len(argv) == 1 and argv[0] == "--help") or len(argv) > 1:
+        print("\nUsage: mcp_server [.yml project file]", file=sys.stderr)
+        sys.exit(0)
+
+    mcp: FastMCP | None = None
+
+    def update_tools() -> None:
+        """Update the tools in the MCP server."""
+        # Tools may change as a result of project activation.
+        # NOTE: While we could pass updated tool information on to the MCP server via the callback, Claude Desktop does not,
+        # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
+        # so we need to register all tools at startup, unfortunately.
+        nonlocal mcp
+        tools = agent.get_exposed_tools()
+        if mcp is not None:
+            mcp._tool_manager._tools = {}
+            for tool in tools:
+                # noinspection PyProtectedMember
+                mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
+
+    project_file_path = argv[0] if len(argv) == 1 else None
+    try:
+        agent = SerenaAgent(
+            project_file_path,
+            # Callback disabled for the time being (see above)
+            # project_activation_callback=update_tools
+        )
+    except Exception as e:
+        show_fatal_exception(e)
+        raise
 
     @asynccontextmanager
-    async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[SerenaMCPRequestContext]:
+    async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        with agent.language_server_lifecycle_context():
-            yield SerenaMCPRequestContext(agent=agent)
+        nonlocal agent
+        mark_used(mcp_server)
+        yield
 
     mcp_settings = Settings(lifespan=server_lifespan)
     mcp = FastMCP(**mcp_settings.model_dump())
-    for tool in agent.tools.values():
-        mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
+
+    update_tools()
 
     return mcp
 

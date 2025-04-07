@@ -75,6 +75,7 @@ Coming soon: Kotlin and Dart.
 - [Is It Really Free to Use?](#is-it-really-free-to-use)
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
 - [Quick Start](#quick-start)
+  * [Setup and Configuration](#setup-and-configuration)
   * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
   * [Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc)
   * [Agno Agent](#agno-agent)
@@ -128,12 +129,23 @@ Serena can read, write and execute code, read logs and the terminal output.
 
 ## Quick Start
 
-### MCP Server (Claude Desktop)
+### Setup and Configuration
 
 1. Install `uv` (instructions [here](https://docs.astral.sh/uv/getting-started/installation/))
 2. Clone the repository to `/path/to/serena`.
-3. Create a configuration file for your project, say `myproject.yml` based on the template in [myproject.demo.yml](myproject.demo.yml).
-4. Configure the MCP server in your client.  
+3. Copy `serena_config.template.yml` to `serena_config.yml` and adjust settings.
+4. Copy `myproject.template.yml` to `myproject.yml` and adjust the settings specific to your project.
+   (Add one such file for each project you want Serena to work on.)
+5. If you want Serena to dynamically switch between projects, add the list of all project files
+   created in the previous step to the `projects` list in `serena_config.yml`.
+
+After this initial setup, continue with one of the sections below, depending on how you
+want to use Serena.
+
+### MCP Server (Claude Desktop)
+
+1. Create a configuration file for your project, say `myproject.yml` based on the template in [myproject.template.yml](myproject.template.yml).
+2. Configure the MCP server in your client.  
    For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
    which will let you open the JSON file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
 
@@ -147,6 +159,9 @@ Serena can read, write and execute code, read logs and the terminal output.
        }
    }
    ```
+   
+   :info: The path to the project file is optional if you have set `enable_project_activation` in your configuration,
+   as this setting will allow you to simply instruct Claude to activate the project you want to work on.
 
    If you are using paths containing backslashes for paths on Windows 
    (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
@@ -549,32 +564,34 @@ For details on contributing, see [here](/CONTRIBUTING.md).
 
 ## Full List of Tools
 
-Here the full list of Serena's default tools with a short description (the output of `uv run serena-list-tools`)
+Here is the full list of Serena's tools with a short description (output of `uv run serena-list-tools`):
 
- * `check_onboarding_performed`: Checks whether the onboarding was already performed.
- * `create_text_file`: Creates/overwrites a file in the project directory.
- * `delete_lines`: Deletes a range of lines within a file.
- * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
- * `execute_shell_command`: Executes a shell command.
- * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
- * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
- * `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
- * `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
- * `get_referencing_code_extracts`: Gets the code blocks that reference the symbol at the given location.
- * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
- * `insert_at_line`: Inserts content at a given line in a file.
- * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
- * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
- * `list_memories`: Lists memories in Serena's project-specific memory store.
- * `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
- * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
- * `read_file`: Reads a file within the project directory.
- * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
- * `replace_lines`: Replaces a range of lines within a file with new content.
- * `replace_symbol_body`: Replaces the full definition of a symbol.
- * `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
- * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
- * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
- * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
- * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
- * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
+* `activate_project`: Activates a project by name.
+* `check_onboarding_performed`: Checks whether the onboarding was already performed.
+* `create_text_file`: Creates/overwrites a file in the project directory.
+* `delete_lines`: Deletes a range of lines within a file.
+* `delete_memory`: Deletes a memory from Serena's project-specific memory store.
+* `execute_shell_command`: Executes a shell command.
+* `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
+* `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
+* `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+* `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
+* `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
+* `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
+* `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
+* `insert_at_line`: Inserts content at a given line in a file.
+* `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
+* `list_dir`: Lists files and directories in the given directory (optionally with recursion).
+* `list_memories`: Lists memories in Serena's project-specific memory store.
+* `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
+* `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
+* `read_file`: Reads a file within the project directory.
+* `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+* `replace_lines`: Replaces a range of lines within a file with new content.
+* `replace_symbol_body`: Replaces the full definition of a symbol.
+* `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
+* `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
+* `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
+* `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
+* `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
+* `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
