@@ -37,6 +37,10 @@ TTool = TypeVar("TTool", bound="Tool")
 SUCCESS_RESULT = "OK"
 
 
+class SerenaConfigError(Exception):
+    pass
+
+
 class ProjectConfig(ToStringMixin):
     SERENA_MANAGED_DIR = ".serena"
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
@@ -49,10 +53,20 @@ class ProjectConfig(ToStringMixin):
         self.project_root: str = str(project_root.resolve())
         self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
-        self.ignore_all_files_in_gitignore = config_dict.get("ignore_all_files_in_gitignore", True)
 
-        # backwards compatibility
-        self.ignored_paths.extend(config_dict.get("ignored_dirs", []))
+        if "ignore_all_files_in_gitignore" not in config_dict:
+            raise SerenaConfigError(
+                "`ignore_all_files_in_gitignore` key not found in project configuration. Please update your `project.yml` file."
+                "It is recommended to set this to `True`."
+            )
+        self.ignore_all_files_in_gitignore = config_dict["ignore_all_files_in_gitignore"]
+
+        # Raise errors for deprecated keys
+        if "ignored_dirs" in config_dict:
+            raise SerenaConfigError(
+                "`ignored_dirs` key is deprecated. Please use `ignored_paths` instead."
+                "Note that you can also set `ignore_all_files_in_gitignore` to `True`, which will be enough for most cases."
+            )
 
     @classmethod
     def from_yml(cls, yml_path: Path) -> Self:
@@ -95,7 +109,9 @@ class SerenaConfig:
 
         # read projects
         self.projects: dict[str, ProjectConfig] = {}
-        for project_config_path in config_yaml.get("projects", []):
+        if "projects" not in config_yaml:
+            raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
+        for project_config_path in config_yaml["projects"]:
             project_config_path = Path(project_config_path)
             if not project_config_path.is_absolute():
                 project_config_path = Path(serena_root_path()) / project_config_path

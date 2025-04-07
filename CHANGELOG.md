@@ -4,13 +4,16 @@ Changes prior to the next official version change will appear here.
 
 # 2025-04-07
 
+> **Breaking Config Changes**: make sure to set `ignore_all_files_in_gitignore`, remove `ignore_dirs`
+>  and (optionally) set `ignore_paths` in your project configs. See [updated config template](myproject.template.yml)
+
 * Serena core:
     * New tool: FindReferencingCodeSnippets
     * Adjusted prompt in CreateTextFileTool to prevent writing partial content (see [here](https://www.reddit.com/r/ClaudeAI/comments/1jpavtm/comment/mloek1x/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)).
     * FindSymbolTool: allow passing a file for restricting search, not just a directory (Gemini was too dumb to pass directories)
     * Native support for gitignore files for configuring files to be ignored by serena. See also
       in *Language Servers* section below.
-    * Allow Serena to switch between projects (project activation)
+    * **Major Feature**: Allow Serena to switch between projects (project activation)
         * Add central Serena configuration in `serena_config.yml`, which 
             * contains the list of available projects
             * allows to configure whether project activation is enabled

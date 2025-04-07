@@ -3,6 +3,7 @@
         "agno",
         "asyncio",
         "genai",
+        "getpid",
         "Gopls",
         "langsrv",
         "multilspy",
