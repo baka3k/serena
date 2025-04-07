@@ -2,6 +2,9 @@
 
 Changes prior to the next official version change will appear here.
 
+* Language Servers:
+    * Add further file extensions considered by the language servers for Python (.pyi), JavaScript (.jsx) and TypeScript (.tsx, .jsx) 
+
 # 2025-04-07
 
 > **Breaking Config Changes**: make sure to set `ignore_all_files_in_gitignore`, remove `ignore_dirs`
