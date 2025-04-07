@@ -56,7 +56,8 @@ class ProjectConfig(ToStringMixin):
 
         if "ignore_all_files_in_gitignore" not in config_dict:
             raise SerenaConfigError(
-                "`ignore_all_files_in_gitignore` key not found in project configuration. Please update your `project.yml` file."
+                f"`ignore_all_files_in_gitignore` key not found in configuration of project '{project_name}'. "
+                "Please update your `.yml` configuration file for this project. "
                 "It is recommended to set this to `True`."
             )
         self.ignore_all_files_in_gitignore = config_dict["ignore_all_files_in_gitignore"]
@@ -64,7 +65,7 @@ class ProjectConfig(ToStringMixin):
         # Raise errors for deprecated keys
         if "ignored_dirs" in config_dict:
             raise SerenaConfigError(
-                "`ignored_dirs` key is deprecated. Please use `ignored_paths` instead."
+                f"Use of `ignored_dirs` key in configuration of project '{project_name}' deprecated. Please use `ignored_paths` instead. "
                 "Note that you can also set `ignore_all_files_in_gitignore` to `True`, which will be enough for most cases."
             )
 
@@ -74,15 +75,15 @@ class ProjectConfig(ToStringMixin):
         try:
             with open(yml_path, encoding="utf-8") as f:
                 config_dict = yaml.safe_load(f)
+            if yml_path.parent.name == cls.SERENA_MANAGED_DIR:
+                project_root = yml_path.parent.parent
+                project_name = project_root.name
+            else:
+                project_root = None
+                project_name = yml_path.stem
+            return cls(config_dict, project_name=project_name, project_root=project_root)
         except Exception as e:
             raise ValueError(f"Error loading project configuration from {yml_path}: {e}") from e
-        if yml_path.parent.name == cls.SERENA_MANAGED_DIR:
-            project_root = yml_path.parent.parent
-            project_name = project_root.name
-        else:
-            project_root = None
-            project_name = yml_path.stem
-        return cls(config_dict, project_name=project_name, project_root=project_root)
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
