@@ -8,6 +8,8 @@ Changes prior to the next official version change will appear here.
     * New tool: FindReferencingCodeSnippets
     * Adjusted prompt in CreateTextFileTool to prevent writing partial content (see [here](https://www.reddit.com/r/ClaudeAI/comments/1jpavtm/comment/mloek1x/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)).
     * FindSymbolTool: allow passing a file for restricting search, not just a directory (Gemini was too dumb to pass directories)
+    * Native support for gitignore files for configuring files to be ignored by serena. See also
+      in *Language Servers* section below.
     * Allow Serena to switch between projects (project activation)
         * Add central Serena configuration in `serena_config.yml`, which 
             * contains the list of available projects
@@ -18,8 +20,11 @@ Changes prior to the next official version change will appear here.
 * Logging:
     * Improve error reporting in case of initialization failure: 
       open a new GUI log window showing the error or ensure that the existing log window remains visible for some time
-* Language servers:
+* Language Servers:
     * Fix C# language server initialization issue when the project path contains spaces
+    * Native support for gitignore in overview, document-tree and find_references operations.
+      This is an **important** addition, since previously things like `venv` and `node_modules` were scanned
+      and were likely responsible for slowness of tools and even server crashes (presumably due to OOM errors).
 * Agno: 
     * Fix Agno reloading mechanism causing failures when initializing the sqlite memory database #8
     * Fix Serena GUI log window not capturing logs after initialization
