@@ -18,9 +18,12 @@ import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
+from typing import Dict, List, Optional, Tuple, Union
 from fnmatch import fnmatch
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
+
+import pathspec
 
 from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_text
 from . import multilspy_types
@@ -82,8 +85,17 @@ class LanguageServer:
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
     """
+
+    # To be overridden and extended by subclasses
+    def should_always_ignore(self, dirname: str) -> bool:
+        """
+        A language-specific condition for directories that should be ignored always. For example, venv
+        in Python and node_modules in JS/TS should be ignored always.
+        """
+        return dirname.startswith('.')
+
     @classmethod
-    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str) -> "LanguageServer":
+    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config: bool = True) -> "LanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
 
@@ -93,9 +105,29 @@ class LanguageServer:
         :param repository_root_path: The root path of the repository.
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
+        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
+            the paths ignored there are also ignored by the language server
 
         :return LanguageServer: A language specific LanguageServer instance.
         """
+        config = copy(config)  # prevent mutation
+        if add_gitignore_content_to_config:
+            gitignore_path = os.path.join(repository_root_path, ".gitignore")
+            if not os.path.exists(gitignore_path):
+                logger.log(
+                    f"Should ignore all files in gitignore not not .gitignore found at {gitignore_path}. Skipping.",
+                    logging.WARNING
+                )
+                gitignore_file_content = None
+            else:
+                if config.gitignore_file_content is not None:
+                    raise ValueError(
+                        f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry"
+                    )
+                with open(gitignore_path) as f:
+                    gitignore_file_content = f.read()
+            config.gitignore_file_content = gitignore_file_content
+
         if config.code_language == Language.PYTHON:
             from multilspy.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
@@ -158,7 +190,7 @@ class LanguageServer:
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
         :param repository_root_path: The root path of the repository.
-        :param cmd: Each language server has a specific command used to start the server.
+        :param process_launch_info: Each language server has a specific command used to start the server.
                     This parameter is the command to launch the language server process.
                     The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
                     as opposed to HTTP, TCP modes supported by some language servers.
@@ -172,7 +204,7 @@ class LanguageServer:
         self.server_started = False
         self.repository_root_path: str = repository_root_path
         self.completions_available = asyncio.Event()
-
+        
         if config.trace_lsp_communication:
 
             def logging_fn(source, target, msg):
@@ -196,6 +228,66 @@ class LanguageServer:
         self.load_cache()
         self._cache_has_changed = bool
         self.language = Language(language_id)
+        
+        # Set up the pathspec matcher for the ignored paths
+        # for all absolute paths in ignored_paths, convert them to relative paths
+        processed_patterns = []
+        for pattern in set(config.ignored_paths):
+            # Normalize separators (pathspec expects forward slashes)
+            pattern = pattern.replace(os.path.sep, '/')
+            processed_patterns.append(pattern)
+        # Combine explicitly passed patterns with the content of the .gitignore file
+        if config.gitignore_file_content is not None:
+            for line in config.gitignore_file_content.splitlines():
+                if not line.startswith('#') and line.strip() != '':
+                    processed_patterns.append(line.strip())
+
+        # Create a pathspec matcher from the processed patterns
+        self.ignore_spec = pathspec.PathSpec.from_lines(
+            pathspec.patterns.GitWildMatchPattern,
+            processed_patterns
+        )
+
+    def should_ignore_path(self, relative_path: str) -> bool:
+        """
+        Determine if a path should be ignored based on file type
+        and ignore patterns.
+        
+        :param relative_path: Relative path to check
+            
+        :return: True if the path should be ignored, False otherwise
+        """
+        # Check file extension if it's a file
+        fn_matcher = self.language.get_source_fn_matcher()
+        if os.path.isfile(relative_path) and not fn_matcher.is_relevant_filename(relative_path):
+            return True
+        
+        # Create normalized path for consistent handling
+        rel_path = Path(relative_path)
+        
+        # Check each part of the path against always fulfilled ignore conditions
+        for part in rel_path.parts:
+            if not part:  # Skip empty parts (e.g., from leading '/')
+                continue
+            # Check standard ignores
+            if self.should_always_ignore(part):
+                return True
+        
+        # Use pathspec for gitignore-style pattern matching
+        # Normalize path separators for pathspec (it expects forward slashes)
+        normalized_path = str(rel_path).replace(os.path.sep, '/')
+        
+        # pathspec can't handle the matching of directories if they don't end with a slash!
+        # see https://github.com/cpburnz/python-pathspec/issues/89
+        if os.path.isdir(os.path.join(self.repository_root_path, normalized_path)) and not normalized_path.endswith('/'):
+            normalized_path = normalized_path + '/'
+        
+        # Use the pathspec matcher to check if the path matches any ignore pattern
+        if self.ignore_spec.match_file(normalized_path):
+            return True
+        
+        return False
+
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["LanguageServer"]:
@@ -463,20 +555,22 @@ class LanguageServer:
         """
         Raise a [textDocument/references](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references) request to the Language Server
         to find references to the symbol at the given line and column in the given file. Wait for the response and return the result.
+        Filters out references located in ignored directories.
 
         :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
         :param line: The line number of the symbol
         :param column: The column number of the symbol
 
-        :return List[multilspy_types.Location]: A list of locations where the symbol is referenced
+        :return: A list of locations where the symbol is referenced (excluding ignored directories)
         """
 
         if not self.server_started:
             self.logger.log(
-                "find_all_callers_of_function called before Language Server started",
+                "request_references called before Language Server started",
                 logging.ERROR,
             )
             raise MultilspyException("Language Server not started")
+
 
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
@@ -496,13 +590,17 @@ class LanguageServer:
             assert isinstance(item, dict)
             assert LSPConstants.URI in item
             assert LSPConstants.RANGE in item
+            
+            abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])
+            rel_path = Path(abs_path).relative_to(self.repository_root_path)
+            if self.should_ignore_path(str(rel_path)):
+                self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)
+                continue
 
             new_item: multilspy_types.Location = {}
             new_item.update(item)
-            new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-            new_item["relativePath"] = str(
-                PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-            )
+            new_item["absolutePath"] = str(abs_path)
+            new_item["relativePath"] = str(rel_path)
             ret.append(multilspy_types.Location(**new_item))
 
         return ret
@@ -749,12 +847,13 @@ class LanguageServer:
     async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
-        
+
         For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
-        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
         that are within the repository.
-        Will ignore all directories that start with a dot (.) and __pycache__ directories.
-        
+        Will ignore directories starting with '.', language-specific defaults
+        and user-configured directories (e.g. from .gitignore).
+
         :param within_relative_path: pass a relative path to only consider symbols within this path.
                 If a file is passed, only the symbols within this file will be considered.
                 If a directory is passed, all files within this directory will be considered.
@@ -763,22 +862,20 @@ class LanguageServer:
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
         if within_relative_path is not None and os.path.isfile(within_relative_path):
+            if self.should_ignore_path(within_relative_path):
+                self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
+                return []
+            
             _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
             return root_nodes
-
-        # Helper function to check if a path should be ignored
-        def should_ignore_dir(path: str) -> bool:
-            parts = path.split(os.sep)
-            return any(part.startswith('.') or part == '__pycache__' for part in parts)
-
-        fn_matcher = self.language.get_source_fn_matcher()
-
+        
         # Helper function to recursively process directories
         async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
             abs_dir_path = self.repository_root_path if dir_path == "." else os.path.join(self.repository_root_path, dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
-            if should_ignore_dir(abs_dir_path):
+            if self.should_ignore_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
+                self.logger.log(f"Skipping directory: {dir_path}\n(because it should be ignored)", logging.DEBUG)
                 return []
 
             result = []
@@ -804,15 +901,16 @@ class LanguageServer:
             for item in items:
                 item_path = os.path.join(abs_dir_path, item)
                 abs_item_path = os.path.join(self.repository_root_path, item_path)
+                rel_item_path = str(Path(abs_item_path).resolve().relative_to(self.repository_root_path))
+                if self.should_ignore_path(rel_item_path):
+                    self.logger.log(f"Skipping item: {rel_item_path}\n(because it should be ignored)", logging.DEBUG)
+                    continue
 
                 if os.path.isdir(abs_item_path):
                     child_symbols = await process_directory(item_path)
                     package_symbol["children"].extend(child_symbols)
 
                 elif os.path.isfile(abs_item_path):
-                    if not fn_matcher.is_relevant_filename(item):
-                        continue
-
                     _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
 
                     def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
@@ -1435,7 +1533,7 @@ class SyncLanguageServer:
 
     @classmethod
     def create(
-        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str
+        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config=True,
     ) -> "SyncLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
@@ -1445,10 +1543,12 @@ class SyncLanguageServer:
         :param repository_root_path: The root path of the repository.
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
+        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
+            the paths ignored there are also ignored by the language server
 
         :return SyncLanguageServer: A language specific LanguageServer instance.
         """
-        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path))
+        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path, add_gitignore_content_to_config=add_gitignore_content_to_config))
 
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
@@ -1591,9 +1691,10 @@ class SyncLanguageServer:
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
         
         For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
-        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
         that are within the repository.
-        Will ignore all directories that start with a dot (.) and __pycache__ directories.
+        Will ignore directories starting with '.', language-specific defaults
+        and user-configured directories (e.g. from .gitignore).
         
         :param within_relative_path: pass a relative path to only consider symbols within this path.
             If a file is passed, only the symbols within this file will be considered.
@@ -1871,3 +1972,16 @@ class SyncLanguageServer:
         Load the cache from a file.
         """
         self.language_server.load_cache()
+
+    def should_always_ignore(self, dirname: str) -> bool:
+        """
+        A language-specific condition for directories that should be ignored always. For example, venv
+        in Python and node_modules in JS/TS should be ignored always.
+        """
+        return self.language_server.should_always_ignore(dirname)
+    
+    def should_ignore_path(self, relative_path: str) -> bool:
+        """
+        Whether the given path should be ignored.
+        """
+        return self.language_server.should_ignore_path(relative_path)

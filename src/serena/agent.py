@@ -37,6 +37,10 @@ TTool = TypeVar("TTool", bound="Tool")
 SUCCESS_RESULT = "OK"
 
 
+class SerenaConfigError(Exception):
+    pass
+
+
 class ProjectConfig(ToStringMixin):
     SERENA_MANAGED_DIR = ".serena"
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
@@ -47,13 +51,31 @@ class ProjectConfig(ToStringMixin):
         if project_root is None:
             project_root = Path(config_dict["project_root"])
         self.project_root: str = str(project_root.resolve())
-        self.ignored_dirs: list[str] = config_dict.get("ignored_dirs", [])
+        self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
+
+        if "ignore_all_files_in_gitignore" not in config_dict:
+            raise SerenaConfigError(
+                "`ignore_all_files_in_gitignore` key not found in project configuration. Please update your `project.yml` file."
+                "It is recommended to set this to `True`."
+            )
+        self.ignore_all_files_in_gitignore = config_dict["ignore_all_files_in_gitignore"]
+
+        # Raise errors for deprecated keys
+        if "ignored_dirs" in config_dict:
+            raise SerenaConfigError(
+                "`ignored_dirs` key is deprecated. Please use `ignored_paths` instead."
+                "Note that you can also set `ignore_all_files_in_gitignore` to `True`, which will be enough for most cases."
+            )
 
     @classmethod
     def from_yml(cls, yml_path: Path) -> Self:
-        with open(yml_path, encoding="utf-8") as f:
-            config_dict = yaml.safe_load(f)
+        log.info(f"Loading project configuration from {yml_path}")
+        try:
+            with open(yml_path, encoding="utf-8") as f:
+                config_dict = yaml.safe_load(f)
+        except Exception as e:
+            raise ValueError(f"Error loading project configuration from {yml_path}: {e}") from e
         if yml_path.parent.name == cls.SERENA_MANAGED_DIR:
             project_root = yml_path.parent.parent
             project_name = project_root.name
@@ -79,10 +101,16 @@ class SerenaConfig:
         if not os.path.exists(config_file):
             raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
         with open(config_file, encoding="utf-8") as f:
-            config_yaml = yaml.safe_load(f)
+            try:
+                log.info(f"Loading Serena configuration from {config_file}")
+                config_yaml = yaml.safe_load(f)
+            except Exception as e:
+                raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
 
         # read projects
         self.projects: dict[str, ProjectConfig] = {}
+        if "projects" not in config_yaml:
+            raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
         for project_config_path in config_yaml["projects"]:
             project_config_path = Path(project_config_path)
             if not project_config_path.is_absolute():
@@ -91,6 +119,7 @@ class SerenaConfig:
                 project_config_path = project_config_path / ProjectConfig.SERENA_MANAGED_DIR / ProjectConfig.SERENA_DEFAULT_PROJECT_FILE
             if not project_config_path.is_file():
                 raise FileNotFoundError(f"Project file not found: {project_config_path}")
+            log.info(f"Loading project configuration from {project_config_path}")
             project_config = ProjectConfig.from_yml(project_config_path)
             self.projects[project_config.project_name] = project_config
         self.project_names = list(self.projects.keys())
@@ -180,6 +209,7 @@ class SerenaAgent:
         if project_file_path is not None:
             if not os.path.exists(project_file_path):
                 raise FileNotFoundError(f"Project file not found: {project_file_path}")
+            log.info(f"Loading project configuration from {project_file_path}")
             project_config = ProjectConfig.from_yml(Path(project_file_path))
         else:
             match len(self.serena_config.projects):
@@ -251,9 +281,14 @@ class SerenaAgent:
 
         # instantiate and start the language server
         assert self.project_config is not None
-        multilspy_config = MultilspyConfig(code_language=self.project_config.language)
+        multilspy_config = MultilspyConfig(code_language=self.project_config.language, ignored_paths=self.project_config.ignored_paths)
         ls_logger = MultilspyLogger()
-        self.language_server = SyncLanguageServer.create(multilspy_config, ls_logger, self.project_config.project_root)
+        self.language_server = SyncLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            self.project_config.project_root,
+            add_gitignore_content_to_config=self.project_config.ignore_all_files_in_gitignore,
+        )
         self.language_server.start()
         if not self.language_server.is_running():
             raise RuntimeError(f"Failed to start the language server for {self.project_config}")
@@ -544,7 +579,7 @@ class ListDirTool(Tool):
             os.path.join(self.project_root, relative_path),
             relative_to=self.project_root,
             recursive=recursive,
-            ignored_dirs=self.project_config.ignored_dirs,
+            ignored_dirs=self.project_config.ignored_paths,
         )
         result = json.dumps({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
