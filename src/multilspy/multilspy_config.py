@@ -67,7 +67,10 @@ class MultilspyConfig:
     """
     code_language: Language
     trace_lsp_communication: bool = False
-    ignored_paths: List[str] = field(default_factory=list)
+    ignored_paths: list[str] = field(default_factory=list)
+    """Paths, dirs or glob-like patterns. The matching will follow the same logic as for .gitignore entries"""
+    gitignore_file_content: str | None = None
+    """Optional content of the gitignore file. If passed, will be used in addition to the explicitly passed ignored_paths for deciding which paths to ignore."""
 
     @classmethod
     def from_dict(cls, env: dict):

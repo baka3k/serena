@@ -81,18 +81,17 @@ class LSPFileBuffer:
 
 
 class LanguageServer:
-    
-    # To be overridden and extended by subclasses
-    def should_always_ignore(self, dirname: str) -> bool:
-        return dirname.startswith('.')
-    
-    
     """
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
     """
+
+    # To be overridden and extended by subclasses
+    def should_always_ignore(self, dirname: str) -> bool:
+        return dirname.startswith('.')
+
     @classmethod
-    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str) -> "LanguageServer":
+    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config: bool = True) -> "LanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
 
@@ -102,9 +101,29 @@ class LanguageServer:
         :param repository_root_path: The root path of the repository.
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
+        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
+            the paths ignored there are also ignored by the language server
 
         :return LanguageServer: A language specific LanguageServer instance.
         """
+        config = copy(config)  # prevent mutation
+        if add_gitignore_content_to_config:
+            gitignore_path = os.path.join(repository_root_path, ".gitignore")
+            if not os.path.exists(gitignore_path):
+                logger.log(
+                    f"Should ignore all files in gitignore not not .gitignore found at {gitignore_path}. Skipping.",
+                    logging.WARNING
+                )
+                gitignore_file_content = None
+            else:
+                if config.gitignore_file_content is not None:
+                    raise ValueError(
+                        f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry"
+                    )
+                with open(gitignore_path) as f:
+                    gitignore_file_content = f.read()
+            config.gitignore_file_content = gitignore_file_content
+
         if config.code_language == Language.PYTHON:
             from multilspy.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
@@ -167,7 +186,7 @@ class LanguageServer:
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
         :param repository_root_path: The root path of the repository.
-        :param cmd: Each language server has a specific command used to start the server.
+        :param process_launch_info: Each language server has a specific command used to start the server.
                     This parameter is the command to launch the language server process.
                     The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
                     as opposed to HTTP, TCP modes supported by some language servers.
@@ -213,13 +232,16 @@ class LanguageServer:
             # Normalize separators (pathspec expects forward slashes)
             pattern = pattern.replace(os.path.sep, '/')
             processed_patterns.append(pattern)
+        # Combine explicitly passed patterns with
+        if config.gitignore_file_content is not None:
+            processed_patterns.extend(config.gitignore_file_content.splitlines())
+
         # Create a pathspec matcher from the processed patterns
         self.ignore_spec = pathspec.PathSpec.from_lines(
             pathspec.patterns.GitWildMatchPattern,
             processed_patterns
         )
 
-        
     def should_ignore_path(self, relative_path: str) -> bool:
         """
         Determine if a path should be ignored based on file type
@@ -248,6 +270,11 @@ class LanguageServer:
         # Use pathspec for gitignore-style pattern matching
         # Normalize path separators for pathspec (it expects forward slashes)
         normalized_path = str(rel_path).replace(os.path.sep, '/')
+        
+        # pathspec can't handle the matching of directories if they don't end with a slash!
+        # see https://github.com/cpburnz/python-pathspec/issues/89
+        if os.path.isdir(os.path.join(self.repository_root_path, normalized_path)) and not normalized_path.endswith('/'):
+            normalized_path = normalized_path + '/'
         
         # Use the pathspec matcher to check if the path matches any ignore pattern
         if self.ignore_spec.match_file(normalized_path):
@@ -1500,7 +1527,7 @@ class SyncLanguageServer:
 
     @classmethod
     def create(
-        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str
+        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config=True,
     ) -> "SyncLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
@@ -1510,10 +1537,12 @@ class SyncLanguageServer:
         :param repository_root_path: The root path of the repository.
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
+        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
+            the paths ignored there are also ignored by the language server
 
         :return SyncLanguageServer: A language specific LanguageServer instance.
         """
-        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path))
+        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path, add_gitignore_content_to_config=add_gitignore_content_to_config))
 
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
