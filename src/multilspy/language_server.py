@@ -88,6 +88,10 @@ class LanguageServer:
 
     # To be overridden and extended by subclasses
     def should_always_ignore(self, dirname: str) -> bool:
+        """
+        A language-specific condition for directories that should be ignored always. For example, venv
+        in Python and node_modules in JS/TS should be ignored always.
+        """
         return dirname.startswith('.')
 
     @classmethod
@@ -232,9 +236,11 @@ class LanguageServer:
             # Normalize separators (pathspec expects forward slashes)
             pattern = pattern.replace(os.path.sep, '/')
             processed_patterns.append(pattern)
-        # Combine explicitly passed patterns with
+        # Combine explicitly passed patterns with the content of the .gitignore file
         if config.gitignore_file_content is not None:
-            processed_patterns.extend(config.gitignore_file_content.splitlines())
+            for line in config.gitignore_file_content.splitlines():
+                if not line.startswith('#') and line.strip() != '':
+                    processed_patterns.append(line.strip())
 
         # Create a pathspec matcher from the processed patterns
         self.ignore_spec = pathspec.PathSpec.from_lines(
@@ -845,8 +851,8 @@ class LanguageServer:
         For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
         All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
         that are within the repository.
-        Will ignore directories starting with '.', '__pycache__', language-specific defaults (self.default_ignored_dirs),
-        and user-configured directories (self.config.ignored_dirs).
+        Will ignore directories starting with '.', language-specific defaults
+        and user-configured directories (e.g. from .gitignore).
 
         :param within_relative_path: pass a relative path to only consider symbols within this path.
                 If a file is passed, only the symbols within this file will be considered.
@@ -1685,9 +1691,10 @@ class SyncLanguageServer:
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
         
         For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
-        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project 
+        All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
         that are within the repository.
-        Will ignore all directories that start with a dot (.) and __pycache__ directories.
+        Will ignore directories starting with '.', language-specific defaults
+        and user-configured directories (e.g. from .gitignore).
         
         :param within_relative_path: pass a relative path to only consider symbols within this path.
             If a file is passed, only the symbols within this file will be considered.
@@ -1968,7 +1975,8 @@ class SyncLanguageServer:
 
     def should_always_ignore(self, dirname: str) -> bool:
         """
-        Whether the given directory should be ignored.
+        A language-specific condition for directories that should be ignored always. For example, venv
+        in Python and node_modules in JS/TS should be ignored always.
         """
         return self.language_server.should_always_ignore(dirname)
     
