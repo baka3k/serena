@@ -14,6 +14,7 @@ import os
 import pathlib
 import pickle
 import re
+from site import abs_paths
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
@@ -259,7 +260,11 @@ class LanguageServer:
         """
         # Check file extension if it's a file
         fn_matcher = self.language.get_source_fn_matcher()
-        if os.path.isfile(relative_path) and not fn_matcher.is_relevant_filename(relative_path):
+        abs_path = os.path.join(self.repository_root_path, relative_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+        
+        if os.path.isfile(abs_path) and not fn_matcher.is_relevant_filename(abs_path):
             return True
         
         # Create normalized path for consistent handling
