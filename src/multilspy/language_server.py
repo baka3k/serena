@@ -16,13 +16,14 @@ import pickle
 import re
 import threading
 from collections import defaultdict
-from urllib.parse import urlparse
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
-from typing import Any, AsyncGenerator, Dict, Generator, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from fnmatch import fnmatch
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
+
+import pathspec
 
 from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_text
 from . import multilspy_types
@@ -181,14 +182,6 @@ class LanguageServer:
         self.repository_root_path: str = repository_root_path
         self.completions_available = asyncio.Event()
         
-        # for all absolute paths in ignored_dirs, convert them to relative paths
-        self.ignored_paths = []
-        for path in set(config.ignored_paths):
-            if os.path.isabs(path):
-                path = str(Path(path).resolve().relative_to(self.repository_root_path))
-            self.ignored_paths.append(path)
-        
-
         if config.trace_lsp_communication:
 
             def logging_fn(source, target, msg):
@@ -213,26 +206,55 @@ class LanguageServer:
         self._cache_has_changed = bool
         self.language = Language(language_id)
         
-    # Helper function to check if a relative path should be ignored
+        # Set up the pathspec matcher for the ignored paths
+        # for all absolute paths in ignored_paths, convert them to relative paths
+        processed_patterns = []
+        for pattern in set(config.ignored_paths):
+            # Normalize separators (pathspec expects forward slashes)
+            pattern = pattern.replace(os.path.sep, '/')
+            processed_patterns.append(pattern)
+        # Create a pathspec matcher from the processed patterns
+        self.ignore_spec = pathspec.PathSpec.from_lines(
+            pathspec.patterns.GitWildMatchPattern,
+            processed_patterns
+        )
+
+        
     def should_ignore_path(self, relative_path: str) -> bool:
+        """
+        Determine if a path should be ignored based on file type
+        and ignore patterns.
+        
+        :param relative_path: Relative path to check
+            
+        :return: True if the path should be ignored, False otherwise
+        """
+        # Check file extension if it's a file
         fn_matcher = self.language.get_source_fn_matcher()
         if os.path.isfile(relative_path) and not fn_matcher.is_relevant_filename(relative_path):
             return True
         
-        # Normalize path separators for consistent comparison
+        # Create normalized path for consistent handling
         rel_path = Path(relative_path)
-        for ignored_path in self.ignored_paths:
-            if rel_path.is_relative_to(ignored_path):
-                return True
         
         # Check each part of the path against always fulfilled ignore conditions
         for part in rel_path.parts:
-            if not part: # Skip empty parts (e.g., from leading '/')
+            if not part:  # Skip empty parts (e.g., from leading '/')
                 continue
             # Check standard ignores
             if self.should_always_ignore(part):
                 return True
+        
+        # Use pathspec for gitignore-style pattern matching
+        # Normalize path separators for pathspec (it expects forward slashes)
+        normalized_path = str(rel_path).replace(os.path.sep, '/')
+        
+        # Use the pathspec matcher to check if the path matches any ignore pattern
+        if self.ignore_spec.match_file(normalized_path):
+            return True
+        
         return False
+
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["LanguageServer"]:

@@ -44,3 +44,28 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
 
     # assert that scripts does not appear in the references
     assert not any("scripts" in ref["relativePath"] for ref in references)
+
+
+def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
+    """Tests that refs and symbols with glob patterns are ignored."""
+    config = MultilspyConfig(
+        code_language=Language.PYTHON,
+        trace_lsp_communication=False,
+        ignored_paths=["*ipts", "custom_t*"],
+    )
+    logger = MultilspyLogger()
+    ls = SyncLanguageServer.create(config, logger, str(repo_path))
+    ls.start()
+    # same as in the above tests
+    root = ls.request_full_symbol_tree()[0]
+    root_children = root["children"]
+    children_names = {child["name"] for child in root_children}
+    assert children_names == {"test_repo", "examples"}
+
+    # test that the refs and symbols with glob patterns are ignored
+    definition_file = "test_repo/models.py"
+    definition_line = 56
+    definition_col = 6
+
+    references = ls.request_references(definition_file, definition_line, definition_col)
+    assert not any("scripts" in ref["relativePath"] for ref in references)
