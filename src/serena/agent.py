@@ -83,11 +83,15 @@ class SerenaConfig:
         if not os.path.exists(config_file):
             raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
         with open(config_file, encoding="utf-8") as f:
-            config_yaml = yaml.safe_load(f)
+            try:
+                log.info(f"Loading Serena configuration from {config_file}")
+                config_yaml = yaml.safe_load(f)
+            except Exception as e:
+                raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
 
         # read projects
         self.projects: dict[str, ProjectConfig] = {}
-        for project_config_path in config_yaml["projects"]:
+        for project_config_path in config_yaml.get("projects", []):
             project_config_path = Path(project_config_path)
             if not project_config_path.is_absolute():
                 project_config_path = Path(serena_root_path()) / project_config_path
@@ -95,8 +99,12 @@ class SerenaConfig:
                 project_config_path = project_config_path / ProjectConfig.SERENA_MANAGED_DIR / ProjectConfig.SERENA_DEFAULT_PROJECT_FILE
             if not project_config_path.is_file():
                 raise FileNotFoundError(f"Project file not found: {project_config_path}")
+            log.info(f"Loading project configuration from {project_config_path}")
             project_config = ProjectConfig.from_yml(project_config_path)
-            self.projects[project_config.project_name] = project_config
+            try:
+                self.projects[project_config.project_name] = project_config
+            except Exception as e:
+                raise ValueError(f"Error loading project configuration from {project_config_path}: {e}") from e
         self.project_names = list(self.projects.keys())
 
         self.gui_log_window_enabled = config_yaml.get("gui_log_window", True)
@@ -184,7 +192,11 @@ class SerenaAgent:
         if project_file_path is not None:
             if not os.path.exists(project_file_path):
                 raise FileNotFoundError(f"Project file not found: {project_file_path}")
-            project_config = ProjectConfig.from_yml(Path(project_file_path))
+            log.info(f"Loading project configuration from {project_file_path}")
+            try:
+                project_config = ProjectConfig.from_yml(Path(project_file_path))
+            except Exception as e:
+                raise ValueError(f"Error loading project configuration from {project_file_path}: {e}") from e
         else:
             match len(self.serena_config.projects):
                 case 0:
