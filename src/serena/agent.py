@@ -47,8 +47,12 @@ class ProjectConfig(ToStringMixin):
         if project_root is None:
             project_root = Path(config_dict["project_root"])
         self.project_root: str = str(project_root.resolve())
-        self.ignored_dirs: list[str] = config_dict.get("ignored_dirs", [])
+        self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
+        self.ignore_all_files_in_gitignore = config_dict.get("ignore_all_files_in_gitignore", True)
+
+        # backwards compatibility
+        self.ignored_paths.extend(config_dict.get("ignored_dirs", []))
 
     @classmethod
     def from_yml(cls, yml_path: Path) -> Self:
@@ -251,9 +255,14 @@ class SerenaAgent:
 
         # instantiate and start the language server
         assert self.project_config is not None
-        multilspy_config = MultilspyConfig(code_language=self.project_config.language)
+        multilspy_config = MultilspyConfig(code_language=self.project_config.language, ignored_paths=self.project_config.ignored_paths)
         ls_logger = MultilspyLogger()
-        self.language_server = SyncLanguageServer.create(multilspy_config, ls_logger, self.project_config.project_root)
+        self.language_server = SyncLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            self.project_config.project_root,
+            add_gitignore_content_to_config=self.project_config.ignore_all_files_in_gitignore,
+        )
         self.language_server.start()
         if not self.language_server.is_running():
             raise RuntimeError(f"Failed to start the language server for {self.project_config}")
@@ -544,7 +553,7 @@ class ListDirTool(Tool):
             os.path.join(self.project_root, relative_path),
             relative_to=self.project_root,
             recursive=recursive,
-            ignored_dirs=self.project_config.ignored_dirs,
+            ignored_dirs=self.project_config.ignored_paths,
         )
         result = json.dumps({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
