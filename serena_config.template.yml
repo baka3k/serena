@@ -6,9 +6,15 @@
 # the current project. This is because clients typically do not respond to a changed set of tools.
 enable_project_activation: True
 
-# Add your list of .yml project files here (which you can switch between using "activate_project").
-# Serena will know the projects by their base filename, i.e. "MyProject.yml" will be project "MyProject" to Serena.
-# Paths should either be relative to the directory this configuration file is in or absolute.
+# Add your list of projects here (which you can switch between using "activate_project").
+# Every list item must be either
+#   - a path to a .yml file, absolute or relative to the directory this
+#     configuration file is in (e.g. "myproject.yml" or "/path/to/wherever/myproject.yml").
+#     In this case, the name of the project will be the base filename of the .yml file
+#     (e.g. "myproject" for "myproject.yml").
+#   - or a path to the project's root directory (e.g. "/path/to/myproject"), with the
+#     configuration file being located in "/path/to/myproject/.serena/project.yml".
+#     In this case, the name of the project will be the name of the directory ("myproject").
 projects:
   - myproject.yml
 
