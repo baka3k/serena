@@ -41,13 +41,13 @@ class Language(str, Enum):
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
             case self.PYTHON:
-                return FilenameMatcher("*.py")
+                return FilenameMatcher("*.py", "*.pyi")
             case self.JAVA:
                 return FilenameMatcher("*.java")
             case self.TYPESCRIPT:
-                return FilenameMatcher("*.ts", "*.js")
+                return FilenameMatcher("*.ts", "*.js", "*.jsx", "*.tsx")
             case self.JAVASCRIPT:
-                return FilenameMatcher("*.js")
+                return FilenameMatcher("*.js", "*.jsx")
             case self.CSHARP:
                 return FilenameMatcher("*.cs")
             case self.RUST:
