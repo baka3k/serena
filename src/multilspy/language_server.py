@@ -1025,6 +1025,23 @@ class LanguageServer:
             for root in document_roots
         ]
     
+    async def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+        """
+        An overview of all symbols in the given file or directory.
+        
+        :param within_relative_path: the relative path to the file or directory to get the overview of.
+        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        """
+        abs_path = (Path(self.repository_root_path) / within_relative_path).resolve()
+        if not abs_path.exists():
+            raise FileNotFoundError(f"File or directory not found: {abs_path}")
+        
+        if abs_path.is_file():
+            symbols_overview = await self.request_document_overview(within_relative_path)
+            return {within_relative_path: symbols_overview}
+        else:
+            return await self.request_dir_overview(within_relative_path)
+    
     async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
@@ -1743,7 +1760,20 @@ class SyncLanguageServer:
             self.language_server.request_document_overview(relative_file_path), self.loop
         ).result()
         return result
-
+    
+    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+        """
+        An overview of all symbols in the given file or directory.
+        
+        :param within_relative_path: the relative path to the file or directory to get the overview of.
+        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        """
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_overview(within_relative_path), self.loop
+        ).result()
+        return result
+    
     def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
