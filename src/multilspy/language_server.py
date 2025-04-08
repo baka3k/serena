@@ -866,14 +866,19 @@ class LanguageServer:
 
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
-        if within_relative_path is not None and os.path.isfile(within_relative_path):
-            if self.should_ignore_path(within_relative_path):
-                self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
-                return []
-            
-            _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
-            return root_nodes
         
+        if within_relative_path is not None:
+            within_abs_path = os.path.join(self.repository_root_path, within_relative_path)
+            if not os.path.exists(within_abs_path):
+                raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
+            if os.path.isfile(within_abs_path):
+                if self.should_ignore_path(within_relative_path):
+                    self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
+                    return []
+                else:
+                    _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
+                    return root_nodes
+                
         # Helper function to recursively process directories
         async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
             abs_dir_path = self.repository_root_path if dir_path == "." else os.path.join(self.repository_root_path, dir_path)
