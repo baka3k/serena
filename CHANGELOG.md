@@ -2,8 +2,14 @@
 
 Changes prior to the next official version change will appear here.
 
+* Serena core:
+    * bugfix in find_symbol tool (a bug fixed in LS)
+    * merged the two overview tools (for dir and file) int a single one
+    * one-click setup for Cline enabled
+
 * Language Servers:
-    * Add further file extensions considered by the language servers for Python (.pyi), JavaScript (.jsx) and TypeScript (.tsx, .jsx) 
+    * Add further file extensions considered by the language servers for Python (.pyi), JavaScript (.jsx) and TypeScript (.tsx, .jsx)
+    
 
 # 2025-04-07
 
