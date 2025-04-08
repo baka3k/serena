@@ -886,13 +886,18 @@ class LanguageServer:
 
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
-        if within_relative_path is not None and os.path.isfile(within_relative_path):
-            if self.should_ignore_path(within_relative_path):
-                self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
-                return []
 
-            _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
-            return root_nodes
+        if within_relative_path is not None:
+            within_abs_path = os.path.join(self.repository_root_path, within_relative_path)
+            if not os.path.exists(within_abs_path):
+                raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
+            if os.path.isfile(within_abs_path):
+                if self.should_ignore_path(within_relative_path):
+                    self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
+                    return []
+                else:
+                    _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
+                    return root_nodes
 
         # Helper function to recursively process directories
         async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
@@ -1039,6 +1044,23 @@ class LanguageServer:
             )
             for root in document_roots
         ]
+
+    async def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+        """
+        An overview of all symbols in the given file or directory.
+
+        :param within_relative_path: the relative path to the file or directory to get the overview of.
+        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        """
+        abs_path = (Path(self.repository_root_path) / within_relative_path).resolve()
+        if not abs_path.exists():
+            raise FileNotFoundError(f"File or directory not found: {abs_path}")
+
+        if abs_path.is_file():
+            symbols_overview = await self.request_document_overview(within_relative_path)
+            return {within_relative_path: symbols_overview}
+        else:
+            return await self.request_dir_overview(within_relative_path)
 
     async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
@@ -1786,6 +1808,19 @@ class SyncLanguageServer:
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_document_overview(relative_file_path), self.loop
         ).result(timeout=self.timeout)
+        return result
+
+    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+        """
+        An overview of all symbols in the given file or directory.
+
+        :param within_relative_path: the relative path to the file or directory to get the overview of.
+        :return: A mapping of all relative paths analyzed to lists of tuples (name, kind, line, column) of all top-level symbols in the corresponding file.
+        """
+        assert self.loop
+        result = asyncio.run_coroutine_threadsafe(
+            self.language_server.request_overview(within_relative_path), self.loop
+        ).result()
         return result
 
     def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:

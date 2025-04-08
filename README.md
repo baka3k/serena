@@ -586,8 +586,7 @@ Here is the full list of Serena's tools with a short description (output of `uv 
 * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
 * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
 * `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
-* `get_dir_overview`: Gets an overview of the top-level symbols defined in all files within a given directory.
-* `get_document_overview`: Gets an overview of the top-level symbols defined in a given file.
+* `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
 * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
 * `insert_at_line`: Inserts content at a given line in a file.
 * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.

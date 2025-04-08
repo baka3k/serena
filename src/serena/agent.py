@@ -125,7 +125,7 @@ class SerenaConfig:
             self.projects[project_config.project_name] = project_config
         self.project_names = list(self.projects.keys())
 
-        self.gui_log_window_enabled = config_yaml.get("gui_log_window", True)
+        self.gui_log_window_enabled = config_yaml.get("gui_log_window", False)
         self.gui_log_window_level = config_yaml.get("gui_log_level", logging.INFO)
         self.enable_project_activation = config_yaml.get("enable_project_activation", True)
 
@@ -590,52 +590,31 @@ class ListDirTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class GetDirOverviewTool(Tool):
+class GetSymbolsOverviewTool(Tool):
     """
-    Gets an overview of the top-level symbols defined in all files within a given directory.
+    Gets an overview of the top-level symbols defined in a given file or directory.
     """
 
     def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Gets an overview of the given directory.
-        For each file in the directory, we list the top-level symbols in the file (name, kind, line).
-        Use this tool to get a high-level understanding of the code symbols inside a directory.
+        Gets an overview of the given file or directory.
+        For each analyzed file, we list the top-level symbols in the file (name, kind, line).
+        Use this tool to get a high-level understanding of the code symbols.
+        Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
 
-        :param relative_path: the relative path to the directory to get the overview of
+        :param relative_path: the relative path to the file or directory to get the overview of
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. If the overview is too long, you should use a smaller directory instead,
             (e.g. a subdirectory).
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line, column).
         """
-        path_to_symbol_infos = self.language_server.request_dir_overview(relative_path)
+        path_to_symbol_infos = self.language_server.request_overview(relative_path)
         result = {}
         for file_path, symbols in path_to_symbol_infos.items():
             result[file_path] = [_tuple_to_info(*symbol_info) for symbol_info in symbols]
 
         result_json_str = json.dumps(result)
-        return self._limit_length(result_json_str, max_answer_chars)
-
-
-class GetDocumentOverviewTool(Tool):
-    """
-    Gets an overview of the top-level symbols defined in a given file.
-    """
-
-    def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
-        """
-        Use this tool to get a high-level understanding of the code symbols in a file. It often makes sense
-        to call this before targeted reading, searching or editing operations on the code symbols in the file,
-        as the output will contain a lot of information about names and lines.
-
-        :param relative_path: the relative path to the file to get the overview of
-        :param max_answer_chars: if the overview is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
-        :return: a JSON object with the info (name, kind, line, column) of all top-level symbols in the file.
-        """
-        result = self.language_server.request_document_overview(relative_path)
-        result_json_str = json.dumps([_tuple_to_info(*symbol_info) for symbol_info in result])
         return self._limit_length(result_json_str, max_answer_chars)
 
 
