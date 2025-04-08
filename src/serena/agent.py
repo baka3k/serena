@@ -125,7 +125,7 @@ class SerenaConfig:
             self.projects[project_config.project_name] = project_config
         self.project_names = list(self.projects.keys())
 
-        self.gui_log_window_enabled = config_yaml.get("gui_log_window", True)
+        self.gui_log_window_enabled = config_yaml.get("gui_log_window", False)
         self.gui_log_window_level = config_yaml.get("gui_log_level", logging.INFO)
         self.enable_project_activation = config_yaml.get("enable_project_activation", True)
 

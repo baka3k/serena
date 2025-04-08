@@ -31,7 +31,7 @@ projects:
 #
 # Limitations: doesn't seem to work with the community version of Claude Desktop for Linux
 # Might also cause problems with some MCP clients - if you have any issues, try disabling this
-gui_log_window: True
+gui_log_window: False
 
 # minimum log level for the GUI log window (10 = debug, 20 = info, 30 = warning, 40 = error)
 gui_log_level: 20
