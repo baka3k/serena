@@ -502,6 +502,20 @@ class ToolMarkerDoesNotRequireActiveProject:
     pass
 
 
+class RestartLanguageServerTool(Tool):
+    """Restarts the language server, may be necessary when edits not through Serena happen."""
+
+    def apply(self) -> str:
+        """Use this tool only on explicit user request or after confirmation.
+        It may be necessary to restart the language server if the user performs edits
+        not through Serena, so the language server state becomes outdated and further editing attempts lead to errors.
+
+        If such editing errors happen, you should suggest using this tool.
+        """
+        self.agent.reset_language_server()
+        return "OK"
+
+
 class ReadFileTool(Tool):
     """
     Reads a file within the project directory.

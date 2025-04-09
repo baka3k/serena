@@ -596,6 +596,7 @@ Here is the full list of Serena's tools with a short description (output of `uv 
 * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
 * `replace_lines`: Replaces a range of lines within a file with new content.
 * `replace_symbol_body`: Replaces the full definition of a symbol.
+* `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
 * `search_in_all_code`: Performs a search for a pattern in all code files (and only in code files) in the project.
 * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
 * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
