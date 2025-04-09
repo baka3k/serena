@@ -1589,6 +1589,10 @@ class SyncLanguageServer:
     """
 
     def __init__(self, language_server: LanguageServer, timeout: Optional[int] = None):
+        """
+        :param language_server: the async language server being wrapped
+        :param timeout: the timeout, in seconds, to use for requests to the language server.
+        """
         self.language_server = language_server
         self.loop = None
         self.loop_thread = None
@@ -1611,6 +1615,7 @@ class SyncLanguageServer:
         :param logger: The logger to use.
         :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
             the paths ignored there are also ignored by the language server
+        :param timeout: the timeout, in seconds, to use for requests; if None, use no timeout
 
         :return SyncLanguageServer: A language specific LanguageServer instance.
         """
