@@ -6,6 +6,9 @@ Changes prior to the next official version change will appear here.
     * bugfix in find_symbol tool (a bug fixed in LS)
     * merged the two overview tools (for dir and file) int a single one
     * one-click setup for Cline enabled
+    * Fix `CheckOnboardingPerformedTool`:
+        * Tool description was incompatible with project change
+        * Returned result was not as useful as it could be (now added list of memories)
 
 * Language Servers:
     * Add further file extensions considered by the language servers for Python (.pyi), JavaScript (.jsx) and TypeScript (.tsx, .jsx)
