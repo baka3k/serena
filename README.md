@@ -53,6 +53,9 @@ With Serena, we provide
      * Go (untested)
      * C# (untested)
      * Rust (untested)
+     * Kotlin (untested)
+     * Dart (untested)
+     * C/C++ (untested)
      
    These languages are supported by the language server library [multilspy](https://github.com/microsoft/multilspy), which Serena uses under the hood.
    But we did not explicitly test whether the support for these languages actually works.
@@ -61,13 +64,6 @@ Further languages can, in principle, easily be supported by providing a shallow 
 implementation.
 
 Coming soon: Kotlin and Dart.
-
-
-> ⚠️ **Note:** Serena is under active development, we are continuously adding features, improving stability and UX.
-> As a result, configuration might change in a breaking way. If you have an invalid configuration,
-> the MCP server (or the Serena Agent) may not start properly (investigate the MCP logs in the former case). 
-> Check the [changelog](CHANGELOG.md)
-> and the configuration templates when updating Serena and update your configs accordingly.
 
 
 ## Table of Contents
@@ -152,7 +148,13 @@ We thus built Serena with the prospect of being able to cancel most other subscr
 5. If you want Serena to dynamically switch between projects, add the list of all project files
    created in the previous step to the `projects` list in `serena_config.yml`.
 
-After this initial setup, continue with one of the sections below, depending on how you
+> ⚠️ **Note:** Serena is under active development. We are continuously adding features, improving stability and the UX.
+> As a result, configuration may change in a breaking manner. If you have an invalid configuration,
+> the MCP server or Serena-based Agent may fail to start (investigate the MCP logs in the former case).
+> Check the [changelog](CHANGELOG.md)
+> and the configuration templates when updating Serena, adapting your configurations accordingly.
+
+After the initial setup, continue with one of the sections below, depending on how you
 want to use Serena.
 
 ### MCP Server (Claude Desktop)
