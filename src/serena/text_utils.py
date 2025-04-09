@@ -236,8 +236,12 @@ def search_files(
         if paths_exclude_glob and fnmatch(path, paths_exclude_glob):
             log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
             continue
+        try:
+            file_content = content_reader(path)
+        except Exception as e:
+            log.error(f"Error reading file {path}. Skipping.\nError: {e}")
+            continue
 
-        file_content = content_reader(path)
         search_results = search_text(
             pattern,
             file_content,

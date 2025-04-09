@@ -244,10 +244,22 @@ class LanguageServer:
                     processed_patterns.append(line.strip())
 
         # Create a pathspec matcher from the processed patterns
-        self.ignore_spec = pathspec.PathSpec.from_lines(
+        self._ignore_spec = pathspec.PathSpec.from_lines(
             pathspec.patterns.GitWildMatchPattern,
             processed_patterns
         )
+        
+    def get_ignore_spec(self) -> pathspec.PathSpec:
+        """Returns the pathspec matcher for the paths that were configured to be ignored through
+        the multilspy config file and the .gitignore file.
+        
+        This is is a subset of the full language-specific ignore spec that determines
+        which files are relevant for the language server.
+        
+        This matcher is useful for operations outside of the language server,
+        such as when searching for relevant non-language files in the project.
+        """
+        return self._ignore_spec
 
     def should_ignore_path(self, relative_path: str) -> bool:
         """
@@ -288,7 +300,7 @@ class LanguageServer:
             normalized_path = normalized_path + '/'
         
         # Use the pathspec matcher to check if the path matches any ignore pattern
-        if self.ignore_spec.match_file(normalized_path):
+        if self._ignore_spec.match_file(normalized_path):
             return True
         
         return False
@@ -2008,3 +2020,15 @@ class SyncLanguageServer:
         Whether the given path should be ignored.
         """
         return self.language_server.should_ignore_path(relative_path)
+    
+    def get_ignore_spec(self) -> pathspec.PathSpec:
+        """Returns the pathspec matcher for the paths that were configured to be ignored through
+        the multilspy config file and the .gitignore file.
+        
+        This is is a subset of the full language-specific ignore spec that determines
+        which files are relevant for the language server.
+        
+        This matcher is useful for operations outside of the language server,
+        such as when searching for relevant non-language files in the project.
+        """
+        return self.language_server.get_ignore_spec()
