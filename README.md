@@ -3,15 +3,9 @@
   <img src="resources/serena-logo-dark-mode.svg#gh-dark-mode-only" style="width:500px">
 </p>
 
-* :rocket: Serena is a powerful, fully-featured **coding agent that works directly on your codebase**.
-* :wrench: Serena **integrates with existing LLMs**, providing them with essential **semantic code retrieval and editing tools!**
-* :free: Serena is **free to use**. No API keys or subscriptions required!
-
-Q: Can I have a state-of-the-art coding agent without paying (enormous) API costs 
-or constantly purchasing tokens?  
-A: Yes, you can!
-By integrating Serena with your favourite (even free) LLM and thereby enabling it
-to perform coding tasks directly on your codebase.
+* :rocket: Serena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
+* :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure.
+* :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
 
 ### Demonstration
 
@@ -27,14 +21,17 @@ orchestrating tool use.
 
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
-   Serena provides an MCP server which integrates with Claude (and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)).
+   Serena provides an MCP server which integrates with 
+     * Claude Desktop, 
+     * IDEs like VSCode, Cursor or IntelliJ,
+     * and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)
  * by using **Agno – the model-agnostic agent framework**.  
-   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or DeepSeek (with a paid API key)
+   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
    or a free model provided by Ollama, Together or Anyscale.
  * by incorporating Serena's tools into an agent framework of your choice.  
    Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
 
-### Programming Language Support & Semantic Analysis
+### Programming Language Support & Semantic Analysis Capabilities
 
 Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
 language server protocol (LSP). The LSP provides a set of versatile code querying
@@ -80,8 +77,8 @@ Coming soon: Kotlin and Dart.
 
 <!-- toc -->
 
-- [Is It Really Free to Use?](#is-it-really-free-to-use)
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
+- [Free Coding Agents with Serena](#free-coding-agents-with-serena)
 - [Quick Start](#quick-start)
   * [Setup and Configuration](#setup-and-configuration)
   * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
@@ -113,9 +110,25 @@ Coming soon: Kotlin and Dart.
 
 <!-- tocstop -->
 
-## Is It Really Free to Use?
+## What Can I Use Serena For?
 
-Yes! Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
+You can use Serena for any coding tasks – whether it is focussed on analysis, planning, 
+designing new components or refactoring existing ones.
+Since Serena's tools allow an LLM to close the cognitive perception-action loop, 
+agents based on Serena can autonomously carry out coding tasks from start to finish – 
+from the initial analysis to the implementation, testing and, finally, the version
+control system commit.
+
+Serena can read, write and execute code, read logs and the terminal output.
+While we do not necessarily encourage it, "vibe coding" is certainly possible, and if you 
+want to almost feel like "the code no longer exists",
+you may find Serena even more adequate for vibing than an agent inside an IDE
+(since you will have a separate GUI that really lets you forget).
+
+## Free Coding Agents with Serena
+
+Serena can  
+Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
 Presumably, the same will soon be possible with ChatGPT Desktop once support for MCP servers is added.  
 Through Agno, you furthermore have the option to use Serena with a free/open-weights model.
 
@@ -126,14 +139,6 @@ We got tired of having to pay multiple
 IDE-based subscriptions (such as Windsurf or Cursor) that forced us to keep purchasing tokens on top of the chat subscription costs we already had.
 The substantial API costs incurred by tools like Claude Code, Cline, Aider and other API-based tools are similarly unattractive.
 We thus built Serena with the prospect of being able to cancel most other subscriptions.
-
-## What Can I Use Serena For?
-
-You can use Serena for any coding tasks – analyzing, planning, editing and so on.
-Serena can read, write and execute code, read logs and the terminal output. 
-"Vibe coding" is possible, and if you want to almost feel like "the code no longer exists",
- you may find Serena even more adequate for vibing than an agent inside an IDE
-(since you will have a separate GUI that really lets you forget).
 
 ## Quick Start
 
