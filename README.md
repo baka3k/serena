@@ -58,6 +58,7 @@ With Serena, we provide
      * Rust (untested)
      * Kotlin (untested)
      * Dart (untested)
+     * C/C++ (untested)
      
    These languages are supported by the language server library [multilspy](https://github.com/microsoft/multilspy), which Serena uses under the hood.
    But we did not explicitly test whether the support for these languages actually works.
