@@ -23,9 +23,9 @@ class SymbolLocation:
     Represents the (start) location of a symbol identifier
     """
 
-    relative_path: str
+    relative_path: str | None
     """
-    the relative path of the file containing the symbol
+    the relative path of the file containing the symbol; if None, the symbol is defined outside of the project's scope
     """
     line: int | None
     """
@@ -39,13 +39,14 @@ class SymbolLocation:
     """
 
     def __post_init__(self) -> None:
-        self.relative_path = self.relative_path.replace("/", os.path.sep)
+        if self.relative_path is not None:
+            self.relative_path = self.relative_path.replace("/", os.path.sep)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def has_position_in_file(self) -> bool:
-        return self.line is not None and self.column is not None
+        return self.relative_path is not None and self.line is not None and self.column is not None
 
 
 class Symbol(ToStringMixin):
@@ -71,7 +72,7 @@ class Symbol(ToStringMixin):
         return self.s["kind"]
 
     @property
-    def relative_path(self) -> str:
+    def relative_path(self) -> str | None:
         return self.s["location"]["relativePath"]
 
     @property
@@ -239,6 +240,8 @@ class SymbolManager:
         return symbols
 
     def find_by_location(self, location: SymbolLocation) -> Symbol | None:
+        if location.relative_path is None:
+            return None
         symbol_dicts, roots = self.lang_server.request_document_symbols(location.relative_path, include_body=False)
         for symbol_dict in symbol_dicts:
             symbol = Symbol(symbol_dict)
@@ -268,6 +271,7 @@ class SymbolManager:
         """
         if not symbol_location.has_position_in_file():
             raise ValueError("Symbol location does not contain a valid position in a file")
+        assert symbol_location.relative_path is not None
         assert symbol_location.line is not None
         assert symbol_location.column is not None
         symbol_dicts = self.lang_server.request_referencing_symbols(
@@ -301,7 +305,8 @@ class SymbolManager:
     def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
         symbol = self.find_by_location(location)
         if symbol is None:
-            raise ValueError("Symbol not found")
+            raise ValueError("Symbol not found/has no defined location within a file")
+        assert location.relative_path is not None
         with self._edited_file(location.relative_path):
             yield symbol
 
@@ -313,6 +318,7 @@ class SymbolManager:
         :param body: the new body
         """
         with self._edited_symbol_location(location) as symbol:
+            assert location.relative_path is not None
             self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
             self.lang_server.insert_text_at_position(
                 location.relative_path, symbol.body_start_position["line"], symbol.body_start_position["character"], body
@@ -327,6 +333,7 @@ class SymbolManager:
         """
         with self._edited_symbol_location(location) as symbol:
             pos = symbol.body_end_position
+            assert location.relative_path is not None
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
     def insert_before(self, location: SymbolLocation, body: str) -> None:
@@ -338,6 +345,7 @@ class SymbolManager:
         """
         with self._edited_symbol_location(location) as symbol:
             pos = copy(symbol.body_start_position)
+            assert location.relative_path is not None
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
     def insert_at_line(self, relative_path: str, line: int, content: str) -> None:

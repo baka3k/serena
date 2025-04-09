@@ -525,13 +525,7 @@ class LanguageServer:
                     new_item: multilspy_types.Location = {}
                     new_item.update(item)
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-                    try:
-                        # TODO can we use PathUtils.get_relative_path? (same elsewhere!)
-                        new_item["relativePath"] = str(
-                            PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-                        )
-                    except:
-                        new_item["relativePath"] = str(new_item["absolutePath"])
+                    new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     ret.append(multilspy_types.Location(new_item))
                 elif (
                     LSPConstants.ORIGIN_SELECTION_RANGE in item
@@ -542,12 +536,7 @@ class LanguageServer:
                     new_item: multilspy_types.Location = {}
                     new_item["uri"] = item[LSPConstants.TARGET_URI]
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
-                    try:
-                        new_item["relativePath"] = str(
-                            PurePath(os.path.relpath(new_item["absolutePath"], self.repository_root_path))
-                        )
-                    except:
-                        new_item["relativePath"] = str(new_item["absolutePath"])
+                    new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     new_item["range"] = item[LSPConstants.TARGET_SELECTION_RANGE]
                     ret.append(multilspy_types.Location(**new_item))
                 else:
@@ -943,6 +932,7 @@ class LanguageServer:
                 elif os.path.isfile(abs_item_path):
                     _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
 
+                    # TODO: Not sure if this is actually still needed given recent changes to relative path handling
                     def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
                         for node in nodes:
                             path = Path(node["location"]["relativePath"])
