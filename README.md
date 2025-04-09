@@ -63,8 +63,6 @@ With Serena, we provide
 Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
 implementation.
 
-Coming soon: Kotlin and Dart.
-
 
 ## Table of Contents
 
@@ -123,7 +121,6 @@ you may find Serena even more adequate for vibing than an agent inside an IDE
 
 ## Free Coding Agents with Serena
 
-Serena can  
 Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
 Presumably, the same will soon be possible with ChatGPT Desktop once support for MCP servers is added.  
 Through Agno, you furthermore have the option to use Serena with a free/open-weights model.
