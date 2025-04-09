@@ -59,8 +59,14 @@ class Language(str, Enum):
                 return FilenameMatcher("*.go")
             case self.RUBY:
                 return FilenameMatcher("*.rb")
+            case self.CPP:
+                return FilenameMatcher("*.cpp", "*.h", "*.hpp", "*.c", "*.hxx", "*.cc", "*.cxx")
+            case self.KOTLIN:
+                return FilenameMatcher("*.kt", "*.kts")
+            case self.DART:
+                return FilenameMatcher("*.dart")
             case _:
-                raise ValueError
+                raise ValueError(f"Unhandled language: {self}")
 
 
 @dataclass
