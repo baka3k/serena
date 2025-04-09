@@ -199,9 +199,6 @@ necessarily has to be started by the client in order for communication to take p
 In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and 
 therefore needs to be configured with a launch command.
 
-ℹ️ Furthermore note that Serena is always configured *for a single project*. To use it for another, you will have to
-write a new configuration file, adjust the configuration to point to it and then restart the client.
-
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
 ### Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.
