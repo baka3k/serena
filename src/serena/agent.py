@@ -973,15 +973,13 @@ class InsertAtLineTool(Tool):
 
 class CheckOnboardingPerformedTool(Tool):
     """
-    Checks whether the onboarding was already performed.
+    Checks whether project onboarding was already performed.
     """
 
     def apply(self) -> str:
         """
-        Check if onboarding was performed yet.
-        You should always call this tool in the beginning of the conversation,
-        before any question about code or the project is asked.
-        You will call this tool only once per conversation.
+        Checks whether project onboarding was already performed.
+        You should always call this tool before beginning to actually work on a project/after activating a project.
         """
         list_memories_tool = self.agent.get_tool(ListMemoriesTool)
         memories = json.loads(list_memories_tool.apply())
@@ -991,7 +989,7 @@ class CheckOnboardingPerformedTool(Tool):
                 + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
             )
         else:
-            return "Onboarding already performed, no need to perform it again."
+            return json.dumps({"result": "Onboarding already performed.", "available_memories": memories})
 
 
 class OnboardingTool(Tool):

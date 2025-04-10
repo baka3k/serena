@@ -8,9 +8,13 @@ Changes prior to the next official version change will appear here.
     * one-click setup for Cline enabled
     * search for pattern tool can now (optionally) search in the entire project
     * new tool for restarting the language server, in case of other sources of editing apart from Serena
+    * Fix `CheckOnboardingPerformedTool`:
+        * Tool description was incompatible with project change
+        * Returned result was not as useful as it could be (now added list of memories)
 
 * Language Servers:
     * Add further file extensions considered by the language servers for Python (.pyi), JavaScript (.jsx) and TypeScript (.tsx, .jsx)
+    * Updated multilspy, adding support for Kotlin, Dart and C/C++ and several improvements.
     
 
 # 2025-04-07
