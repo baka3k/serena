@@ -514,7 +514,7 @@ class RestartLanguageServerTool(Tool):
         If such editing errors happen, you should suggest using this tool.
         """
         self.agent.reset_language_server()
-        return "OK"
+        return SUCCESS_RESULT
 
 
 class ReadFileTool(Tool):

@@ -1172,7 +1172,7 @@ class LanguageServer:
         return search_files(
             relative_file_paths,
             pattern,
-            content_reader=self.retrieve_full_file_content,
+            file_reader=self.retrieve_full_file_content,
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,
