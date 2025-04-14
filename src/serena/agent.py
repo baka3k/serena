@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable
 from logging import Logger
 from pathlib import Path
-from typing import Any, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, Union, cast
 
 import yaml
 from sensai.util import logging
@@ -23,7 +23,6 @@ from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
-from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 from serena.llm.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.text_utils import search_files
@@ -31,6 +30,9 @@ from serena.util.class_decorators import singleton
 from serena.util.file_system import scan_directory
 from serena.util.inspection import iter_subclasses
 from serena.util.shell import execute_shell_command
+
+if TYPE_CHECKING:
+    from serena.gui_log_viewer import GuiLogViewerHandler
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -164,11 +166,14 @@ class SerenaAgent:
         self.serena_config = SerenaConfig()
 
         # open GUI log window if enabled
-        self._gui_log_handler: GuiLogViewerHandler | None = None
+        self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
         if self.serena_config.gui_log_window_enabled:
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
             else:
+                # even importing on macOS may fail since tkinter is not available by default
+                from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
+
                 log_level = self.serena_config.gui_log_window_level
                 if Logger.root.level > log_level:
                     log.info(f"Root logger level is higher than GUI log level; changing the root logger level to {log_level}")
