@@ -7,12 +7,14 @@ def scan_directory(
     recursive: bool = False,
     relative_to: str | None = None,
     is_ignored_dir: Callable[[str], bool] = lambda x: False,
+    is_ignored_file: Callable[[str], bool] = lambda x: False,
 ) -> tuple[list[str], list[str]]:
     """
     :param path: the path to scan
     :param recursive: whether to recursively scan subdirectories
     :param relative_to: the path to which the results should be relative to; if None, provide absolute paths
     :param is_ignored_dir: a function with which to determine whether the given directory (abs. path) shall be ignored
+    :param is_ignored_file: a function with which to determine whether the given file (abs. path) shall be ignored
     :return: the list of directories and files
     """
     files = []
@@ -31,7 +33,8 @@ def scan_directory(
                 result_path = entry_path
 
             if entry.is_file():
-                files.append(result_path)
+                if not is_ignored_file(entry_path):
+                    files.append(result_path)
             elif entry.is_dir():
                 if not is_ignored_dir(entry_path):
                     directories.append(result_path)

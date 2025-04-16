@@ -597,15 +597,16 @@ class ListDirTool(Tool):
         :return: a JSON object with the names of directories and files within the given directory
         """
 
-        def is_ignored_dir(abs_path: str):
+        def is_ignored_path(abs_path: str):
             rel_path = os.path.relpath(abs_path, self.project_root)
-            return self.language_server.is_ignored_path(rel_path)
+            return self.language_server.is_ignored_path(rel_path, ignore_unsupported_files=False)
 
         dirs, files = scan_directory(
             os.path.join(self.project_root, relative_path),
             relative_to=self.project_root,
             recursive=recursive,
-            is_ignored_dir=is_ignored_dir,
+            is_ignored_dir=is_ignored_path,
+            is_ignored_file=is_ignored_path,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})
