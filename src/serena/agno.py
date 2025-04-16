@@ -15,8 +15,7 @@ from dotenv import load_dotenv
 from sensai.util.logging import LogTime
 
 from serena import serena_root_path
-from serena.agent import SerenaAgent, Tool
-from serena.gui_log_viewer import show_fatal_exception
+from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +91,7 @@ class SerenaAgnoAgentProvider:
                 try:
                     serena_agent = SerenaAgent(project_file)
                 except Exception as e:
-                    show_fatal_exception(e)
+                    show_fatal_exception_safe(e)
                     raise
 
             # Even though we don't want to keep history between sessions,
