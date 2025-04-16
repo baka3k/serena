@@ -24,7 +24,9 @@ Serena can be integrated with an LLM in several ways:
    Serena provides an MCP server which integrates with 
      * Claude Desktop, 
      * IDEs like VSCode, Cursor or IntelliJ,
-     * and [soon also ChatGPT](https://x.com/OpenAIDevs/status/1904957755829481737)
+     * Extensions like Cline or Roo Code
+     * Goose (for a nice CLI experience)
+     * and many others, including [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
  * by using **Agno – the model-agnostic agent framework**.  
    Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
    or a free model provided by Ollama, Together or Anyscale.
@@ -77,6 +79,7 @@ implementation.
   * [Setup and Configuration](#setup-and-configuration)
   * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
   * [Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc)
+  * [Goose](#goose)
   * [Agno Agent](#agno-agent)
   * [Other Agent Frameworks](#other-agent-frameworks)
 - [Serena's Tools and Configuration](#serenas-tools-and-configuration)
@@ -134,6 +137,13 @@ The substantial API costs incurred by tools like Claude Code, Cline, Aider and o
 We thus built Serena with the prospect of being able to cancel most other subscriptions.
 
 ## Quick Start
+
+Serena can be used in various ways, below you will find instructions for selected integrations.
+
+- If you just want to turn Claude into a free-to-use coding agent, we recommend using Serena through Claude Desktop.
+- If you want to use Gemini or any other model and you want a GUI experience, you should use [Agno](#agno-agent). On macOS you can also use the GUI of [goose](#goose).
+- If you prefer using Serena through a CLI, you can use [goose](#goose). There again almost any model is possible.
+- If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
 
 ### Setup and Configuration
 
@@ -220,10 +230,39 @@ e.g., for one of the following reasons:
 The same considerations as in using Serena for Claude Desktop (in particular, tool name collisions) 
 also apply here.
 
+When used in an IDE or extension that has inbuilt AI interactions for coding 
+(which is, really, all of them), Serena's full set of tools may lead to unwanted interactions with
+the clients internal tools that you as the user may have no control over. This holds especially for the editing tools, which you may want to disable for this purpose.
+As we are gaining more experience with Serena used within the various popular clients, we will collect and enhance best practices that enable a smooth experience.
+
+### Goose
+
+[goose](https://github.com/block/goose) is a standalone coding agent which has an integration for MCP servers and offers a CLI (and a GUI on macOS). Using goose is currently the simplest way of running Serena through a CLI with an LLM of your choice.
+
+Follow the instructions [here](https://block.github.io/goose/docs/getting-started/installation/) to install it.
+
+After that, use `goose configure` to add an extension. For adding Serena, choose the option `Command-line Extension`, name it `Serena` and add the following as command:
+
+```
+/abs/path/to/uv run --directory /abs/path/to/serena serena-mcp-server /optional/abs/path/to/project.yml
+```
+
+Since Serena can do all necessary editing and command operations, you should disable the `developer` extension that goose enables by default.
+For that execute
+
+```shell
+goose configure
+```
+again, choose the option `Toggle Extensions`, and make sure Serena is enabled selected while `developer` is not.
+
+That's it. Read through the configuration options of goose to see what you can do with it (which is a lot, like setting different levels of permissions for tool execution).
+
 ### Agno Agent
 
 Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
-(independent of the MCP technology) with a large number of underlying LLMs.
+(independent of the MCP technology) with a large number of underlying LLMs. Agno is currently
+the simplest way of running Serena in a chat GUI with an LLM of your choice 
+(unless you are using a Mac, then you might prefer goose, which requires almost no setup).
 
 While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
 making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
