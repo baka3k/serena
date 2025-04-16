@@ -57,8 +57,8 @@ class TypeScriptLanguageServer(LanguageServer):
         self.server_ready = asyncio.Event()
 
     @override
-    def should_always_ignore(self, dirname: str) -> bool:
-        return super().should_always_ignore(dirname) or dirname in [
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in [
             "node_modules",
             "dist",
             "build",

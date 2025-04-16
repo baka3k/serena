@@ -6,6 +6,7 @@ import inspect
 import json
 import os
 import platform
+import sys
 import traceback
 from abc import ABC
 from collections import defaultdict
@@ -16,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Self, TypeVar, Union, cast
 
 import yaml
 from sensai.util import logging
+from sensai.util.logging import FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
 from multilspy import SyncLanguageServer
@@ -38,6 +40,27 @@ log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 TTool = TypeVar("TTool", bound="Tool")
 SUCCESS_RESULT = "OK"
+
+
+def show_fatal_exception_safe(e: Exception) -> None:
+    """
+    Shows the given exception in the GUI log viewer on the main thread and ensures that the exception is logged or at
+    least printed to stderr.
+    """
+    # Make sure the error is logged (adding a fallback handler which writes to stderr in case there is no other handler)
+    fallback_handler = FallbackHandler(logging.StreamHandler(sys.stderr))
+    Logger.root.addHandler(fallback_handler)
+    log.error(f"Fatal exception: {e}", exc_info=e)
+
+    # attempt to show the error in the GUI
+    try:
+        # NOTE: The import can fail on macOS if Tk is not available (depends on Python interpreter installation, which uv
+        #   used as a base); while tkinter as such is always available, its dependencies can be unavailable on macOS.
+        from serena.gui_log_viewer import show_fatal_exception
+
+        show_fatal_exception(e)
+    except:
+        pass
 
 
 class SerenaConfigError(Exception):
@@ -171,7 +194,8 @@ class SerenaAgent:
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
             else:
-                # even importing on macOS may fail since tkinter is not available by default
+                # even importing on macOS may fail if tkinter dependencies are unavailable (depends on Python interpreter installation
+                # which uv used as a base, unfortunately)
                 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 
                 log_level = self.serena_config.gui_log_window_level
@@ -596,16 +620,19 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
+
+        def is_ignored_path(abs_path: str):
+            rel_path = os.path.relpath(abs_path, self.project_root)
+            return self.language_server.is_ignored_path(rel_path, ignore_unsupported_files=False)
+
         dirs, files = scan_directory(
             os.path.join(self.project_root, relative_path),
             relative_to=self.project_root,
             recursive=recursive,
+            is_ignored_dir=is_ignored_path,
+            is_ignored_file=is_ignored_path,
         )
 
-        # Don't use the scan_directory ignoring mechanism, instead rely on the language server,
-        # which has all information about ignored paths
-        dirs = [d for d in dirs if not self.language_server.should_ignore_path(d)]
-        files = [f for f in files if not self.language_server.should_ignore_path(f)]
         result = json.dumps({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
 

@@ -142,14 +142,14 @@ class EclipseJDTLS(LanguageServer):
         super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java")
     
     @override
-    def should_always_ignore(self, dirname: str) -> bool:
+    def is_ignored_dirname(self, dirname: str) -> bool:
         # Ignore common Java build directories from different build tools:
         # - Maven: target
         # - Gradle: build, .gradle
         # - Eclipse: bin, .settings
         # - IntelliJ IDEA: out, .idea
         # - General: classes, dist, lib
-        return super().should_always_ignore(dirname) or dirname in [
+        return super().is_ignored_dirname(dirname) or dirname in [
             "target",      # Maven
             "build",       # Gradle
             "bin",         # Eclipse

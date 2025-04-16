@@ -111,8 +111,8 @@ class OmniSharp(LanguageServer):
         self.references_available = asyncio.Event()
         
     @override
-    def should_always_ignore(self, dirname: str) -> bool:
-        return super().should_always_ignore(dirname) or dirname in ["bin", "obj"]
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj"]
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
