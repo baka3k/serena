@@ -36,8 +36,8 @@ class JediServer(LanguageServer):
         )
         
     @override
-    def should_always_ignore(self, dirname: str) -> bool:
-        return super().should_always_ignore(dirname) or dirname in ["venv", "__pycache__"]
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["venv", "__pycache__"]
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """

@@ -3,11 +3,13 @@
 Changes prior to the next official version change will appear here.
 
 * Serena core:
-    * bugfix in find_symbol tool (a bug fixed in LS)
-    * merged the two overview tools (for dir and file) int a single one
-    * one-click setup for Cline enabled
-    * search for pattern tool can now (optionally) search in the entire project
-    * new tool for restarting the language server, in case of other sources of editing apart from Serena
+    * Bugfix in `FindSymbolTool` (a bug fixed in LS)
+    * Fix in `ListDirTool`: Do not ignore files with extensions not understood by the language server, only skip ignored directories
+      (error introduced in previous version)
+    * Merged the two overview tools (for directories and files) into a single one: `GetSymbolsOverviewTool`
+    * One-click setup for Cline enabled
+    * `SearchForPatternTool` can now (optionally) search in the entire project
+    * New tool `RestartLanguageServerTool` for restarting the language server (in case of other sources of editing apart from Serena)
     * Fix `CheckOnboardingPerformedTool`:
         * Tool description was incompatible with project change
         * Returned result was not as useful as it could be (now added list of memories)
