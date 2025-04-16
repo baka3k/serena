@@ -44,8 +44,8 @@ class Solargraph(LanguageServer):
         self.server_ready = asyncio.Event()
         
     @override
-    def should_always_ignore(self, dirname: str) -> bool:
-        return super().should_always_ignore(dirname) or dirname in ["vendor"]
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
 
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig, repository_root_path: str) -> str:
         """

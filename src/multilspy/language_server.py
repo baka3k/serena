@@ -91,9 +91,9 @@ class LanguageServer:
     """
 
     # To be overridden and extended by subclasses
-    def should_always_ignore(self, dirname: str) -> bool:
+    def is_ignored_dirname(self, dirname: str) -> bool:
         """
-        A language-specific condition for directories that should be ignored always. For example, venv
+        A language-specific condition for directories that should always be ignored. For example, venv
         in Python and node_modules in JS/TS should be ignored always.
         """
         return dirname.startswith('.')
@@ -282,33 +282,38 @@ class LanguageServer:
         """
         return self._ignore_spec
 
-    def should_ignore_path(self, relative_path: str) -> bool:
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
         """
         Determine if a path should be ignored based on file type
         and ignore patterns.
 
         :param relative_path: Relative path to check
+        :param ignore_unsupported_files: whether files that are not supported source files should be ignored
 
         :return: True if the path should be ignored, False otherwise
         """
-        # Check file extension if it's a file
-        fn_matcher = self.language.get_source_fn_matcher()
         abs_path = os.path.join(self.repository_root_path, relative_path)
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
 
-        if os.path.isfile(abs_path) and not fn_matcher.is_relevant_filename(abs_path):
-            return True
+        # Check file extension if it's a file
+        is_file = os.path.isfile(abs_path)
+        if is_file and ignore_unsupported_files:
+            fn_matcher = self.language.get_source_fn_matcher()
+            if not fn_matcher.is_relevant_filename(abs_path):
+                return True
 
         # Create normalized path for consistent handling
         rel_path = Path(relative_path)
 
         # Check each part of the path against always fulfilled ignore conditions
-        for part in rel_path.parts:
+        dir_parts = rel_path.parts
+        if is_file:
+            dir_parts = dir_parts[:-1]
+        for part in dir_parts:
             if not part:  # Skip empty parts (e.g., from leading '/')
                 continue
-            # Check standard ignores
-            if self.should_always_ignore(part):
+            if self.is_ignored_dirname(part):
                 return True
 
         # Use pathspec for gitignore-style pattern matching
@@ -619,7 +624,7 @@ class LanguageServer:
 
             abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])
             rel_path = Path(abs_path).relative_to(self.repository_root_path)
-            if self.should_ignore_path(str(rel_path)):
+            if self.is_ignored_path(str(rel_path)):
                 self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)
                 continue
 
@@ -893,7 +898,7 @@ class LanguageServer:
             if not os.path.exists(within_abs_path):
                 raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
             if os.path.isfile(within_abs_path):
-                if self.should_ignore_path(within_relative_path):
+                if self.is_ignored_path(within_relative_path):
                     self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
                     return []
                 else:
@@ -905,7 +910,7 @@ class LanguageServer:
             abs_dir_path = self.repository_root_path if dir_path == "." else os.path.join(self.repository_root_path, dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
-            if self.should_ignore_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
+            if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
                 self.logger.log(f"Skipping directory: {dir_path}\n(because it should be ignored)", logging.DEBUG)
                 return []
 
@@ -933,7 +938,7 @@ class LanguageServer:
                 item_path = os.path.join(abs_dir_path, item)
                 abs_item_path = os.path.join(self.repository_root_path, item_path)
                 rel_item_path = str(Path(abs_item_path).resolve().relative_to(self.repository_root_path))
-                if self.should_ignore_path(rel_item_path):
+                if self.is_ignored_path(rel_item_path):
                     self.logger.log(f"Skipping item: {rel_item_path}\n(because it should be ignored)", logging.DEBUG)
                     continue
 
@@ -2066,18 +2071,18 @@ class SyncLanguageServer:
         """
         self.language_server.load_cache()
 
-    def should_always_ignore(self, dirname: str) -> bool:
+    def is_ignored_dirname(self, dirname: str) -> bool:
         """
         A language-specific condition for directories that should be ignored always. For example, venv
         in Python and node_modules in JS/TS should be ignored always.
         """
-        return self.language_server.should_always_ignore(dirname)
+        return self.language_server.is_ignored_dirname(dirname)
 
-    def should_ignore_path(self, relative_path: str) -> bool:
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
         """
         Whether the given path should be ignored.
         """
-        return self.language_server.should_ignore_path(relative_path)
+        return self.language_server.is_ignored_path(relative_path, ignore_unsupported_files=ignore_unsupported_files)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """Returns the pathspec matcher for the paths that were configured to be ignored through

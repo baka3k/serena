@@ -22,12 +22,12 @@ class Gopls(LanguageServer):
     """
     
     @override
-    def should_always_ignore(self, dirname: str) -> bool:
+    def is_ignored_dirname(self, dirname: str) -> bool:
         # For Go projects, we should ignore:
         # - vendor: third-party dependencies vendored into the project
         # - node_modules: if the project has JavaScript components
         # - dist/build: common output directories
-        return super().should_always_ignore(dirname) or dirname in ["vendor", "node_modules", "dist", "build"]
+        return super().is_ignored_dirname(dirname) or dirname in ["vendor", "node_modules", "dist", "build"]
 
     @staticmethod
     def _get_go_version():

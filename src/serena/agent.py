@@ -596,16 +596,18 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
+
+        def is_ignored_dir(abs_path: str):
+            rel_path = os.path.relpath(abs_path, self.project_root)
+            return self.language_server.is_ignored_path(rel_path)
+
         dirs, files = scan_directory(
             os.path.join(self.project_root, relative_path),
             relative_to=self.project_root,
             recursive=recursive,
+            is_ignored_dir=is_ignored_dir,
         )
 
-        # Don't use the scan_directory ignoring mechanism, instead rely on the language server,
-        # which has all information about ignored paths
-        dirs = [d for d in dirs if not self.language_server.should_ignore_path(d)]
-        files = [f for f in files if not self.language_server.should_ignore_path(f)]
         result = json.dumps({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
 
