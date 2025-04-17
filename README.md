@@ -176,13 +176,13 @@ want to use Serena.
        "mcpServers": {
            "serena": {
                "command": "/abs/path/to/uv",
-               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "/abs/path/to/myproject.yml"]
+               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "--project-file", "/abs/path/to/myproject.yml"]
            }
        }
    }
    ```
    
-   :info: The path to the project file is optional if you have set `enable_project_activation` in your configuration,
+   :info: passing the project file is optional if you have set `enable_project_activation` in your configuration,
    as this setting will allow you to simply instruct Claude to activate the project you want to work on.
 
    If you are using paths containing backslashes for paths on Windows 
