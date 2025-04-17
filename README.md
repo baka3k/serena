@@ -257,6 +257,10 @@ again, choose the option `Toggle Extensions`, and make sure Serena is enabled se
 
 That's it. Read through the configuration options of goose to see what you can do with it (which is a lot, like setting different levels of permissions for tool execution).
 
+> Goose does not seem to always properly terminate python processes for MCP servers when a session ends. 
+> You may want to disable the Serena GUI and/or to manually cleanup any running python processes after finishing your work
+> with goose.
+
 ### Agno Agent
 
 Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
