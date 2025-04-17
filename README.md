@@ -87,8 +87,6 @@ implementation.
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
-- [Stability Issues in MCP Client-Server Interactions](#stability-issues-in-mcp-client-server-interactions)
-  * [Serena Logging](#serena-logging)
 - [Onboarding and Memories](#onboarding-and-memories)
 - [Combination with Other MCP Servers](#combination-with-other-mcp-servers)
 - [Recommendations on Using Serena](#recommendations-on-using-serena)
@@ -101,6 +99,8 @@ implementation.
   * [Structuring Your Codebase](#structuring-your-codebase)
   * [Logging, Linting, and Testing](#logging-linting-and-testing)
   * [General Advice](#general-advice)
+- [Troubleshooting](#troubleshooting)
+  * [Serena Logging](#serena-logging)
 - [Acknowledgements](#acknowledgements)
 - [Customizing Serena](#customizing-serena)
 - [Full List of Tools](#full-list-of-tools)
@@ -423,30 +423,6 @@ It is the integration of language servers and the MCP that makes Serena unique
 and so powerful for challenging coding tasks, especially in the context of
 larger codebases.
 
-## Stability Issues in MCP Client-Server Interactions
-
-The support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new developments,
-and we found them to be somewhat unstable. Sometimes, Claude Desktop will crash on a tool execution (with an asyncio error or
-something else of this kind). On the one hand, it can display show error messages that are no of consequence, and on the other, it can fail to
-show error messages when things fail irrecoverably. 
-Yet we expect these stability issues to improve over time.
-
-The working configuration of an MCP server may vary from platform to
-platform and from client to client. We recommend always using absolute paths, as relative paths may be sources of
-errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
-Claude Desktop lets it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
-
-For now, you may have to restart Claude Desktop multiple times, may have to manually cleanup lingering processes,
-and you may experiences freezes in conversations.
-Just try again in the latter case. 
-Feel free to open issues if you encounter setup problems that you cannot solve.
-
-### Serena Logging
-
-To help with troubleshooting, we have written a small GUI utility for logging. We recommend that you enable it
-through the project configuration (`myproject.yml`) if you encounter problems. For Claude Desktop, there are also the MCP logs that can help
-identify issues.
-
 ## Onboarding and Memories
 
 By default, Serena will perform an onboarding process when 
@@ -582,6 +558,29 @@ before actually implementing it, especially for non-trivial task. This helps bot
 better results and in increasing the feeling of control and staying in the loop. You can
 make a detailed plan in one session, where Serena may read a lot of your code to build up the context,
 and then continue with the implementation in another (potentially after creating suitable memories).
+
+
+
+## Troubleshooting
+
+The support for MCP Servers in Claude Desktop and the various MCP Server SDKs are relatively new developments and may display instabilities.
+
+The working configuration of an MCP server may vary from platform to
+platform and from client to client. We recommend always using absolute paths, as relative paths may be sources of
+errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
+a client may make it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
+
+Some clients (like goose) may not properly terminate MCP servers,
+look out for hanging python processes and terminate them 
+manually, if needed.
+
+
+### Serena Logging
+
+To help with troubleshooting, we have written a small GUI utility for logging. For most clients, we recommend that you enable it
+through the project configuration (`myproject.yml`) if you encounter problems. Many clients also write MCP logs that can help identify issues.
+
+The logging GUI may not work for all clients and on all systems. Currently, it does not work on macOS or within VSCode extensions like Cline.
 
 
 ## Acknowledgements
