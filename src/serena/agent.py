@@ -621,7 +621,7 @@ class ListDirTool(Tool):
         :return: a JSON object with the names of directories and files within the given directory
         """
 
-        def is_ignored_path(abs_path: str):
+        def is_ignored_path(abs_path: str) -> bool:
             rel_path = os.path.relpath(abs_path, self.project_root)
             return self.language_server.is_ignored_path(rel_path, ignore_unsupported_files=False)
 
