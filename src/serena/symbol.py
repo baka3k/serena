@@ -317,6 +317,9 @@ class SymbolManager:
         :param location: the location of the symbol to replace
         :param body: the new body
         """
+        # make sure body always ends with at least one newline
+        if not body.endswith("\n"):
+            body += "\n"
         with self._edited_symbol_location(location) as symbol:
             assert location.relative_path is not None
             self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
@@ -331,6 +334,9 @@ class SymbolManager:
         :param location: the location of the symbol after which to add new lines
         :param body: the body of the entity to append
         """
+        # make sure body always ends with at least one newline
+        if not body.endswith("\n"):
+            body += "\n"
         with self._edited_symbol_location(location) as symbol:
             pos = symbol.body_end_position
             assert location.relative_path is not None
@@ -343,6 +349,9 @@ class SymbolManager:
         :param location: the location of the symbol before which to add new lines
         :param body: the body of the entity to insert
         """
+        # make sure body always ends with at least one newline
+        if not body.endswith("\n"):
+            body += "\n"
         with self._edited_symbol_location(location) as symbol:
             pos = copy(symbol.body_start_position)
             assert location.relative_path is not None
