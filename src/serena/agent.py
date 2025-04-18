@@ -1011,7 +1011,10 @@ class CheckOnboardingPerformedTool(Tool):
     def apply(self) -> str:
         """
         Checks whether project onboarding was already performed.
-        You should always call this tool before beginning to actually work on a project/after activating a project.
+        You should always call this tool before beginning to actually work on the project/after activating a project,
+        but after calling the initial instructions tool.
+        If onboarding was already performed, you will receive a list of available memories.
+        Don't read the memories immediately after if not needed, just remember that they exist and that you can read them later.
         """
         list_memories_tool = self.agent.get_tool(ListMemoriesTool)
         memories = json.loads(list_memories_tool.apply())
@@ -1143,9 +1146,7 @@ class ThinkAboutWhetherYouAreDoneTool(Tool):
 
     def apply(self) -> str:
         """
-        Think about whether you are done with the task.
-
-        This tool should ALWAYS be called after you have completed a task or a subtask.
+        Whenever you feel that you are done with what the user has asked for, it is important to call this tool.
         """
         return self.prompt_factory.create_think_about_whether_you_are_done()
 
@@ -1158,8 +1159,8 @@ class SummarizeChangesTool(Tool):
     def apply(self) -> str:
         """
         Summarize the changes you have made to the codebase.
-        This tool should ALWAYS be called after you have fully completed any non-trivial coding task
-        (but after the think_about_whether_you_are_done call).
+        This tool should always be called after you have fully completed any non-trivial coding task,
+        but only after the think_about_whether_you_are_done call.
         """
         return self.prompt_factory.create_summarize_changes()
 
@@ -1319,6 +1320,21 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
             return str(e)
         self.agent.activate_project(project_config)
         return SUCCESS_RESULT
+
+
+class InitialInstructionsTool(Tool):
+    """
+    Gets the initial instructions for the current project.
+    Should only be used in settings where the system prompt cannot be set,
+    e.g. in clients you have no control over, like Claude Desktop.
+    """
+
+    def apply(self) -> str:
+        """
+        Get the initial instructions for the current coding project.
+        You should always call this tool before starting to work (including using any other tool) on any programming task!
+        """
+        return self.agent.prompt_factory.create_system_prompt()
 
 
 def iter_tool_classes() -> Generator[type[Tool], None, None]:
