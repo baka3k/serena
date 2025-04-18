@@ -31,7 +31,6 @@ from serena.text_utils import search_files
 from serena.util.class_decorators import singleton
 from serena.util.file_system import scan_directory
 from serena.util.inspection import iter_subclasses
-from serena.editingtool import EditingTool
 from serena.util.shell import execute_shell_command
 
 if TYPE_CHECKING:
@@ -115,7 +114,6 @@ class ProjectConfig(ToStringMixin):
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
-
 
 
 @singleton
@@ -269,7 +267,6 @@ class SerenaAgent:
             # When project activation is not enabled, we only expose the active tools
             return list(self._active_tools.values())
 
-
     def activate_project(self, project_config: ProjectConfig) -> None:
         log.info(f"Activating {project_config}")
         self.project_config = project_config
@@ -282,13 +279,13 @@ class SerenaAgent:
             log.info(f"Active tools after exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
         else:
             self._active_tools = dict(self._all_tools)
-            
+
         # if read_only mode is enabled, exclude all editing tools
         if self.project_config.read_only:
-            self._active_tools = {
-                key: tool for key, tool in self._active_tools.items() if not key.can_edit()
-            }
-            log.info(f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
+            log.info(
+                f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}"
+            )
 
         # start the language server
         self.reset_language_server()
@@ -301,7 +298,6 @@ class SerenaAgent:
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
-
 
     def get_active_tool_names(self) -> list[str]:
         """
@@ -436,6 +432,16 @@ class Component(ABC):
 _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
+class ToolMarkerCanEdit:
+    """
+    Marker class for all tools that can perform editing operations on files.
+    """
+
+
+class ToolMarkerDoesNotRequireActiveProject:
+    pass
+
+
 class Tool(Component):
     # NOTE: each tool should implement the apply method, which is then used in
     # the central method of the Tool class `apply_ex`.
@@ -461,15 +467,15 @@ class Tool(Component):
         if apply_fn is None:
             raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
         return apply_fn
-        
+
     @classmethod
     def can_edit(cls) -> bool:
         """
         Returns whether this tool can perform editing operations on code.
-        
+
         :return: True if the tool can edit code, False otherwise
         """
-        return issubclass(cls, EditingTool)
+        return issubclass(cls, ToolMarkerCanEdit)
 
     @classmethod
     def get_tool_description(cls) -> str:
@@ -533,13 +539,9 @@ class Tool(Component):
                     f"Error: Tool '{self.get_name()}' is disabled for the active project ('{self.project_config.project_name}'); "
                     f"active tools: {self.agent.get_active_tool_names()}"
                 )
-                
+
             # check if the project is in read-only mode and this is an editing tool
-            if (
-                self.agent.project_config is not None 
-                and self.agent.project_config.read_only 
-                and self.__class__.can_edit()
-            ):
+            if self.agent.project_config is not None and self.agent.project_config.read_only and self.__class__.can_edit():
                 return (
                     f"Error: Tool '{self.get_name()}' cannot be used because the project '{self.project_config.project_name}' "
                     f"is in read-only mode. Editing operations are not allowed."
@@ -559,11 +561,6 @@ class Tool(Component):
             log.info(f"Result: {result}")
 
         return result
-
-
-
-class ToolMarkerDoesNotRequireActiveProject:
-    pass
 
 
 class RestartLanguageServerTool(Tool):
@@ -613,7 +610,7 @@ class ReadFileTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateTextFileTool(Tool, EditingTool):
+class CreateTextFileTool(Tool, ToolMarkerCanEdit):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -865,7 +862,7 @@ class FindReferencingCodeSnippetsTool(Tool):
         return self._limit_length(result_json_str, max_answer_chars)
 
 
-class ReplaceSymbolBodyTool(Tool, EditingTool):
+class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
     """
     Replaces the full definition of a symbol.
     """
@@ -894,7 +891,7 @@ class ReplaceSymbolBodyTool(Tool, EditingTool):
         return SUCCESS_RESULT
 
 
-class InsertAfterSymbolTool(Tool, EditingTool):
+class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -923,7 +920,7 @@ class InsertAfterSymbolTool(Tool, EditingTool):
         return SUCCESS_RESULT
 
 
-class InsertBeforeSymbolTool(Tool, EditingTool):
+class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -952,7 +949,7 @@ class InsertBeforeSymbolTool(Tool, EditingTool):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool, EditingTool):
+class DeleteLinesTool(Tool, ToolMarkerCanEdit):
     """
     Deletes a range of lines within a file.
     """
@@ -979,7 +976,7 @@ class DeleteLinesTool(Tool, EditingTool):
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool, EditingTool):
+class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -1010,7 +1007,7 @@ class ReplaceLinesTool(Tool, EditingTool):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool, EditingTool):
+class InsertAtLineTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content at a given line in a file.
     """
@@ -1282,7 +1279,7 @@ class SearchForPatternTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class ExecuteShellCommandTool(Tool, EditingTool):
+class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
     """
     Executes a shell command.
     """
