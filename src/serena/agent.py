@@ -31,6 +31,7 @@ from serena.text_utils import search_files
 from serena.util.class_decorators import singleton
 from serena.util.file_system import scan_directory
 from serena.util.inspection import iter_subclasses
+from serena.editingtool import EditingTool
 from serena.util.shell import execute_shell_command
 
 if TYPE_CHECKING:
@@ -79,6 +80,7 @@ class ProjectConfig(ToStringMixin):
         self.project_root: str = str(project_root.resolve())
         self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
+        self.read_only: bool = config_dict.get("read_only", False)
 
         if "ignore_all_files_in_gitignore" not in config_dict:
             raise SerenaConfigError(
@@ -113,6 +115,7 @@ class ProjectConfig(ToStringMixin):
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
+
 
 
 @singleton
@@ -260,10 +263,12 @@ class SerenaAgent:
         """
         if self.serena_config.enable_project_activation:
             # With project activation, we must expose all tools and handle tool activation within Serena
-            # (because clients to not react to changed tools)
+            # (because clients do not react to changed tools)
             return list(self._all_tools.values())
         else:
+            # When project activation is not enabled, we only expose the active tools
             return list(self._active_tools.values())
+
 
     def activate_project(self, project_config: ProjectConfig) -> None:
         log.info(f"Activating {project_config}")
@@ -277,6 +282,13 @@ class SerenaAgent:
             log.info(f"Active tools after exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
         else:
             self._active_tools = dict(self._all_tools)
+            
+        # if read_only mode is enabled, exclude all editing tools
+        if self.project_config.read_only:
+            self._active_tools = {
+                key: tool for key, tool in self._active_tools.items() if not key.can_edit()
+            }
+            log.info(f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
         # start the language server
         self.reset_language_server()
@@ -289,6 +301,7 @@ class SerenaAgent:
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
+
 
     def get_active_tool_names(self) -> list[str]:
         """
@@ -448,6 +461,15 @@ class Tool(Component):
         if apply_fn is None:
             raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
         return apply_fn
+        
+    @classmethod
+    def can_edit(cls) -> bool:
+        """
+        Returns whether this tool can perform editing operations on code.
+        
+        :return: True if the tool can edit code, False otherwise
+        """
+        return issubclass(cls, EditingTool)
 
     @classmethod
     def get_tool_description(cls) -> str:
@@ -511,6 +533,17 @@ class Tool(Component):
                     f"Error: Tool '{self.get_name()}' is disabled for the active project ('{self.project_config.project_name}'); "
                     f"active tools: {self.agent.get_active_tool_names()}"
                 )
+                
+            # check if the project is in read-only mode and this is an editing tool
+            if (
+                self.agent.project_config is not None 
+                and self.agent.project_config.read_only 
+                and self.__class__.can_edit()
+            ):
+                return (
+                    f"Error: Tool '{self.get_name()}' cannot be used because the project '{self.project_config.project_name}' "
+                    f"is in read-only mode. Editing operations are not allowed."
+                )
 
             # apply the actual tool
             result = apply_fn(**kwargs)
@@ -526,6 +559,7 @@ class Tool(Component):
             log.info(f"Result: {result}")
 
         return result
+
 
 
 class ToolMarkerDoesNotRequireActiveProject:
@@ -579,7 +613,7 @@ class ReadFileTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateTextFileTool(Tool):
+class CreateTextFileTool(Tool, EditingTool):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -831,7 +865,7 @@ class FindReferencingCodeSnippetsTool(Tool):
         return self._limit_length(result_json_str, max_answer_chars)
 
 
-class ReplaceSymbolBodyTool(Tool):
+class ReplaceSymbolBodyTool(Tool, EditingTool):
     """
     Replaces the full definition of a symbol.
     """
@@ -860,7 +894,7 @@ class ReplaceSymbolBodyTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertAfterSymbolTool(Tool):
+class InsertAfterSymbolTool(Tool, EditingTool):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -889,7 +923,7 @@ class InsertAfterSymbolTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertBeforeSymbolTool(Tool):
+class InsertBeforeSymbolTool(Tool, EditingTool):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -918,7 +952,7 @@ class InsertBeforeSymbolTool(Tool):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool):
+class DeleteLinesTool(Tool, EditingTool):
     """
     Deletes a range of lines within a file.
     """
@@ -945,7 +979,7 @@ class DeleteLinesTool(Tool):
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool):
+class ReplaceLinesTool(Tool, EditingTool):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -976,7 +1010,7 @@ class ReplaceLinesTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool):
+class InsertAtLineTool(Tool, EditingTool):
     """
     Inserts content at a given line in a file.
     """
@@ -1248,7 +1282,7 @@ class SearchForPatternTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class ExecuteShellCommandTool(Tool):
+class ExecuteShellCommandTool(Tool, EditingTool):
     """
     Executes a shell command.
     """
