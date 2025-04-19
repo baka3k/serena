@@ -348,14 +348,9 @@ this should not be a problem.
 However, if you have concerns, you can choose to disable certain commands in your project's 
 .yml configuration file.
 If you only want to use Serena purely for analyzing code and suggesting implementations
-without modifying the codebase, you can consider disabling the editing tools in the configuration, i.e.
-
-  * `create_text_file`
-  * `insert_after_symbol`
-  * `insert_at_line`
-  * `insert_before_symbol`
-  * `replace_symbol_body`
-  * `delete_lines`.
+without modifying the codebase, you can enable read-only mode by setting `read_only: true` in your project configuration file. 
+This will automatically disable all editing tools and prevent any modifications to your codebase while still 
+allowing all analysis and exploration capabilities.
 
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.

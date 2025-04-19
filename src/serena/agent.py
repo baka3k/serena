@@ -79,6 +79,7 @@ class ProjectConfig(ToStringMixin):
         self.project_root: str = str(project_root.resolve())
         self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
         self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
+        self.read_only: bool = config_dict.get("read_only", False)
 
         if "ignore_all_files_in_gitignore" not in config_dict:
             raise SerenaConfigError(
@@ -260,9 +261,10 @@ class SerenaAgent:
         """
         if self.serena_config.enable_project_activation:
             # With project activation, we must expose all tools and handle tool activation within Serena
-            # (because clients to not react to changed tools)
+            # (because clients do not react to changed tools)
             return list(self._all_tools.values())
         else:
+            # When project activation is not enabled, we only expose the active tools
             return list(self._active_tools.values())
 
     def activate_project(self, project_config: ProjectConfig) -> None:
@@ -277,6 +279,13 @@ class SerenaAgent:
             log.info(f"Active tools after exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
         else:
             self._active_tools = dict(self._all_tools)
+
+        # if read_only mode is enabled, exclude all editing tools
+        if self.project_config.read_only:
+            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
+            log.info(
+                f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}"
+            )
 
         # start the language server
         self.reset_language_server()
@@ -423,6 +432,16 @@ class Component(ABC):
 _DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
+class ToolMarkerCanEdit:
+    """
+    Marker class for all tools that can perform editing operations on files.
+    """
+
+
+class ToolMarkerDoesNotRequireActiveProject:
+    pass
+
+
 class Tool(Component):
     # NOTE: each tool should implement the apply method, which is then used in
     # the central method of the Tool class `apply_ex`.
@@ -448,6 +467,15 @@ class Tool(Component):
         if apply_fn is None:
             raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
         return apply_fn
+
+    @classmethod
+    def can_edit(cls) -> bool:
+        """
+        Returns whether this tool can perform editing operations on code.
+
+        :return: True if the tool can edit code, False otherwise
+        """
+        return issubclass(cls, ToolMarkerCanEdit)
 
     @classmethod
     def get_tool_description(cls) -> str:
@@ -512,6 +540,13 @@ class Tool(Component):
                     f"active tools: {self.agent.get_active_tool_names()}"
                 )
 
+            # check if the project is in read-only mode and this is an editing tool
+            if self.agent.project_config is not None and self.agent.project_config.read_only and self.__class__.can_edit():
+                return (
+                    f"Error: Tool '{self.get_name()}' cannot be used because the project '{self.project_config.project_name}' "
+                    f"is in read-only mode. Editing operations are not allowed."
+                )
+
             # apply the actual tool
             result = apply_fn(**kwargs)
 
@@ -526,10 +561,6 @@ class Tool(Component):
             log.info(f"Result: {result}")
 
         return result
-
-
-class ToolMarkerDoesNotRequireActiveProject:
-    pass
 
 
 class RestartLanguageServerTool(Tool):
@@ -579,7 +610,7 @@ class ReadFileTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateTextFileTool(Tool):
+class CreateTextFileTool(Tool, ToolMarkerCanEdit):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -831,7 +862,7 @@ class FindReferencingCodeSnippetsTool(Tool):
         return self._limit_length(result_json_str, max_answer_chars)
 
 
-class ReplaceSymbolBodyTool(Tool):
+class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
     """
     Replaces the full definition of a symbol.
     """
@@ -860,7 +891,7 @@ class ReplaceSymbolBodyTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertAfterSymbolTool(Tool):
+class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -889,7 +920,7 @@ class InsertAfterSymbolTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertBeforeSymbolTool(Tool):
+class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -918,7 +949,7 @@ class InsertBeforeSymbolTool(Tool):
         return SUCCESS_RESULT
 
 
-class DeleteLinesTool(Tool):
+class DeleteLinesTool(Tool, ToolMarkerCanEdit):
     """
     Deletes a range of lines within a file.
     """
@@ -945,7 +976,7 @@ class DeleteLinesTool(Tool):
         return SUCCESS_RESULT
 
 
-class ReplaceLinesTool(Tool):
+class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -976,7 +1007,7 @@ class ReplaceLinesTool(Tool):
         return SUCCESS_RESULT
 
 
-class InsertAtLineTool(Tool):
+class InsertAtLineTool(Tool, ToolMarkerCanEdit):
     """
     Inserts content at a given line in a file.
     """
@@ -1011,7 +1042,10 @@ class CheckOnboardingPerformedTool(Tool):
     def apply(self) -> str:
         """
         Checks whether project onboarding was already performed.
-        You should always call this tool before beginning to actually work on a project/after activating a project.
+        You should always call this tool before beginning to actually work on the project/after activating a project,
+        but after calling the initial instructions tool.
+        If onboarding was already performed, you will receive a list of available memories.
+        Don't read the memories immediately after if not needed, just remember that they exist and that you can read them later.
         """
         list_memories_tool = self.agent.get_tool(ListMemoriesTool)
         memories = json.loads(list_memories_tool.apply())
@@ -1143,9 +1177,7 @@ class ThinkAboutWhetherYouAreDoneTool(Tool):
 
     def apply(self) -> str:
         """
-        Think about whether you are done with the task.
-
-        This tool should ALWAYS be called after you have completed a task or a subtask.
+        Whenever you feel that you are done with what the user has asked for, it is important to call this tool.
         """
         return self.prompt_factory.create_think_about_whether_you_are_done()
 
@@ -1158,8 +1190,8 @@ class SummarizeChangesTool(Tool):
     def apply(self) -> str:
         """
         Summarize the changes you have made to the codebase.
-        This tool should ALWAYS be called after you have fully completed any non-trivial coding task
-        (but after the think_about_whether_you_are_done call).
+        This tool should always be called after you have fully completed any non-trivial coding task,
+        but only after the think_about_whether_you_are_done call.
         """
         return self.prompt_factory.create_summarize_changes()
 
@@ -1247,7 +1279,7 @@ class SearchForPatternTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class ExecuteShellCommandTool(Tool):
+class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
     """
     Executes a shell command.
     """
@@ -1319,6 +1351,21 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
             return str(e)
         self.agent.activate_project(project_config)
         return SUCCESS_RESULT
+
+
+class InitialInstructionsTool(Tool):
+    """
+    Gets the initial instructions for the current project.
+    Should only be used in settings where the system prompt cannot be set,
+    e.g. in clients you have no control over, like Claude Desktop.
+    """
+
+    def apply(self) -> str:
+        """
+        Get the initial instructions for the current coding project.
+        You should always call this tool before starting to work (including using any other tool) on any programming task!
+        """
+        return self.agent.prompt_factory.create_system_prompt()
 
 
 def iter_tool_classes() -> Generator[type[Tool], None, None]:
