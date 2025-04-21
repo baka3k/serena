@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
-from typing import Literal
+from typing import Any, Literal
 
 import click  # Add click import
 from mcp.server.fastmcp import server
@@ -41,6 +41,36 @@ class SerenaMCPRequestContext:
     agent: SerenaAgent
 
 
+def _process_parameter_descriptions(
+    parameters_properties: dict[str, dict[str, Any]],
+    func_doc: str,
+) -> str:
+    """
+    Move the parameter descriptions from the docstring to the parameters properties
+    and return the docstring without the parameter descriptions, but keeping the
+    return description if present.
+    """
+    split_docs = func_doc.split(":param ")
+    split_docs[0] = split_docs[0].strip().strip(".") + "."
+
+    if ":return:" in split_docs[-1]:
+        split_docs[-1], return_doc = split_docs[-1].split(":return:")
+        split_docs[0] = split_docs[0].strip() + " Returns " + return_doc.strip()
+
+    for parameter, properties in parameters_properties.items():
+        if ("description" in properties) or (f":param {parameter}:" not in func_doc):
+            continue
+        for doc in split_docs:
+            if doc.startswith(parameter):
+                param_desc = doc.split(":", 1)[1].strip().strip(".") + "."
+                param_desc = param_desc[0].upper() + param_desc[1:]
+                properties["description"] = param_desc
+                split_docs.remove(doc)
+                break
+
+    return split_docs[0].strip().strip(".") + "."
+
+
 def make_tool(
     tool: Tool,
 ) -> MCPTool:
@@ -55,6 +85,8 @@ def make_tool(
 
     func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
+
+    func_doc = _process_parameter_descriptions(parameters["properties"], func_doc)
 
     def execute_fn(**kwargs) -> str:  # type: ignore
         return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
