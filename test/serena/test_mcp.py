@@ -1,139 +1,200 @@
 """Tests for the mcp.py module in serena."""
 
-from serena.mcp import _process_parameter_descriptions
+import pytest
+from mcp.server.fastmcp.tools.base import Tool as MCPTool
+
+from serena.agent import Tool
+from serena.mcp import make_tool
 
 
-def test_basic_parameter_processing() -> None:
-    """Test basic functionality with parameters and return description."""
-    params_props = {
-        "name": {},
-        "age": {},
-    }
-    func_doc = """This is a test function.
+class BaseMockTool(Tool):
+    """A mock Tool class for testing."""
 
-    :param name: The person's name
-    :param age: The person's age
-    :return: A greeting message
-    """
-
-    result_doc = _process_parameter_descriptions(params_props, func_doc)
-
-    assert "param" not in result_doc
-    assert "Returns A greeting message" in result_doc
-    assert result_doc == "This is a test function. Returns A greeting message."
-    assert params_props["name"]["description"] == "The person's name."
-    assert params_props["age"]["description"] == "The person's age."
+    def __init__(self) -> None:
+        pass
 
 
-def test_no_parameters() -> None:
-    """Test with a docstring that has no parameters."""
-    params_props = {}
-    func_doc = """This is a test function with no parameters.
+class BasicTool(BaseMockTool):
+    """A mock Tool class for testing."""
 
-    :return: A simple result
-    """
+    def apply(self, name: str, age: int = 0) -> str:
+        """This is a test function.
 
-    result_doc = _process_parameter_descriptions(params_props, func_doc)
+        :param name: The person's name
+        :param age: The person's age
+        :return: A greeting message
+        """
+        return f"Hello {name}, you are {age} years old!"
 
-    assert result_doc == "This is a test function with no parameters. Returns A simple result."
-    assert len(params_props) == 0
-
-
-def test_no_return_description() -> None:
-    """Test with a docstring that has no return description."""
-    params_props = {"name": {}}
-    func_doc = """This is a test function.
-
-    :param name: The parameter name
-    """
-
-    result_doc = _process_parameter_descriptions(params_props, func_doc)
-
-    assert result_doc == "This is a test function."
-    assert "description" in params_props["name"]
-    assert params_props["name"]["description"] == "The parameter name."
+    def apply_ex(
+        self,
+        log_call: bool = True,
+        catch_exceptions: bool = True,
+        **kwargs,
+    ) -> str:
+        """Mock implementation of apply_ex."""
+        return self.apply(**kwargs)
 
 
-def test_existing_parameter_description() -> None:
-    """Test when parameters already have descriptions in the properties dict."""
-    params_props = {
-        "name": {"description": "Existing name description"},
-        "age": {},
-    }
-    func_doc = """This is a test function.
+def test_make_tool_basic() -> None:
+    """Test that make_tool correctly creates an MCP tool from a Tool object."""
+    mock_tool = BasicTool()
 
-    :param name: The person's name
-    :param age: The person's age
-    """
+    mcp_tool = make_tool(mock_tool)
 
-    result_doc = _process_parameter_descriptions(params_props, func_doc)
+    # Test that the MCP tool has the correct properties
+    assert isinstance(mcp_tool, MCPTool)
+    assert mcp_tool.name == "basic"
+    assert "This is a test function. Returns A greeting message." in mcp_tool.description
 
-    assert result_doc == "This is a test function."
-    assert params_props["name"]["description"] == "Existing name description"
-    assert params_props["age"]["description"] == "The person's age."
-
-
-def test_parameter_not_in_docstring() -> None:
-    """Test when a parameter in properties is not in the docstring."""
-    params_props = {
-        "name": {},
-        "missing_param": {},
-    }
-    func_doc = """This is a test function.
-
-    :param name: The person's name
-    """
-
-    result_doc = _process_parameter_descriptions(params_props, func_doc)
-
-    assert result_doc == "This is a test function."
-    assert params_props["name"]["description"] == "The person's name."
-    assert "description" not in params_props["missing_param"]
+    # Test that the parameters were correctly processed
+    parameters = mcp_tool.parameters
+    assert "properties" in parameters
+    assert "name" in parameters["properties"]
+    assert "age" in parameters["properties"]
+    assert parameters["properties"]["name"]["description"] == "The person's name."
+    assert parameters["properties"]["age"]["description"] == "The person's age."
 
 
-def test_multiline_docstring() -> None:
-    """Test with a complex multi-line docstring."""
-    params_props = {
-        "project_file_path": {},
-        "host": {},
-        "port": {},
-    }
-    func_doc = """Create an MCP server.
+def test_make_tool_execution() -> None:
+    """Test that the execution function created by make_tool works correctly."""
+    mock_tool = BasicTool()
+    mcp_tool = make_tool(mock_tool)
 
-    This function creates and configures a Model Context Protocol server
-    with the specified settings.
+    # Execute the MCP tool function
+    result = mcp_tool.fn(name="Alice", age=30)
 
-    :param project_file_path: The path to the project file, or None
-    :param host: The host to bind to
-    :param port: The port to bind to
-    :return: A configured FastMCP server instance
-    """
-
-    result_doc = _process_parameter_descriptions(params_props, func_doc)
-
-    assert "param" not in result_doc
-    assert "Returns A configured FastMCP server instance" in result_doc
-    assert params_props["project_file_path"]["description"] == "The path to the project file, or None."
-    assert params_props["host"]["description"] == "The host to bind to."
-    assert params_props["port"]["description"] == "The port to bind to."
+    assert result == "Hello Alice, you are 30 years old!"
 
 
-def test_capitalization_and_periods() -> None:
-    """Test that the function properly capitalizes descriptions and adds periods."""
-    params_props = {
-        "param1": {},
-        "param2": {},
-        "param3": {},
-    }
-    func_doc = """Test function.
+def test_make_tool_no_params() -> None:
+    """Test make_tool with a function that has no parameters."""
 
-    :param param1: lowercase description
-    :param param2: description with period.
-    :param param3: description with Capitalized word.
-    """
+    class NoParamsTool(BaseMockTool):
+        def apply(self) -> str:
+            """This is a test function with no parameters.
 
-    _ = _process_parameter_descriptions(params_props, func_doc)
+            :return: A simple result
+            """
+            return "Simple result"
 
-    assert params_props["param1"]["description"] == "Lowercase description."
-    assert params_props["param2"]["description"] == "Description with period."
-    assert params_props["param3"]["description"] == "Description with Capitalized word."
+        def apply_ex(self, *args, **kwargs) -> str:
+            return self.apply()
+
+    tool = NoParamsTool()
+    mcp_tool = make_tool(tool)
+
+    assert mcp_tool.name == "no_params"
+    assert "This is a test function with no parameters. Returns A simple result." in mcp_tool.description
+    assert mcp_tool.parameters["properties"] == {}
+
+
+def test_make_tool_no_return_description() -> None:
+    """Test make_tool with a function that has no return description."""
+
+    class NoReturnTool(BaseMockTool):
+        def apply(self, param: str) -> str:
+            """This is a test function.
+
+            :param param: The parameter
+            """
+            return f"Processed: {param}"
+
+        def apply_ex(self, *args, **kwargs) -> str:
+            return self.apply(**kwargs)
+
+    tool = NoReturnTool()
+    mcp_tool = make_tool(tool)
+
+    assert mcp_tool.name == "no_return"
+    assert mcp_tool.description == "This is a test function."
+    assert mcp_tool.parameters["properties"]["param"]["description"] == "The parameter."
+
+
+def test_make_tool_parameter_not_in_docstring() -> None:
+    """Test make_tool when a parameter in properties is not in the docstring."""
+
+    class MissingParamTool(BaseMockTool):
+        def apply(self, name: str, missing_param: str = "") -> str:
+            """This is a test function.
+
+            :param name: The person's name
+            """
+            return f"Hello {name}! Missing param: {missing_param}"
+
+        def apply_ex(self, *args, **kwargs) -> str:
+            return self.apply(**kwargs)
+
+    tool = MissingParamTool()
+    mcp_tool = make_tool(tool)
+
+    assert "name" in mcp_tool.parameters["properties"]
+    assert "missing_param" in mcp_tool.parameters["properties"]
+    assert mcp_tool.parameters["properties"]["name"]["description"] == "The person's name."
+    assert "description" not in mcp_tool.parameters["properties"]["missing_param"]
+
+
+def test_make_tool_multiline_docstring() -> None:
+    """Test make_tool with a complex multi-line docstring."""
+
+    class ComplexDocTool(BaseMockTool):
+        def apply(self, project_file_path: str, host: str, port: int) -> str:
+            """Create an MCP server.
+
+            This function creates and configures a Model Context Protocol server
+            with the specified settings.
+
+            :param project_file_path: The path to the project file, or None
+            :param host: The host to bind to
+            :param port: The port to bind to
+            :return: A configured FastMCP server instance
+            """
+            return f"Server config: {project_file_path}, {host}:{port}"
+
+        def apply_ex(self, *args, **kwargs) -> str:
+            return self.apply(**kwargs)
+
+    tool = ComplexDocTool()
+    mcp_tool = make_tool(tool)
+
+    assert "Create an MCP server" in mcp_tool.description
+    assert "Returns A configured FastMCP server instance" in mcp_tool.description
+    assert mcp_tool.parameters["properties"]["project_file_path"]["description"] == "The path to the project file, or None."
+    assert mcp_tool.parameters["properties"]["host"]["description"] == "The host to bind to."
+    assert mcp_tool.parameters["properties"]["port"]["description"] == "The port to bind to."
+
+
+def test_make_tool_capitalization_and_periods() -> None:
+    """Test that make_tool properly handles capitalization and periods in descriptions."""
+
+    class FormatTool(BaseMockTool):
+        def apply(self, param1: str, param2: str, param3: str) -> str:
+            """Test function.
+
+            :param param1: lowercase description
+            :param param2: description with period.
+            :param param3: description with Capitalized word.
+            """
+            return f"Formatted: {param1}, {param2}, {param3}"
+
+        def apply_ex(self, *args, **kwargs) -> str:
+            return self.apply(**kwargs)
+
+    tool = FormatTool()
+    mcp_tool = make_tool(tool)
+
+    assert mcp_tool.parameters["properties"]["param1"]["description"] == "Lowercase description."
+    assert mcp_tool.parameters["properties"]["param2"]["description"] == "Description with period."
+    assert mcp_tool.parameters["properties"]["param3"]["description"] == "Description with Capitalized word."
+
+
+def test_make_tool_missing_apply() -> None:
+    """Test make_tool with a tool that doesn't have an apply method."""
+
+    class BadTool(BaseMockTool):
+        pass
+
+    tool = BadTool()
+
+    with pytest.raises(AttributeError):
+        make_tool(tool)
