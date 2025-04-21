@@ -10,6 +10,7 @@ from logging import Formatter, Logger, StreamHandler
 from typing import Any, Literal
 
 import click  # Add click import
+import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
@@ -41,36 +42,6 @@ class SerenaMCPRequestContext:
     agent: SerenaAgent
 
 
-def _process_parameter_descriptions(
-    parameters_properties: dict[str, dict[str, Any]],
-    func_doc: str,
-) -> str:
-    """
-    Move the parameter descriptions from the docstring to the parameters properties
-    and return the docstring without the parameter descriptions, but keeping the
-    return description if present.
-    """
-    split_docs = func_doc.split(":param ")
-    split_docs[0] = split_docs[0].strip().strip(".") + "."
-
-    if ":return:" in split_docs[-1]:
-        split_docs[-1], return_doc = split_docs[-1].split(":return:")
-        split_docs[0] = split_docs[0].strip() + " Returns " + return_doc.strip()
-
-    for parameter, properties in parameters_properties.items():
-        if ("description" in properties) or (f":param {parameter}:" not in func_doc):
-            continue
-        for doc in split_docs:
-            if doc.startswith(parameter):
-                param_desc = doc.split(":", 1)[1].strip().strip(".") + "."
-                param_desc = param_desc[0].upper() + param_desc[1:]
-                properties["description"] = param_desc
-                split_docs.remove(doc)
-                break
-
-    return split_docs[0].strip().strip(".") + "."
-
-
 def make_tool(
     tool: Tool,
 ) -> MCPTool:
@@ -86,7 +57,22 @@ def make_tool(
     func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
 
-    func_doc = _process_parameter_descriptions(parameters["properties"], func_doc)
+    docstring = docstring_parser.parse(func_doc)
+
+    # Mount the tool description as a combination of the docstring description and
+    # the return value description, if it exists.
+    func_doc = f"{docstring.description.strip().strip('.')}."
+    if (docstring.returns) and (docstring_returns := docstring.returns.description):
+        func_doc = f"{func_doc} Returns {docstring_returns.strip().strip('.')}."
+
+    # Parse the parameter descriptions from the docstring and add pass its description
+    # to the parameters schema.
+    docstring_params = {param.arg_name: param for param in docstring.params}
+    parameters_properties: dict[str, dict[str, Any]] = parameters["properties"]
+    for parameter, properties in parameters_properties.items():
+        if (param_doc := docstring_params.get(parameter)) and (param_doc.description):
+            param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
+            properties["description"] = param_desc[0].upper() + param_desc[1:]
 
     def execute_fn(**kwargs) -> str:  # type: ignore
         return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
