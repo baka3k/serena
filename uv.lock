@@ -971,6 +971,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "agno" },
+    { name = "docstring-parser" },
     { name = "dotenv" },
     { name = "fastmcp" },
     { name = "jinja2" },
@@ -1017,6 +1018,7 @@ requires-dist = [
     { name = "agno", marker = "extra == 'agno'", specifier = ">=1.2.6" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.49.0" },
     { name = "black", extras = ["jupyter"], marker = "extra == 'dev'", specifier = ">=23.7.0" },
+    { name = "docstring-parser", specifier = ">=0.16" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "fastapi", marker = "extra == 'agno'", specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=0.4.1" },
