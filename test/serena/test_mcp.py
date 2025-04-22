@@ -245,6 +245,11 @@ def test_make_tool_all_tools() -> None:
             if tool_class.__name__ == "Tool" or getattr(tool_class, "__abstractmethods__", set()):
                 continue
                 
+            # Skip test mock classes that don't properly implement __init__
+            if tool_class.__name__ in ["BaseMockTool", "BadTool", "NoParamsTool", "NoReturnTool", 
+                                      "MissingParamTool", "ComplexDocTool", "FormatTool", "NoDescriptionTool"]:
+                continue
+                
             # Create an instance of the tool
             tool_instance = tool_class(MockAgent())
             
