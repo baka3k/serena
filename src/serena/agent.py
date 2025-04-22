@@ -644,6 +644,8 @@ class ListDirTool(Tool):
 
     def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
+        Lists files and directories in the given directory (optionally with recursion).
+
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
         :param max_answer_chars: if the output is longer than this number of characters,
@@ -1092,7 +1094,7 @@ class WriteMemoryTool(Tool):
         """
         if len(content) > max_answer_chars:
             raise ValueError(
-                f"Content for {memory_file_name    } is too long. Max length is {max_answer_chars} characters. "
+                f"Content for {memory_file_name} is too long. Max length is {max_answer_chars} characters. "
                 + "Please make the content shorter."
             )
 
