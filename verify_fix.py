@@ -1,7 +1,7 @@
-"""Simple test for the make_tool function."""
+"""Simple script to verify our fix for the make_tool function."""
 
 import docstring_parser
-from typing import Any, Callable
+from typing import Any, Optional
 
 
 def make_tool_simplified(func_doc: str) -> str:
@@ -32,6 +32,7 @@ def test_with_description():
     """
     result = make_tool_simplified(doc)
     assert result == "This is a test function. Returns A greeting message."
+    print("✅ Test with description passed")
 
 
 def test_without_description():
@@ -43,6 +44,7 @@ def test_without_description():
     """
     result = make_tool_simplified(doc)
     assert result == "Returns A greeting message."
+    print("✅ Test without description passed")
 
 
 def test_empty_docstring():
@@ -50,10 +52,24 @@ def test_empty_docstring():
     doc = ""
     result = make_tool_simplified(doc)
     assert result == ""
+    print("✅ Test with empty docstring passed")
+
+
+def test_no_return():
+    """Test with a docstring that has no return description."""
+    doc = """This is a test function.
+
+    :param name: The person's name
+    :param age: The person's age
+    """
+    result = make_tool_simplified(doc)
+    assert result == "This is a test function."
+    print("✅ Test with no return passed")
 
 
 if __name__ == "__main__":
     test_with_description()
     test_without_description()
     test_empty_docstring()
+    test_no_return()
     print("All tests passed!")
