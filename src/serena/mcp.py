@@ -64,9 +64,11 @@ def make_tool(
     if docstring.description:
         func_doc = f"{docstring.description.strip().strip('.')}."
     else:
-        func_doc = "No description available."
+        func_doc = ""
     if (docstring.returns) and (docstring_returns := docstring.returns.description):
-        func_doc = f"{func_doc} Returns {docstring_returns.strip().strip('.')}."
+        # Only add a space before "Returns" if func_doc is not empty
+        prefix = " " if func_doc else ""
+        func_doc = f"{func_doc}{prefix}Returns {docstring_returns.strip().strip('.')}."
 
     # Parse the parameter descriptions from the docstring and add pass its description
     # to the parameters schema.

@@ -218,7 +218,7 @@ def test_make_tool_missing_description() -> None:
     mcp_tool = make_tool(tool)
 
     assert mcp_tool.name == "no_description"
-    assert mcp_tool.description == "No description available. Returns A result."
+    assert mcp_tool.description == "Returns A result."
     assert mcp_tool.parameters["properties"]["param"]["description"] == "The parameter."
 
 
