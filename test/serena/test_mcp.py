@@ -3,7 +3,7 @@
 import pytest
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 
-from serena.agent import Tool
+from serena.agent import Tool, iter_tool_classes
 from serena.mcp import make_tool
 
 
@@ -269,23 +269,7 @@ def is_test_mock_class(tool_class: type) -> bool:
     )
 
 
-def get_real_tool_classes():
-    """Get all non-test, non-abstract tool classes."""
-    from serena.agent import iter_tool_classes
-
-    for tool_class in iter_tool_classes(same_module_only=False):
-        # Skip abstract base classes that can't be instantiated
-        if tool_class.__name__ == "Tool" or getattr(tool_class, "__abstractmethods__", set()):
-            continue
-
-        # Skip test mock classes
-        if is_test_mock_class(tool_class):
-            continue
-
-        yield tool_class
-
-
-@pytest.mark.parametrize("tool_class", list(get_real_tool_classes()))
+@pytest.mark.parametrize("tool_class", list(iter_tool_classes()))
 def test_make_tool_all_tools(tool_class) -> None:
     """Test that make_tool works for all tools in the codebase."""
 

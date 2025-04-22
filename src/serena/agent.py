@@ -1372,11 +1372,10 @@ class InitialInstructionsTool(Tool):
 
 def iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:
     """
-    Iterate over all Tool subclasses.
-    
-    Args:
-        same_module_only: If True, only iterate over tools defined in the same module as the Tool class.
-                         If False, iterate over all Tool subclasses.
+    Iterate over Tool subclasses.
+
+    :param same_module_only: Whether to only iterate over tools defined in the same module as the Tool class
+        or over all subclasses of Tool.
     """
     for tool_class in iter_subclasses(Tool):
         if same_module_only and tool_class.__module__ != Tool.__module__:
