@@ -7,9 +7,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
-from typing import Literal
+from typing import Any, Literal
 
 import click  # Add click import
+import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
@@ -55,6 +56,23 @@ def make_tool(
 
     func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
+
+    docstring = docstring_parser.parse(func_doc)
+
+    # Mount the tool description as a combination of the docstring description and
+    # the return value description, if it exists.
+    func_doc = f"{docstring.description.strip().strip('.')}."
+    if (docstring.returns) and (docstring_returns := docstring.returns.description):
+        func_doc = f"{func_doc} Returns {docstring_returns.strip().strip('.')}."
+
+    # Parse the parameter descriptions from the docstring and add pass its description
+    # to the parameters schema.
+    docstring_params = {param.arg_name: param for param in docstring.params}
+    parameters_properties: dict[str, dict[str, Any]] = parameters["properties"]
+    for parameter, properties in parameters_properties.items():
+        if (param_doc := docstring_params.get(parameter)) and (param_doc.description):
+            param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
+            properties["description"] = param_desc[0].upper() + param_desc[1:]
 
     def execute_fn(**kwargs) -> str:  # type: ignore
         return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
