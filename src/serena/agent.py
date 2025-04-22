@@ -1370,8 +1370,18 @@ class InitialInstructionsTool(Tool):
         return self.agent.prompt_factory.create_system_prompt()
 
 
-def iter_tool_classes() -> Generator[type[Tool], None, None]:
-    return iter_subclasses(Tool)
+def iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:
+    """
+    Iterate over all Tool subclasses.
+    
+    Args:
+        same_module_only: If True, only iterate over tools defined in the same module as the Tool class.
+                         If False, iterate over all Tool subclasses.
+    """
+    for tool_class in iter_subclasses(Tool):
+        if same_module_only and tool_class.__module__ != Tool.__module__:
+            continue
+        yield tool_class
 
 
 def print_tool_overview() -> None:

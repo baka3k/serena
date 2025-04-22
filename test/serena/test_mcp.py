@@ -273,7 +273,7 @@ def get_real_tool_classes():
     """Get all non-test, non-abstract tool classes."""
     from serena.agent import iter_tool_classes
 
-    for tool_class in iter_tool_classes():
+    for tool_class in iter_tool_classes(same_module_only=False):
         # Skip abstract base classes that can't be instantiated
         if tool_class.__name__ == "Tool" or getattr(tool_class, "__abstractmethods__", set()):
             continue
