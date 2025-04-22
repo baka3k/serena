@@ -246,7 +246,7 @@ def test_make_tool_all_tools() -> None:
                 continue
                 
             # Skip test mock classes that don't properly implement __init__
-            if tool_class.__name__ in ["BaseMockTool", "BadTool", "NoParamsTool", "NoReturnTool", 
+            if tool_class.__name__ in ["BaseMockTool", "BasicTool", "BadTool", "NoParamsTool", "NoReturnTool", 
                                       "MissingParamTool", "ComplexDocTool", "FormatTool", "NoDescriptionTool"]:
                 continue
                 
