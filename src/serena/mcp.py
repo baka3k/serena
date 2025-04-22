@@ -61,7 +61,10 @@ def make_tool(
 
     # Mount the tool description as a combination of the docstring description and
     # the return value description, if it exists.
-    func_doc = f"{docstring.description.strip().strip('.')}."
+    if docstring.description:
+        func_doc = f"{docstring.description.strip().strip('.')}."
+    else:
+        func_doc = "No description available."
     if (docstring.returns) and (docstring_returns := docstring.returns.description):
         func_doc = f"{func_doc} Returns {docstring_returns.strip().strip('.')}."
 
