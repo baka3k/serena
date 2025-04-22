@@ -198,3 +198,112 @@ def test_make_tool_missing_apply() -> None:
 
     with pytest.raises(AttributeError):
         make_tool(tool)
+
+
+@pytest.mark.parametrize(
+    "docstring, expected_description",
+    [
+        (
+            """This is a test function.
+
+            :param param: The parameter
+            :return: A result
+            """,
+            "This is a test function. Returns A result.",
+        ),
+        (
+            """
+            :param param: The parameter
+            :return: A result
+            """,
+            "Returns A result.",
+        ),
+        (
+            """
+            :param param: The parameter
+            """,
+            "",
+        ),
+        ("", ""),
+    ],
+)
+def test_make_tool_descriptions(docstring, expected_description) -> None:
+    """Test make_tool with various docstring formats."""
+
+    class TestTool(BaseMockTool):
+        def apply(self, param: str) -> str:
+            return f"Result: {param}"
+
+        def apply_ex(self, *args, **kwargs) -> str:
+            return self.apply(**kwargs)
+
+    # Dynamically set the docstring
+    TestTool.apply.__doc__ = docstring
+
+    tool = TestTool()
+    mcp_tool = make_tool(tool)
+
+    assert mcp_tool.name == "test"
+    assert mcp_tool.description == expected_description
+
+
+def is_test_mock_class(tool_class: type) -> bool:
+    """Check if a class is a test mock class."""
+    # Check if the class is defined in a test module
+    module_name = tool_class.__module__
+    return (
+        module_name.startswith(("test.", "tests."))
+        or "test_" in module_name
+        or tool_class.__name__
+        in [
+            "BaseMockTool",
+            "BasicTool",
+            "BadTool",
+            "NoParamsTool",
+            "NoReturnTool",
+            "MissingParamTool",
+            "ComplexDocTool",
+            "FormatTool",
+            "NoDescriptionTool",
+        ]
+    )
+
+
+def get_real_tool_classes():
+    """Get all non-test, non-abstract tool classes."""
+    from serena.agent import iter_tool_classes
+
+    for tool_class in iter_tool_classes(same_module_only=False):
+        # Skip abstract base classes that can't be instantiated
+        if tool_class.__name__ == "Tool" or getattr(tool_class, "__abstractmethods__", set()):
+            continue
+
+        # Skip test mock classes
+        if is_test_mock_class(tool_class):
+            continue
+
+        yield tool_class
+
+
+@pytest.mark.parametrize("tool_class", list(get_real_tool_classes()))
+def test_make_tool_all_tools(tool_class) -> None:
+    """Test that make_tool works for all tools in the codebase."""
+
+    # Create a mock agent for tool initialization
+    class MockAgent:
+        def __init__(self):
+            self.project_config = None
+            self.serena_config = None
+
+    # Create an instance of the tool
+    tool_instance = tool_class(MockAgent())
+
+    # Try to create an MCP tool from it
+    mcp_tool = make_tool(tool_instance)
+
+    # Basic validation
+    assert isinstance(mcp_tool, MCPTool)
+    assert mcp_tool.name == tool_class.get_name()
+
+    # The description should be a string (either from docstring or default)
+    assert isinstance(mcp_tool.description, str)
