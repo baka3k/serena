@@ -952,14 +952,16 @@ class LanguageServer:
                     # TODO: Not sure if this is actually still needed given recent changes to relative path handling
                     def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
                         for node in nodes:
-                            path = Path(node["location"]["relativePath"])
-                            if path.is_absolute():
-                                try:
-                                    path = path.relative_to(self.repository_root_path)
-                                    node["location"]["relativePath"] = str(path)
-                                except:
-                                    pass
-                            fix_relative_path(node["children"])
+                            if "location" in node and "relativePath" in node["location"]:
+                                path = Path(node["location"]["relativePath"])
+                                if path.is_absolute():
+                                    try:
+                                        path = path.relative_to(self.repository_root_path)
+                                        node["location"]["relativePath"] = str(path)
+                                    except Exception:
+                                        pass
+                            if "children" in node:
+                                fix_relative_path(node["children"])
 
                     fix_relative_path(root_nodes)
 
