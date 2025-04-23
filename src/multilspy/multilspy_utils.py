@@ -18,6 +18,7 @@ from multilspy.multilspy_exceptions import MultilspyException
 from pathlib import PurePath, Path
 from multilspy.multilspy_logger import MultilspyLogger
 
+
 class TextUtils:
     """
     Utilities for text operations.
@@ -67,6 +68,7 @@ class TextUtils:
             c += len(text_to_be_inserted)
         return (l, c)
 
+
 class PathUtils:
     """
     Utilities for platform-agnostic path operations.
@@ -103,6 +105,7 @@ class PathUtils:
         if PurePath(path).drive == PurePath(base_path).drive:
             return str(PurePath(os.path.relpath(path, base_path)))
         return None
+
 
 class FileUtils:
     """
@@ -179,6 +182,7 @@ class FileUtils:
                 if os.path.exists(tmp_file_name):
                     Path.unlink(Path(tmp_file_name))
 
+
 class PlatformId(str, Enum):
     """
     multilspy supported platforms
@@ -195,6 +199,7 @@ class PlatformId(str, Enum):
     LINUX_MUSL_x64 = "linux-musl-x64"
     LINUX_MUSL_arm64 = "linux-musl-arm64"
 
+
 class DotnetVersion(str, Enum):
     """
     multilspy supported dotnet versions
@@ -205,19 +210,22 @@ class DotnetVersion(str, Enum):
     V8 = "8"
     VMONO = "mono"
 
+
 class PlatformUtils:
     """
     This class provides utilities for platform detection and identification.
     """
 
-    @staticmethod
-    def get_platform_id() -> PlatformId:
+    @classmethod
+    def get_platform_id(cls) -> PlatformId:
         """
         Returns the platform id for the current system
         """
         system = platform.system()
         machine = platform.machine()
         bitness = platform.architecture()[0]
+        if system == "Windows" and machine == "":
+            machine = cls._determine_windows_machine_type()
         system_map = {"Windows": "win", "Darwin": "osx", "Linux": "linux"}
         machine_map = {"AMD64": "x64", "x86_64": "x64", "i386": "x86", "i686": "x86", "aarch64": "arm64", "arm64": "arm64"}
         if system in system_map and machine in machine_map:
@@ -229,6 +237,46 @@ class PlatformUtils:
             return PlatformId(platform_id)
         else:
             raise MultilspyException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
+
+    @staticmethod
+    def _determine_windows_machine_type():
+        import ctypes
+        from ctypes import wintypes
+
+        class SYSTEM_INFO(ctypes.Structure):
+            class _U(ctypes.Union):
+                class _S(ctypes.Structure):
+                    _fields_ = [("wProcessorArchitecture", wintypes.WORD),
+                        ("wReserved", wintypes.WORD)]
+                _fields_ = [("dwOemId", wintypes.DWORD),
+                    ("s", _S)]
+                _anonymous_ = ("s",)
+
+            _fields_ = [("u", _U),
+                ("dwPageSize", wintypes.DWORD),
+                ("lpMinimumApplicationAddress", wintypes.LPVOID),
+                ("lpMaximumApplicationAddress", wintypes.LPVOID),
+                ("dwActiveProcessorMask", wintypes.LPVOID),
+                ("dwNumberOfProcessors", wintypes.DWORD),
+                ("dwProcessorType", wintypes.DWORD),
+                ("dwAllocationGranularity", wintypes.DWORD),
+                ("wProcessorLevel", wintypes.WORD),
+                ("wProcessorRevision", wintypes.WORD)]
+            _anonymous_ = ("u",)
+
+        sys_info = SYSTEM_INFO()
+        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))
+
+        arch_map = {
+            9: 'AMD64',
+            5: 'ARM',
+            12: 'arm64',
+            6: 'Intel Itanium-based',
+            0: 'i386',
+        }
+
+        return arch_map.get(sys_info.wProcessorArchitecture, f'Unknown ({sys_info.wProcessorArchitecture})')
+
 
     @staticmethod
     def get_dotnet_version() -> DotnetVersion:
