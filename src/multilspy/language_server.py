@@ -1046,10 +1046,10 @@ class LanguageServer:
         _, document_roots = await self.request_document_symbols(relative_file_path)
         return [
             (
-                root["name"],
-                root["kind"],
-                root["selectionRange"]["start"]["line"], # type: ignore
-                root["selectionRange"]["start"]["character"] # type: ignore
+                root.get("name"),
+                root.get("kind"),
+                root.get("selectionRange", {}).get("start", {}).get("line"), # type: ignore
+                root.get("selectionRange", {}).get("start", {}).get("character"), # type: ignore
             )
             for root in document_roots
         ]
