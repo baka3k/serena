@@ -821,8 +821,10 @@ class LanguageServer:
 
         def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
             item = cast(multilspy_types.UnifiedSymbolInformation, item)
+            absolute_path = os.path.join(self.repository_root_path, relative_file_path)
+            
+            # handle missing entries in location
             if "location" not in item:
-                absolute_path = os.path.join(self.repository_root_path, relative_file_path)
                 uri = pathlib.Path(absolute_path).as_uri()
                 assert "range" in item
                 tree_location = multilspy_types.Location(
@@ -832,8 +834,19 @@ class LanguageServer:
                     relativePath=relative_file_path,
                 )
                 item['location'] = tree_location
+            location = item["location"]
+            if "absolutePath" not in location:
+                location["absolutePath"] = absolute_path
+            if "relativePath" not in location:
+                location["relativePath"] = relative_file_path
             if include_body:
                 item['body'] = self.retrieve_symbol_body(item)
+            # handle missing selectionRange
+            if "selectionRange" not in item:
+                if "range" in item:
+                    item["selectionRange"] = item["range"]
+                else:
+                    item["selectionRange"] = item["location"]["range"]
             item[LSPConstants.CHILDREN] = item.get(LSPConstants.CHILDREN, [])
 
         flat_all_symbol_list: List[multilspy_types.UnifiedSymbolInformation] = []
@@ -1044,15 +1057,20 @@ class LanguageServer:
         Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
         _, document_roots = await self.request_document_symbols(relative_file_path)
-        return [
-            (
-                root["name"],
-                root["kind"],
-                root["selectionRange"]["start"]["line"], # type: ignore
-                root["selectionRange"]["start"]["character"] # type: ignore
-            )
-            for root in document_roots
-        ]
+        result = []
+        for root in document_roots:
+            try:
+                result.append(
+                   ( root["name"],
+                    root["kind"],
+                    root["selectionRange"]["start"]["line"],
+                    root["selectionRange"]["start"]["character"],)
+                )
+            except KeyError as e:
+                raise KeyError(
+                    f"Could not process symbol of name {root.get('name', 'unknown')} in {relative_file_path=}"
+                ) from e
+        return result
 
     async def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """

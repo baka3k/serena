@@ -73,7 +73,10 @@ class ProjectConfig(ToStringMixin):
 
     def __init__(self, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None):
         self.project_name: str = project_name
-        self.language: Language = Language(config_dict["language"])
+        try:
+            self.language: Language = Language(config_dict["language"].lower())
+        except ValueError as e:
+            raise ValueError(f"Invalid language: {config_dict['language']}.\nValid languages are: {[l.value for l in Language]}") from e
         if project_root is None:
             project_root = Path(config_dict["project_root"])
         self.project_root: str = str(project_root.resolve())
