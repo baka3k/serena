@@ -71,6 +71,9 @@ google = [
 [project.urls]
 Homepage = "https://github.com/oraios/serena"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/serena", "src/multilspy"]
+
 [tool.black]
 line-length = 140
 target-version = [
