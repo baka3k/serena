@@ -150,8 +150,17 @@ Serena can be used in various ways, below you will find instructions for selecte
 1. Install `uv` (instructions [here](https://docs.astral.sh/uv/getting-started/installation/))
 2. Clone the repository to `/path/to/serena`.
 3. Copy `serena_config.template.yml` to `serena_config.yml` and adjust settings.
-4. Copy `myproject.template.yml` to `myproject.yml` and adjust the settings specific to your project.
-   (Add one such file for each project you want Serena to work on.)
+   ```shell
+   cp serena_config.template.yml serena_config.yml
+   ```
+4. Copy `project.template.yml` to `project.yml` and adjust the settings specific to your project.
+   (Add one such file for each project you want Serena to work on.) We recommend that you copy
+   it to the `.serena` directory of your project, e.g.,
+  ```shell
+  mkdir -p /myproject/.serena
+  cp project.template.yml /myproject/.serena/project.yml
+  ```
+  though you can also keep it somewhere else.
 5. If you want Serena to dynamically switch between projects, add the list of all project files
    created in the previous step to the `projects` list in `serena_config.yml`.
 
@@ -188,7 +197,17 @@ want to use Serena.
    If you are using paths containing backslashes for paths on Windows 
    (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop. 
+That's it! Save the config and then restart Claude Desktop.
+
+#### Troubleshooting
+
+Some client/OS/setup configurations were reported to cause issues when using Serena with the standard `stdio` protocol, where the MCP server is started by the client application. 
+If you experience such problems, you can start Serena in `sse` mode by running, e.g.,
+
+```shell
+uv run --directory /path/to/serena serena-mcp-server --transport sse --port 9121 --project-file /path/to/project.yml
+```
+(the `--project-file` option is optional). Then configure your client to connect to `http://localhost:9121`.
 
 Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
@@ -210,6 +229,17 @@ In other words, you do not need to start the server yourself. The client applica
 therefore needs to be configured with a launch command.
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
+
+### Claude Code
+
+Serena is a great way to make Claude Code both cheaper and more powerful! We are collecting
+several examples for that and have heard very positive feedback so far. Claude Code users can
+add serena with
+
+```shell
+claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --project-file /path/to/project.yml
+```
+
 
 ### Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.
 
