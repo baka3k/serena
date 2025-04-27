@@ -153,15 +153,14 @@ Serena can be used in various ways, below you will find instructions for selecte
    ```shell
    cp serena_config.template.yml serena_config.yml
    ```
-4. Copy `project.template.yml` to `project.yml` and adjust the settings specific to your project.
-   (Add one such file for each project you want Serena to work on.) We recommend that you copy
+4. Copy `project.template.yml` to `project.yml` and adjust the settings specific to your project
+   (add one such file for each project you want Serena to work on). We recommend that you copy
    it to the `.serena` directory of your project, e.g.,
-  ```shell
-  mkdir -p /myproject/.serena
-  cp project.template.yml /myproject/.serena/project.yml
-  ```
-  though you can also keep it somewhere else.
-5. If you want Serena to dynamically switch between projects, add the list of all project files
+   ```shell
+   mkdir -p /myproject/.serena
+   cp project.template.yml /myproject/.serena/project.yml
+   ```
+6. If you want Serena to dynamically switch between projects, add the list of all project files
    created in the previous step to the `projects` list in `serena_config.yml`.
 
 > ⚠️ **Note:** Serena is under active development. We are continuously adding features, improving stability and the UX.
