@@ -29,13 +29,8 @@ class TestLanguageServerBasics:
         if not user_symbol or "selectionRange" not in user_symbol:
             raise AssertionError("User symbol or its selectionRange not found")
         sel_start = user_symbol["selectionRange"]["start"]
-        sel_end = user_symbol["selectionRange"]["end"]
-        found = False
-        for col in range(sel_start["character"], sel_end["character"] + 1):
-            references = language_server.request_references(file_path, sel_start["line"], col)
-            if len(references) > 1:
-                found = True
-        assert found, "User class should be referenced in multiple files (using selectionRange if present)"
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert len(references) > 1, "User class should be referenced in multiple files (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_references_item_class(self, language_server: SyncLanguageServer):
@@ -49,14 +44,9 @@ class TestLanguageServerBasics:
         if not item_symbol or "selectionRange" not in item_symbol:
             raise AssertionError("Item symbol or its selectionRange not found")
         sel_start = item_symbol["selectionRange"]["start"]
-        sel_end = item_symbol["selectionRange"]["end"]
-        found = False
-        for col in range(sel_start["character"], sel_end["character"] + 1):
-            references = language_server.request_references(file_path, sel_start["line"], col)
-            services_references = [ref for ref in references if "services.py" in ref["uri"]]
-            if len(services_references) > 0:
-                found = True
-        assert found, "At least one reference should be in services.py (using selectionRange if present)"
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        services_references = [ref for ref in references if "services.py" in ref["uri"]]
+        assert len(services_references) > 0, "At least one reference should be in services.py (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_references_function_parameter(self, language_server: SyncLanguageServer):
@@ -70,13 +60,8 @@ class TestLanguageServerBasics:
         if not get_user_symbol or "selectionRange" not in get_user_symbol:
             raise AssertionError("get_user symbol or its selectionRange not found")
         sel_start = get_user_symbol["selectionRange"]["start"]
-        sel_end = get_user_symbol["selectionRange"]["end"]
-        found = False
-        for col in range(sel_start["character"], sel_end["character"] + 1):
-            references = language_server.request_references(file_path, sel_start["line"], col)
-            if len(references) > 0:
-                found = True
-        assert found, "id parameter should be referenced within the method (using selectionRange if present)"
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert len(references) > 0, "id parameter should be referenced within the method (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_references_create_user_method(self, language_server: SyncLanguageServer):
@@ -89,13 +74,8 @@ class TestLanguageServerBasics:
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             raise AssertionError("create_user symbol or its selectionRange not found")
         sel_start = create_user_symbol["selectionRange"]["start"]
-        sel_end = create_user_symbol["selectionRange"]["end"]
-        found = False
-        for col in range(sel_start["character"], sel_end["character"] + 1):
-            references = language_server.request_references(file_path, sel_start["line"], col)
-            if len(references) > 1:
-                found = True
-        assert found, "Should get valid references for create_user (using selectionRange if present)"
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert len(references) > 1, "Should get valid references for create_user (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_retrieve_content_around_line(self, language_server: SyncLanguageServer):

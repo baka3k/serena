@@ -109,13 +109,8 @@ class TestLanguageServerSymbols:
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             raise AssertionError("create_user symbol or its selectionRange not found")
         sel_start = create_user_symbol["selectionRange"]["start"]
-        sel_end = create_user_symbol["selectionRange"]["end"]
-        found = False
-        for col in range(sel_start["character"], sel_end["character"] + 1):
-            ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], col)
-            if len(ref_symbols) > 0:
-                found = True
-        assert found, "No referencing symbols found for create_user (selectionRange)"
+        ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        assert len(ref_symbols) > 0, "No referencing symbols found for create_user (selectionRange)"
 
         # Verify the structure of referencing symbols
         for symbol in ref_symbols:
@@ -136,18 +131,13 @@ class TestLanguageServerSymbols:
         if not user_symbol or "selectionRange" not in user_symbol:
             raise AssertionError("User symbol or its selectionRange not found")
         sel_start = user_symbol["selectionRange"]["start"]
-        sel_end = user_symbol["selectionRange"]["end"]
-        found = False
-        for col in range(sel_start["character"], sel_end["character"] + 1):
-            ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], col)
-            services_references = [
-                symbol
-                for symbol in ref_symbols
-                if "location" in symbol and "uri" in symbol["location"] and "services.py" in symbol["location"]["uri"]
-            ]
-            if len(services_references) > 0:
-                found = True
-        assert found, "No referencing symbols from services.py for User (selectionRange)"
+        ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        services_references = [
+            symbol
+            for symbol in ref_symbols
+            if "location" in symbol and "uri" in symbol["location"] and "services.py" in symbol["location"]["uri"]
+        ]
+        assert len(services_references) > 0, "No referencing symbols from services.py for User (selectionRange)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_referencing_symbols_parameter(self, language_server: SyncLanguageServer):
@@ -160,20 +150,15 @@ class TestLanguageServerSymbols:
         if not get_user_symbol or "selectionRange" not in get_user_symbol:
             raise AssertionError("get_user symbol or its selectionRange not found")
         sel_start = get_user_symbol["selectionRange"]["start"]
-        sel_end = get_user_symbol["selectionRange"]["end"]
-        found = False
-        for col in range(sel_start["character"], sel_end["character"] + 1):
-            ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], col)
-            method_refs = [
-                symbol
-                for symbol in ref_symbols
-                if "location" in symbol
-                and "range" in symbol["location"]
-                and symbol["location"]["range"]["start"]["line"] > sel_start["line"]
-            ]
-            if len(method_refs) > 0:
-                found = True
-        assert found, "No referencing symbols within method body for get_user (selectionRange)"
+        ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        method_refs = [
+            symbol
+            for symbol in ref_symbols
+            if "location" in symbol
+            and "range" in symbol["location"]
+            and symbol["location"]["range"]["start"]["line"] > sel_start["line"]
+        ]
+        assert len(method_refs) > 0, "No referencing symbols within method body for get_user (selectionRange)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_referencing_symbols_none(self, language_server: SyncLanguageServer):
