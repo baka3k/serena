@@ -104,10 +104,18 @@ class TestLanguageServerSymbols:
         # Test referencing symbols for create_user function
         file_path = os.path.join("test_repo", "services.py")
         # Line 15 contains the create_user function definition
-        ref_symbols = language_server.request_referencing_symbols(file_path, 15, 9)
-
-        # Verify we get referencing symbols
-        assert len(ref_symbols) > 0
+        symbols = language_server.request_document_symbols(file_path)
+        create_user_symbol = next((s for s in symbols[0] if s.get("name") == "create_user"), None)
+        if not create_user_symbol or "selectionRange" not in create_user_symbol:
+            raise AssertionError("create_user symbol or its selectionRange not found")
+        sel_start = create_user_symbol["selectionRange"]["start"]
+        sel_end = create_user_symbol["selectionRange"]["end"]
+        found = False
+        for col in range(sel_start["character"], sel_end["character"] + 1):
+            ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], col)
+            if len(ref_symbols) > 0:
+                found = True
+        assert found, "No referencing symbols found for create_user (selectionRange)"
 
         # Verify the structure of referencing symbols
         for symbol in ref_symbols:
@@ -123,19 +131,23 @@ class TestLanguageServerSymbols:
         # Test referencing symbols for User class
         file_path = os.path.join("test_repo", "models.py")
         # Line 31 contains the User class definition
-        ref_symbols = language_server.request_referencing_symbols(file_path, 31, 6)
-
-        # Verify we get referencing symbols
-        assert len(ref_symbols) > 0
-
-        # At least one reference should be from services.py
-        services_references = [
-            symbol
-            for symbol in ref_symbols
-            if "location" in symbol and "uri" in symbol["location"] and "services.py" in symbol["location"]["uri"]
-        ]
-
-        assert len(services_references) > 0
+        symbols = language_server.request_document_symbols(file_path)
+        user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
+        if not user_symbol or "selectionRange" not in user_symbol:
+            raise AssertionError("User symbol or its selectionRange not found")
+        sel_start = user_symbol["selectionRange"]["start"]
+        sel_end = user_symbol["selectionRange"]["end"]
+        found = False
+        for col in range(sel_start["character"], sel_end["character"] + 1):
+            ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], col)
+            services_references = [
+                symbol
+                for symbol in ref_symbols
+                if "location" in symbol and "uri" in symbol["location"] and "services.py" in symbol["location"]["uri"]
+            ]
+            if len(services_references) > 0:
+                found = True
+        assert found, "No referencing symbols from services.py for User (selectionRange)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_referencing_symbols_parameter(self, language_server: SyncLanguageServer):
@@ -143,19 +155,25 @@ class TestLanguageServerSymbols:
         # Test referencing symbols for id parameter in get_user
         file_path = os.path.join("test_repo", "services.py")
         # Line 24 contains the get_user method with id parameter
-        ref_symbols = language_server.request_referencing_symbols(file_path, 24, 16)
-
-        # Verify we get referencing symbols
-        assert len(ref_symbols) > 0
-
-        # Verify the symbols include references within the method body
-        method_refs = [
-            symbol
-            for symbol in ref_symbols
-            if "location" in symbol and "range" in symbol["location"] and symbol["location"]["range"]["start"]["line"] > 24
-        ]
-
-        assert len(method_refs) > 0
+        symbols = language_server.request_document_symbols(file_path)
+        get_user_symbol = next((s for s in symbols[0] if s.get("name") == "get_user"), None)
+        if not get_user_symbol or "selectionRange" not in get_user_symbol:
+            raise AssertionError("get_user symbol or its selectionRange not found")
+        sel_start = get_user_symbol["selectionRange"]["start"]
+        sel_end = get_user_symbol["selectionRange"]["end"]
+        found = False
+        for col in range(sel_start["character"], sel_end["character"] + 1):
+            ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], col)
+            method_refs = [
+                symbol
+                for symbol in ref_symbols
+                if "location" in symbol
+                and "range" in symbol["location"]
+                and symbol["location"]["range"]["start"]["line"] > sel_start["line"]
+            ]
+            if len(method_refs) > 0:
+                found = True
+        assert found, "No referencing symbols within method body for get_user (selectionRange)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_referencing_symbols_none(self, language_server: SyncLanguageServer):

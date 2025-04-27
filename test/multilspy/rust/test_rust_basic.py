@@ -1,6 +1,9 @@
 import os
+
 import pytest
+
 from multilspy.multilspy_config import Language
+
 
 def find_symbol_recursive(symbols, name):
     for symbol in symbols:
@@ -10,6 +13,7 @@ def find_symbol_recursive(symbols, name):
             if find_symbol_recursive(symbol["children"], name):
                 return True
     return False
+
 
 class TestRustLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
@@ -27,7 +31,7 @@ class TestRustLanguageServer:
         sel_end = add_symbol["selectionRange"]["end"]
         found = False
         if sel_start["line"] == sel_end["line"]:
-            for col in range(sel_start["character"], sel_end["character"]+1):
+            for col in range(sel_start["character"], sel_end["character"] + 1):
                 refs = language_server.request_references(file_path, sel_start["line"], col)
                 # f"Raw request_references for add in lib.rs at col {col}: {refs}")
                 if any("main.rs" in ref.get("relativePath", "") for ref in refs):
@@ -65,7 +69,7 @@ class TestRustLanguageServer:
         found = False
         # Try all character positions in the selectionRange (same line, from start to end character)
         if sel_start["line"] == sel_end["line"]:
-            for col in range(sel_start["character"], sel_end["character"]+1):
+            for col in range(sel_start["character"], sel_end["character"] + 1):
                 refs = language_server.request_references(file_path, sel_start["line"], col)
                 # f"References for add in lib.rs at col {col} (selectionRange): {refs}")
                 if any("main.rs" in ref.get("relativePath", "") for ref in refs):
