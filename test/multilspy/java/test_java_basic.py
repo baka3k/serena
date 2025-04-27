@@ -28,7 +28,6 @@ class TestJavaLanguageServer:
         # Use correct Maven/Java file paths
         file_path = os.path.join("src", "main", "java", "test_repo", "Utils.java")
         refs = language_server.request_references(file_path, 4, 20)
-        print(f"References for Utils.printHello: {refs}")
         assert any("Main.java" in ref.get("relativePath", "") for ref in refs), "Main should reference Utils.printHello"
 
         # Dynamically determine the correct line/column for the 'Model' class name
@@ -40,11 +39,25 @@ class TestJavaLanguageServer:
                 model_symbol = sym
                 break
         assert model_symbol is not None, "Could not find 'Model' class symbol in Model.java"
-        rng = model_symbol["range"]["start"]
-        print(f"Model symbol range: {model_symbol['range']}")
-        refs = language_server.request_references(file_path, rng["line"], rng["character"])
-        print(f"References for Model class: {refs}")
-        assert any("Main.java" in ref.get("relativePath", "") for ref in refs), "Main should reference Model"
+        # Use selectionRange if present, otherwise fall back to range
+        if "selectionRange" in model_symbol:
+            sel_start = model_symbol["selectionRange"]["start"]
+            sel_end = model_symbol["selectionRange"]["end"]
+        else:
+            sel_start = model_symbol["range"]["start"]
+            sel_end = model_symbol["range"]["end"]
+        found = False
+        if sel_start["line"] == sel_end["line"]:
+            for col in range(sel_start["character"], sel_end["character"] + 1):
+                refs = language_server.request_references(file_path, sel_start["line"], col)
+                if any("Main.java" in ref.get("relativePath", "") for ref in refs):
+                    found = True
+        else:
+            refs_start = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+            refs_end = language_server.request_references(file_path, sel_end["line"], sel_end["character"])
+            if any("Main.java" in ref.get("relativePath", "") for ref in refs_start + refs_end):
+                found = True
+        assert found, "Main should reference Model (tried all positions in selectionRange)"
 
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_overview_methods(self, language_server):

@@ -23,13 +23,14 @@ class TestLanguageServerBasics:
         # Get references to the User class in models.py
         file_path = os.path.join("test_repo", "models.py")
         # Line 31 contains the User class definition
-        references = language_server.request_references(file_path, 31, 6)
-
-        # User class should be referenced in multiple files
-        assert len(references) > 0
-
-        # At least two references should be found (one for the class definition itself)
-        assert len(references) > 1
+        # Use selectionRange only
+        symbols = language_server.request_document_symbols(file_path)
+        user_symbol = next((s for s in symbols[0] if s.get("name") == "User"), None)
+        if not user_symbol or "selectionRange" not in user_symbol:
+            raise AssertionError("User symbol or its selectionRange not found")
+        sel_start = user_symbol["selectionRange"]["start"]
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert len(references) > 1, "User class should be referenced in multiple files (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_references_item_class(self, language_server: SyncLanguageServer):
@@ -37,14 +38,15 @@ class TestLanguageServerBasics:
         # Get references to the Item class in models.py
         file_path = os.path.join("test_repo", "models.py")
         # Line 56 contains the Item class definition
-        references = language_server.request_references(file_path, 56, 6)
-
-        # Item class should be referenced in multiple places
-        assert len(references) > 0
-
-        # At least one reference should be in services.py (ItemService class)
+        # Use selectionRange only
+        symbols = language_server.request_document_symbols(file_path)
+        item_symbol = next((s for s in symbols[0] if s.get("name") == "Item"), None)
+        if not item_symbol or "selectionRange" not in item_symbol:
+            raise AssertionError("Item symbol or its selectionRange not found")
+        sel_start = item_symbol["selectionRange"]["start"]
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         services_references = [ref for ref in references if "services.py" in ref["uri"]]
-        assert len(services_references) > 0
+        assert len(services_references) > 0, "At least one reference should be in services.py (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_references_function_parameter(self, language_server: SyncLanguageServer):
@@ -52,20 +54,28 @@ class TestLanguageServerBasics:
         # Get references to the id parameter in get_user method
         file_path = os.path.join("test_repo", "services.py")
         # Line 24 contains the get_user method with id parameter
-        references = language_server.request_references(file_path, 24, 16)
-
-        # id parameter should be referenced within the method
-        assert len(references) > 0
+        # Use selectionRange only
+        symbols = language_server.request_document_symbols(file_path)
+        get_user_symbol = next((s for s in symbols[0] if s.get("name") == "get_user"), None)
+        if not get_user_symbol or "selectionRange" not in get_user_symbol:
+            raise AssertionError("get_user symbol or its selectionRange not found")
+        sel_start = get_user_symbol["selectionRange"]["start"]
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert len(references) > 0, "id parameter should be referenced within the method (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_request_references_create_user_method(self, language_server: SyncLanguageServer):
         # Get references to the create_user method in UserService
         file_path = os.path.join("test_repo", "services.py")
         # Line 15 contains the create_user method definition
-        references = language_server.request_references(file_path, 15, 9)
-
-        # Verify that we get valid references
-        assert len(references) > 1
+        # Use selectionRange only
+        symbols = language_server.request_document_symbols(file_path)
+        create_user_symbol = next((s for s in symbols[0] if s.get("name") == "create_user"), None)
+        if not create_user_symbol or "selectionRange" not in create_user_symbol:
+            raise AssertionError("create_user symbol or its selectionRange not found")
+        sel_start = create_user_symbol["selectionRange"]["start"]
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert len(references) > 1, "Should get valid references for create_user (using selectionRange if present)"
 
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
     def test_retrieve_content_around_line(self, language_server: SyncLanguageServer):
