@@ -90,7 +90,14 @@ class PathUtils:
         parsed = urlparse(uri)
         host = "{0}{0}{mnt}{0}".format(os.path.sep, mnt=parsed.netloc)
         return os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
-    
+
+    @staticmethod
+    def path_to_uri(path: str) -> str:
+        """
+        Converts a file path to a file URI (file:///...).
+        """
+        return str(Path(path).absolute().as_uri())
+
     @staticmethod
     def is_glob_pattern(pattern: str) -> bool:
         """Check if a pattern contains glob-specific characters."""
