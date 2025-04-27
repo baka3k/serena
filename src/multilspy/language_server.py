@@ -592,30 +592,42 @@ class LanguageServer:
         :param line: The line number of the symbol
         :param column: The column number of the symbol
 
+        :return: A list of locations where the symbol is referenced (excluding ignored directories)
         """
-        try:
-            response = await self.server.send.references(
-                {
-                    "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
-                    "position": {"line": line, "character": column},
-                    "context": {"includeDeclaration": False},
-                }
+        
+        if not self.server_started:
+            self.logger.log(
+                "request_references called before Language Server started",
+                logging.ERROR,
             )
-        except Exception as e:
-            # Catch LSP internal error (-32603) and raise a more informative exception
-            from multilspy.lsp_protocol_handler.server import Error
-            if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
-                raise RuntimeError(
-                    f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "
-                    "This often occurs when requesting references for a symbol not referenced in the expected way. "
-                    "Please check your test setup and ensure the symbol is referenced in your code."
-                ) from e
-            raise
+            raise MultilspyException("Language Server not started")
+
+
+        with self.open_file(relative_file_path):
+            try:
+                response = await self.server.send.references(
+                    {
+                        "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
+                        "position": {"line": line, "character": column},
+                        "context": {"includeDeclaration": False},
+                    }
+                )
+            except Exception as e:
+                # Catch LSP internal error (-32603) and raise a more informative exception
+                from multilspy.lsp_protocol_handler.server import Error
+                if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
+                    raise RuntimeError(
+                        f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "
+                        "This often occurs when requesting references for a symbol not referenced in the expected way. "
+                    ) from e
+                raise
         if response is None:
             return []
 
-        ret = []
+        ret: List[multilspy_types.Location] = []
+        assert isinstance(response, list), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
         for item in response:
+            assert isinstance(item, dict), f"Unexpected response from Language Server (expected dict, got {type(item)}): {item}"
             assert LSPConstants.URI in item
             assert LSPConstants.RANGE in item
 
@@ -1727,7 +1739,6 @@ class SyncLanguageServer:
                 raise RuntimeError(
                     f"LSP internal error (-32603) when requesting references for {file_path}:{line}:{column}. "
                     "This often occurs when requesting references for a symbol not referenced in the expected way. "
-                    "Please check your test setup and ensure the symbol is referenced in your code."
                 ) from e
             raise
         return result
