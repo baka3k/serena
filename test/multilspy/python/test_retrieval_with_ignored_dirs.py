@@ -6,10 +6,11 @@ import pytest
 from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
+from test.conftest import get_repo_path
 
 
 @pytest.fixture(scope="module")
-def ls_with_ignored_dirs(repo_path: Path) -> Generator[SyncLanguageServer, None, None]:
+def ls_with_ignored_dirs() -> Generator[SyncLanguageServer, None, None]:
     """Fixture to set up an LS for the python test repo with the 'scripts' directory ignored."""
     config = MultilspyConfig(
         code_language=Language.PYTHON,
@@ -17,6 +18,7 @@ def ls_with_ignored_dirs(repo_path: Path) -> Generator[SyncLanguageServer, None,
         ignored_paths=["scripts", "custom_test"],  # Configure the relative path to be ignored
     )
     logger = MultilspyLogger()
+    repo_path = get_repo_path(Language.PYTHON)
     ls = SyncLanguageServer.create(config, logger, str(repo_path))
     ls.start()
     try:
@@ -25,6 +27,7 @@ def ls_with_ignored_dirs(repo_path: Path) -> Generator[SyncLanguageServer, None,
         ls.stop()
 
 
+@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory."""
     root = ls_with_ignored_dirs.request_full_symbol_tree()[0]
@@ -33,6 +36,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
     assert children_names == {"test_repo", "examples"}
 
 
+@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
     """Tests that find_references ignores the configured directory."""
     # Location of Item, which is referenced in scripts
@@ -46,6 +50,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
     assert not any("scripts" in ref["relativePath"] for ref in references)
 
 
+@pytest.mark.parametrize("repo_path", [Language.PYTHON], indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     config = MultilspyConfig(

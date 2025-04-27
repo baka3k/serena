@@ -5,8 +5,8 @@ it assumes that you already have a serena_config.yml file setup.
 """
 
 import json
-from pprint import pprint
 from pathlib import Path
+from pprint import pprint
 
 from serena.agent import *
 
@@ -16,11 +16,11 @@ if __name__ == "__main__":
     agent = SerenaAgent(project_file_path=str(project_root / ".serena" / "project.yml"))
     overview_tool = agent.get_tool(GetSymbolsOverviewTool)
     find_symbol_tool = agent.get_tool(FindSymbolTool)
-    
+
     print("Getting an overview of the util package\n")
     pprint(json.loads(overview_tool.apply("src/serena/util")))
-    
+
     print("\n\n")
-    
+
     print("Finding the symbol 'SerenaAgent'\n")
     pprint(json.loads(find_symbol_tool.apply("SerenaAgent")))
