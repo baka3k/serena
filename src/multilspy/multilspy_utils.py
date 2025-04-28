@@ -17,6 +17,7 @@ from enum import Enum
 from multilspy.multilspy_exceptions import MultilspyException
 from pathlib import PurePath, Path
 from multilspy.multilspy_logger import MultilspyLogger
+from multilspy.multilspy_types import UnifiedSymbolInformation
 
 
 class TextUtils:
@@ -322,3 +323,13 @@ class PlatformUtils:
             except (FileNotFoundError, subprocess.CalledProcessError):
                 raise MultilspyException("dotnet or mono not found on the system")
 
+
+class SymbolUtils:
+    @staticmethod
+    def symbol_tree_contains_name(roots: list[UnifiedSymbolInformation], name: str) -> bool:
+        for symbol in roots:
+            if symbol["name"] == name:
+                return True
+            if SymbolUtils.symbol_tree_contains_name(symbol["children"], name):
+                return True
+        return False
