@@ -32,6 +32,7 @@ from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
 from .lsp_protocol_handler.lsp_types import SymbolKind
 from .lsp_protocol_handler.server import (
+    Error,
     LanguageServerHandler,
     ProcessLaunchInfo,
 )
@@ -614,7 +615,6 @@ class LanguageServer:
                 )
             except Exception as e:
                 # Catch LSP internal error (-32603) and raise a more informative exception
-                from multilspy.lsp_protocol_handler.server import Error
                 if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
                     raise RuntimeError(
                         f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "

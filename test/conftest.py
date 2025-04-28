@@ -59,7 +59,7 @@ def language_server(request: LanguageParamRequest):
     Example:
     ```
     @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
-    def test_python_server(language_server):
+    def test_python_server(language_server: SyncLanguageServer) -> None:
         # Use the Python language server
         pass
     ```
@@ -67,7 +67,7 @@ def language_server(request: LanguageParamRequest):
     You can also test multiple languages in a single test:
     ```
     @pytest.mark.parametrize("language_server", [Language.PYTHON, Language.TYPESCRIPT], indirect=True)
-    def test_multiple_languages(language_server):
+    def test_multiple_languages(language_server: SyncLanguageServer) -> None:
         # This test will run once for each language
         pass
     ```
