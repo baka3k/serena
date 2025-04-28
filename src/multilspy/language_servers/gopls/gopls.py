@@ -161,7 +161,9 @@ class Gopls(LanguageServer):
     ) -> List[multilspy_types.Location]:
         NUM_COLS_TO_TRY = 10
         """selectionRange in Gopls always return the wrong column, 
-        the one at the beginnning of the declaration instead of the symbol. We do a dirty hack here."""
+        the one at the beginnning of the declaration instead of the symbol. We do a dirty hack here.
+        See https://github.com/golang/go/issues/73521
+        """
         actual_column = column
         for actual_column in range(column, column+NUM_COLS_TO_TRY):
             try:
