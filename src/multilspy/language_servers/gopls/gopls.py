@@ -154,3 +154,18 @@ class Gopls(LanguageServer):
 
             await self.server.shutdown()
             await self.server.stop()
+
+    @override
+    async def request_references(
+        self, relative_file_path: str, line: int, column: int
+    ) -> List[multilspy_types.Location]:
+        NUM_COLS_TO_TRY = 10
+        """selectionRange in Gopls always return the wrong column, 
+        the one at the beginnning of the declaration instead of the symbol. We do a dirty hack here."""
+        actual_column = column
+        for actual_column in range(column, column+NUM_COLS_TO_TRY):
+            try:
+                return await super().request_references(relative_file_path, line, actual_column)
+            except (Error, RuntimeError, MultilspyException) as e:
+                self.logger.log(f"Cannot find symbol at {line=}, column={actual_column}, trying to bump column by 1", logging.INFO)
+        raise RuntimeError(f"Failed to find references for symbol at {line=}, {column=}")
