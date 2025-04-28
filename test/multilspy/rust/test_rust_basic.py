@@ -1,10 +1,10 @@
 import os
 
 import pytest
-from conftest import symbol_tree_contains_name
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language
+from multilspy.multilspy_utils import SymbolUtils
 
 
 class TestRustLanguageServer:
@@ -28,8 +28,8 @@ class TestRustLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
     def test_find_symbol(self, language_server: SyncLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
-        assert symbol_tree_contains_name(symbols, "main"), "main function not found in symbol tree"
-        assert symbol_tree_contains_name(symbols, "add"), "add function not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main function not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add function not found in symbol tree"
         # Add more as needed based on test_repo
 
     @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
@@ -52,5 +52,5 @@ class TestRustLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
     def test_overview_methods(self, language_server: SyncLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
-        assert symbol_tree_contains_name(symbols, "main"), "main missing from overview"
-        assert symbol_tree_contains_name(symbols, "add"), "add missing from overview"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main missing from overview"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add missing from overview"

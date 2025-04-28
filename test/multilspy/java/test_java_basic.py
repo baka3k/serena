@@ -1,19 +1,19 @@
 import os
 
 import pytest
-from conftest import symbol_tree_contains_name
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language
+from multilspy.multilspy_utils import SymbolUtils
 
 
 class TestJavaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_find_symbol(self, language_server: SyncLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
-        assert symbol_tree_contains_name(symbols, "Main"), "Main class not found in symbol tree"
-        assert symbol_tree_contains_name(symbols, "Utils"), "Utils class not found in symbol tree"
-        assert symbol_tree_contains_name(symbols, "Model"), "Model class not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main class not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils class not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model class not found in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_find_referencing_symbols(self, language_server: SyncLanguageServer) -> None:
@@ -44,6 +44,6 @@ class TestJavaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_overview_methods(self, language_server: SyncLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
-        assert symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
-        assert symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
-        assert symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"

@@ -1,19 +1,19 @@
 import os
 
 import pytest
-from conftest import symbol_tree_contains_name
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language
+from multilspy.multilspy_utils import SymbolUtils
 
 
 class TestTypescriptLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
     def test_find_symbol(self, language_server: SyncLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
-        assert symbol_tree_contains_name(symbols, "DemoClass"), "DemoClass not found in symbol tree"
-        assert symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
-        assert symbol_tree_contains_name(symbols, "printValue"), "printValue method not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "DemoClass"), "DemoClass not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "printValue"), "printValue method not found in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
     def test_find_referencing_symbols(self, language_server: SyncLanguageServer) -> None:

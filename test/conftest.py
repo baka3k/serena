@@ -5,7 +5,6 @@ import pytest
 from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_types import UnifiedSymbolInformation
 
 
 @pytest.fixture(scope="session")
@@ -84,12 +83,3 @@ def language_server(request: LanguageParamRequest):
         yield server
     finally:
         server.stop()
-
-
-def symbol_tree_contains_name(roots: list[UnifiedSymbolInformation], name: str) -> bool:
-    for symbol in roots:
-        if symbol["name"] == name:
-            return True
-        if symbol_tree_contains_name(symbol["children"], name):
-            return True
-    return False
