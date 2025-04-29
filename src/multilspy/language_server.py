@@ -575,7 +575,7 @@ class LanguageServer:
 
         return ret
 
-    # For some reason, the LS may need longer to process this, so we just retry
+    # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
     async def _send_references_request(self, relative_file_path: str, line: int, column: int):
         return await self.server.send.references(
             {
