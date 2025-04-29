@@ -11,7 +11,7 @@ import traceback
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable
-from dataclasses import field
+from dataclasses import dataclass, field
 from logging import Logger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, TypeVar, Union, cast
@@ -67,10 +67,6 @@ class SerenaConfigError(Exception):
     pass
 
 
-import logging
-from dataclasses import dataclass
-
-
 @dataclass
 class ProjectConfig(ToStringMixin):
     project_name: str
@@ -83,6 +79,10 @@ class ProjectConfig(ToStringMixin):
 
     SERENA_MANAGED_DIR = ".serena"
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+
+    @classmethod
+    def rel_path_to_project_yml(cls):
+        return os.path.join(cls.SERENA_MANAGED_DIR, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
     def from_config_dict(cls, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None) -> Self:
@@ -128,12 +128,12 @@ class ProjectConfig(ToStringMixin):
         )
 
     @classmethod
-    def from_yml(cls, yml_path: Path) -> Self:
+    def _from_yml(cls, yml_path: Path) -> Self:
         """
         Create a ProjectConfig instance from a YAML file
         """
         log.info(f"Loading project configuration from {yml_path}")
-        if not os.path.exists(yml_path):
+        if not yml_path.exists():
             raise FileNotFoundError(f"Project file not found: {yml_path}")
         try:
             with open(yml_path, encoding="utf-8") as f:
@@ -148,16 +148,30 @@ class ProjectConfig(ToStringMixin):
         except Exception as e:
             raise ValueError(f"Error loading project configuration from {yml_path}: {e}") from e
 
+    @classmethod
+    def from_path(cls, path: Path | str) -> Self:
+        """
+        Create a ProjectConfig instance from a path. Can either be a path to a yaml file or a directory
+        containing `.serena/project.yml`.
+        """
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path}")
+        if path.is_dir():
+            path = path / cls.SERENA_MANAGED_DIR / cls.SERENA_DEFAULT_PROJECT_FILE
+        return cls._from_yml(path)
+
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
 
 
+@dataclass
 class SerenaConfig:
     """
     Handles user-defined Serena configuration based on the configuration file
     """
 
-    projects: dict[str, "ProjectConfig"] = field(default_factory=dict)
+    projects: dict[str, ProjectConfig] = field(default_factory=dict)
     project_names: list[str] = field(default_factory=list)
     gui_log_window_enabled: bool = False
     gui_log_window_level: int = logging.INFO
@@ -197,7 +211,7 @@ class SerenaConfig:
             if not project_config_path.is_file():
                 raise FileNotFoundError(f"Project file not found: {project_config_path}")
             log.info(f"Loading project configuration from {project_config_path}")
-            project_config = ProjectConfig.from_yml(project_config_path)
+            project_config = ProjectConfig.from_path(project_config_path)
             projects[project_config.project_name] = project_config
 
         instance.projects = projects
@@ -233,7 +247,7 @@ class LinesRead:
 class SerenaAgent:
     def __init__(
         self,
-        project_config: ProjectConfig | str | None = None,
+        project_config: ProjectConfig | str | Path | None = None,
         project_activation_callback: Callable[[], None] | None = None,
         serena_config: SerenaConfig | None = None,
     ) -> None:
@@ -246,7 +260,7 @@ class SerenaAgent:
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
         """
         # obtain serena configuration
-        self.serena_config = serena_config | SerenaConfig.from_config_file()
+        self.serena_config = serena_config or SerenaConfig.from_config_file()
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
@@ -298,19 +312,17 @@ class SerenaAgent:
         # activate a project configuration (if provided or if there is only a single project available)
         project_config_to_load: ProjectConfig | None = None
         if project_config is not None:
-            if isinstance(project_config, str):
-                project_config_to_load = ProjectConfig.from_yml(Path(project_config))
-            elif isinstance(project_config, ProjectConfig):
-                project_config_to_load = project_config
+            if isinstance(project_config, (str, Path)):
+                project_config_to_load = ProjectConfig.from_path(project_config)
             else:
-                raise ValueError(f"Invalid project configuration: {project_config}, (type {type(project_config)})")
+                project_config_to_load = project_config
         else:
             match len(self.serena_config.projects):
                 case 0:
                     raise RuntimeError(f"No projects found in {SerenaConfig.CONFIG_FILE} and no project file specified.")
                 case 1:
-                    project_config = self.serena_config.get_project_configuration(self.serena_config.project_names[0])
-        if project_config is not None:
+                    project_config_to_load = self.serena_config.get_project_configuration(self.serena_config.project_names[0])
+        if project_config_to_load is not None:
             self.activate_project(project_config_to_load)
         else:
             if not self.serena_config.enable_project_activation:
