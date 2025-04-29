@@ -13,7 +13,7 @@ from serena.agent import *
 project_root = Path(__file__).parent.parent
 
 if __name__ == "__main__":
-    agent = SerenaAgent(project_file_path=str(project_root / ".serena" / "project.yml"))
+    agent = SerenaAgent(project_config=str(project_root / ".serena" / "project.yml"))
     overview_tool = agent.get_tool(GetSymbolsOverviewTool)
     find_symbol_tool = agent.get_tool(FindSymbolTool)
 

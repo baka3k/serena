@@ -14,19 +14,16 @@ import os
 import pathlib
 import pickle
 import re
-from site import abs_paths
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
-from typing import Dict, List, Optional, Tuple, Union
-from fnmatch import fnmatch
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
 
-from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files, search_text
+from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
@@ -38,9 +35,6 @@ from .lsp_protocol_handler.server import (
 )
 from .multilspy_config import Language, MultilspyConfig
 from .multilspy_exceptions import MultilspyException
-from .multilspy_utils import PathUtils, FileUtils, TextUtils
-from pathlib import PurePath
-from typing import AsyncIterator, Iterator, List, Dict, Optional, Union, Tuple
 from .multilspy_logger import MultilspyLogger
 from .multilspy_utils import FileUtils, PathUtils, TextUtils
 from .type_helpers import ensure_all_methods_implemented
@@ -581,6 +575,16 @@ class LanguageServer:
 
         return ret
 
+    # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int):
+        return await self.server.send.references(
+            {
+                "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
+                "position": {"line": line, "character": column},
+                "context": {"includeDeclaration": False},
+            }
+        )
+
     async def request_references(
         self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
@@ -606,13 +610,7 @@ class LanguageServer:
 
         with self.open_file(relative_file_path):
             try:
-                response = await self.server.send.references(
-                    {
-                        "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
-                        "position": {"line": line, "character": column},
-                        "context": {"includeDeclaration": False},
-                    }
-                )
+                response = await self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
                 # Catch LSP internal error (-32603) and raise a more informative exception
                 if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
