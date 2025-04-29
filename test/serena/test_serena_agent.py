@@ -15,11 +15,11 @@ def serena_config():
 
 
 @pytest.fixture
-def serena_agent(request: LanguageParamRequest) -> SerenaAgent:
+def serena_agent(request: LanguageParamRequest, serena_config) -> SerenaAgent:
     language = Language(request.param)
     repo = get_repo_path(language)
     project_config = ProjectConfig(project_name=os.path.basename(str(repo)), language=language, project_root=str(repo))
-    return SerenaAgent(project_config=project_config)
+    return SerenaAgent(project_config=project_config, serena_config=serena_config)
 
 
 class TestSerenaAgent:
