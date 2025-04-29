@@ -1,6 +1,6 @@
 name: Tests on Ubuntu
 
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   cpu:
