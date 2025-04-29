@@ -4,22 +4,23 @@ Provides TypeScript specific instantiation of the LanguageServer class. Contains
 
 import asyncio
 import json
-import shutil
 import logging
 import os
-import subprocess
 import pathlib
+import shutil
+import subprocess
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Tuple
+from time import sleep
 
 from overrides import override
 
-from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_utils import PlatformUtils, PlatformId
+from multilspy.multilspy_logger import MultilspyLogger
+from multilspy.multilspy_utils import PlatformId, PlatformUtils
 
 # Platform-specific imports
 if os.name != 'nt':  # Unix-like systems
@@ -82,7 +83,7 @@ class TypeScriptLanguageServer(LanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
             d = json.load(f)
             del d["_description"]
 
@@ -132,7 +133,7 @@ class TypeScriptLanguageServer(LanguageServer):
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
             d = json.load(f)
 
         del d["_description"]
@@ -222,3 +223,14 @@ class TypeScriptLanguageServer(LanguageServer):
 
             await self.server.shutdown()
             await self.server.stop()
+
+    @override
+    # For some reason, the LS may need longer to process this, so we just retry
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int):
+        # TODO: The LS doesn't return references contained in other files if it doesn't sleep. This is
+        #   despite the LS having processed requests already. I don't know what causes this, but sleeping
+        #   one second helps. It may be that sleeping only once is enough but that's hard to reliably test.
+        #   It may be that even this 1sec is not enough in larger TS projects, at some point we should find what
+        #   causes this and solve it.
+        sleep(1)
+        return await super()._send_references_request(relative_file_path, line, column)
