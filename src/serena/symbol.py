@@ -297,9 +297,10 @@ class SymbolManager:
             yield
             root_path = self.lang_server.language_server.repository_root_path
             abs_path = os.path.join(root_path, relative_path)
-            with open(abs_path, "w") as f:
+            with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(file_buffer.contents)
             self.agent.mark_file_modified(relative_path)
+
 
     @contextmanager
     def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
