@@ -7,6 +7,7 @@ from multilspy.multilspy_config import Language
 from multilspy.multilspy_utils import SymbolUtils
 
 
+@pytest.mark.java
 class TestJavaLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.JAVA], indirect=True)
     def test_find_symbol(self, language_server: SyncLanguageServer) -> None:

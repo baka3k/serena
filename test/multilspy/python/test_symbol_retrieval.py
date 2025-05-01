@@ -14,6 +14,8 @@ from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_config import Language
 from multilspy.multilspy_types import SymbolKind
 
+pytestmark = pytest.mark.python
+
 
 class TestLanguageServerSymbols:
     """Test the language server's symbol-related functionality."""

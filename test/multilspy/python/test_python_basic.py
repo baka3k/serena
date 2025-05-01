@@ -14,6 +14,7 @@ from multilspy.multilspy_config import Language
 from serena.text_utils import LineType
 
 
+@pytest.mark.python
 class TestLanguageServerBasics:
     """Test basic functionality of the language server."""
 

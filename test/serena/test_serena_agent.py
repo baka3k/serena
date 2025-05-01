@@ -26,15 +26,15 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
         [
-            (Language.PYTHON, "User", "Class", "models.py"),
-            (Language.GO, "Helper", "Function", "main.go"),
-            (Language.JAVA, "Model", "Class", "Model.java"),
-            (Language.RUST, "add", "Function", "lib.rs"),
-            (Language.TYPESCRIPT, "DemoClass", "Class", "index.ts"),
+            pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
+            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
+            pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
+            pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
+            pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol(self, serena_agent, symbol_name, expected_kind, expected_file):
+    def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply(symbol_name)

@@ -8,6 +8,9 @@ from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from test.conftest import get_repo_path
 
+# This mark will be applied to all tests in this module
+pytestmark = pytest.mark.python
+
 
 @pytest.fixture(scope="module")
 def ls_with_ignored_dirs() -> Generator[SyncLanguageServer, None, None]:

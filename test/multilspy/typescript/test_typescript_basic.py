@@ -7,6 +7,7 @@ from multilspy.multilspy_config import Language
 from multilspy.multilspy_utils import SymbolUtils
 
 
+@pytest.mark.typescript
 class TestTypescriptLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
     def test_find_symbol(self, language_server: SyncLanguageServer) -> None:

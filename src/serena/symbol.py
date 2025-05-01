@@ -301,7 +301,6 @@ class SymbolManager:
                 f.write(file_buffer.contents)
             self.agent.mark_file_modified(relative_path)
 
-
     @contextmanager
     def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
         symbol = self.find_by_location(location)

@@ -7,6 +7,7 @@ from multilspy.multilspy_config import Language
 from multilspy.multilspy_utils import SymbolUtils
 
 
+@pytest.mark.rust
 class TestRustLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
     def test_find_references_raw(self, language_server: SyncLanguageServer) -> None:
