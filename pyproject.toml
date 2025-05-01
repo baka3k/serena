@@ -41,7 +41,7 @@ serena-mcp-server = "serena.mcp:start_mcp_server"
 serena-list-tools = "serena.agent:print_tool_overview"
 
 [project.license]
-text = "GPL-2.0"
+text = "MIT"
 
 [project.optional-dependencies]
 dev = [
@@ -107,7 +107,7 @@ exclude = "^build/|^docs/"
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
 
 [tool.poe.tasks]
-test = "pytest test --cov=serena --cov-report=xml --cov-report=term-missing --durations=0 -v --color=yes"
+test = "pytest test --color=yes"
 _black_check = "black --check --exclude src/multilspy/ src scripts test"
 _ruff_check = "ruff check --exclude .venv/ --exclude src/multilspy/ src scripts test"
 _black_format = "black --exclude .venv/|src/multilspy/ src scripts test"
@@ -271,4 +271,13 @@ max-complexity = 20
 ]
 "scripts/**" = [
   "D103"
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "python: language server running for Python",
+    "go: language server running for Go",
+    "java: language server running for Java",
+    "rust: language server running for Rust",
+    "typescript: language server running for TypeScript",
 ]
