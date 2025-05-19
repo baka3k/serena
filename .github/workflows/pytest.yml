@@ -2,6 +2,10 @@ name: Tests on CI
 
 on: [pull_request]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cpu:
     name: Tests on ${{ matrix.os }}
