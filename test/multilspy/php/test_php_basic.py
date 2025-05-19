@@ -1,4 +1,3 @@
-import time  # Import time module
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,6 @@ class TestPhpLanguageServer:
         """Test that the language server starts and stops successfully."""
         # The fixture already handles start and stop
         assert language_server.is_running()
-
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
@@ -40,7 +38,6 @@ class TestPhpLanguageServer:
         assert definition_location["range"]["start"]["line"] == 9
         assert definition_location["range"]["start"]["character"] == 0
 
-
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_definition_across_files(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
@@ -52,7 +49,6 @@ class TestPhpLanguageServer:
         assert definition_location["uri"].endswith("helper.php")
         assert definition_location["range"]["start"]["line"] == 2
         assert definition_location["range"]["start"]["character"] == 0
-
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
@@ -74,7 +70,6 @@ class TestPhpLanguageServer:
         assert definition_location["uri"].endswith("simple_var.php")
         assert definition_location["range"]["start"]["line"] == 1  # Definition of $localVar (0-indexed)
         assert definition_location["range"]["start"]["character"] == 0  # $localVar (0-indexed)
-
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
@@ -109,7 +104,6 @@ class TestPhpLanguageServer:
         expected_locations = sorted(expected_locations, key=lambda x: (x["uri_suffix"], x["line"], x["character"]))
 
         assert actual_locations == expected_locations
-
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)

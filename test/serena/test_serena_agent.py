@@ -47,10 +47,15 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,def_file,ref_file",
         [
-            (Language.PYTHON, "User", "test_repo/models.py", "test_repo/services.py"),
+            (Language.PYTHON, "User", os.path.join("test_repo", "models.py"), os.path.join("test_repo", "services.py")),
             (Language.GO, "Helper", "main.go", "main.go"),
-            (Language.JAVA, "Model", "src/main/java/test_repo/Model.java", "src/main/java/test_repo/Main.java"),
-            (Language.RUST, "add", "src/lib.rs", "src/main.rs"),
+            (
+                Language.JAVA,
+                "Model",
+                os.path.join("src", "main", "java", "test_repo", "Model.java"),
+                os.path.join("src", "main", "java", "test_repo", "Main.java"),
+            ),
+            (Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs")),
             (Language.TYPESCRIPT, "helperFunction", "index.ts", "use_helper.ts"),
         ],
         indirect=["serena_agent"],
