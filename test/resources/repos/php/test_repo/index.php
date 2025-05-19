@@ -13,4 +13,8 @@ echo $greeting;
 
 helperFunction();
 
+function useHelperFunction() {
+    helperFunction();
+}
+
 ?> 

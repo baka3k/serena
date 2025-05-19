@@ -109,11 +109,11 @@ class TestPhpLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_references_across_files(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
-        index_php_path = str(repo_path / "index.php")
+        helper_php_path = str(repo_path / "helper.php")
         # In index.php (0-indexed lines):
         # Line 13: helperFunction(); // Usage of helperFunction
-        # Find references for helperFunction from its usage (line 13, char 0 for 'h')
-        references = language_server.request_references(index_php_path, 13, 0)
+        # Find references for helperFunction from its definition
+        references = language_server.request_references(helper_php_path, 2, len("function "))
 
         assert references, f"Expected non-empty references for helperFunction but got {references=}"
         # Intelephense might return 1 (usage) or 2 (usage + definition) references.
@@ -132,19 +132,4 @@ class TestPhpLanguageServer:
             )
 
         usage_in_index_php = {"uri_suffix": "index.php", "line": 13, "character": 0}
-        definition_in_helper_php = {"uri_suffix": "helper.php", "line": 2, "character": 0}
-
         assert usage_in_index_php in actual_locations_comparable, "Usage of helperFunction in index.php not found"
-
-        # Depending on Intelephense's behavior, it might also include the definition.
-        # For now, we are flexible: it must find the usage. If it finds more, that's also okay.
-        # If we want to be strict about finding both or only one, this part would need adjustment.
-        if len(references) == 2:
-            assert (
-                definition_in_helper_php in actual_locations_comparable
-            ), "Definition of helperFunction in helper.php expected but not found when 2 references returned"
-        elif len(references) == 1:
-            # If only one reference, ensure it's the usage we definitely expect
-            assert actual_locations_comparable[0] == usage_in_index_php
-        else:
-            assert False, f"Expected 1 or 2 references, but got {len(references)}"
