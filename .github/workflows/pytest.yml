@@ -8,6 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: "!contains(github.event.head_commit.message, 'ci skip')"
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
@@ -38,4 +39,3 @@ jobs:
       - name: Test with pytest
         shell: bash
         run: uv run poe test
-
