@@ -10,10 +10,11 @@ from multilspy.multilspy_config import Language
 class TestPhpLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
-    def test_initialize_and_shutdown(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
+    def test_ls_is_running(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
         """Test that the language server starts and stops successfully."""
         # The fixture already handles start and stop
         assert language_server.is_running()
+        assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
@@ -30,7 +31,7 @@ class TestPhpLanguageServer:
         #           ^ char 5
         definition_location_list = language_server.request_definition(str(repo_path / "index.php"), 10, 6)  # cursor on 'g' in $greeting
 
-        assert definition_location_list is not None
+        assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
         assert len(definition_location_list) == 1
         definition_location = definition_location_list[0]
         assert definition_location["uri"].endswith("index.php")
@@ -43,7 +44,7 @@ class TestPhpLanguageServer:
     def test_find_definition_across_files(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
         definition_location_list = language_server.request_definition(str(repo_path / "index.php"), 12, 5)  # helperFunction
 
-        assert definition_location_list is not None
+        assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
         assert len(definition_location_list) == 1
         definition_location = definition_location_list[0]
         assert definition_location["uri"].endswith("helper.php")
@@ -64,7 +65,7 @@ class TestPhpLanguageServer:
         #                           ^ char 5
         definition_location_list = language_server.request_definition(file_path, 2, 6)  # cursor on 'l' in $localVar
 
-        assert definition_location_list is not None
+        assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
         assert len(definition_location_list) == 1
         definition_location = definition_location_list[0]
         assert definition_location["uri"].endswith("simple_var.php")
@@ -82,7 +83,7 @@ class TestPhpLanguageServer:
         # Find references for $greeting from its usage in "echo $greeting;" (line 11, char 6 for 'g')
         references = language_server.request_references(index_php_path, 11, 6)
 
-        assert references is not None
+        assert references
         # Intelephense, when asked for references from usage, seems to only return the usage itself.
         assert len(references) == 1, "Expected to find 1 reference for $greeting (the usage itself)"
 
@@ -114,7 +115,7 @@ class TestPhpLanguageServer:
         # Find references for helperFunction from its usage (line 13, char 0 for 'h')
         references = language_server.request_references(index_php_path, 13, 0)
 
-        assert references is not None
+        assert references, f"Expected non-empty references for helperFunction but got {references=}"
         # Intelephense might return 1 (usage) or 2 (usage + definition) references.
         # Let's check for at least the usage in index.php
         # Definition is in helper.php, line 2, char 0 (based on previous findings)
