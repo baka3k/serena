@@ -11,6 +11,4 @@
         "sensai",
         "vibing"
     ],
-    "basedpyright.disableLanguageServices": true,
-    "python.languageServer": "None"
 }
