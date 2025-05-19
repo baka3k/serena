@@ -1457,11 +1457,11 @@ class LanguageServer:
             column_condition = True
             if strict:
                 line_condition = end["line"] >= line > start["line"]
-                if column is not None:
+                if column is not None and line == start["line"]:
                     column_condition = column > start["character"]
             else:
                 line_condition = end["line"] >= line >= start["line"]
-                if column is not None:
+                if column is not None and line == start["line"]:
                     column_condition = column >= start["character"]
             return line_condition and column_condition
 
