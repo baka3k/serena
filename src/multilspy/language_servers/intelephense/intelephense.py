@@ -18,7 +18,7 @@ from overrides import override
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.lsp_types import DefinitionParams, InitializeParams
 from multilspy.multilspy_config import MultilspyConfig
 from multilspy.multilspy_utils import PlatformUtils, PlatformId
 
@@ -191,7 +191,13 @@ class Intelephense(LanguageServer):
         # TODO: The LS doesn't return references contained in other files if it doesn't sleep. This is
         #   despite the LS having processed requests already. I don't know what causes this, but sleeping
         #   one second helps. It may be that sleeping only once is enough but that's hard to reliably test.
-        #   It may be that even this 1sec is not enough in larger TS projects, at some point we should find what
-        #   causes this and solve it.
+        # May be related to the time it takes to read the files or something like that.
+        # The sleeping doesn't seem to be needed on all systems
         sleep(1)
         return await super()._send_references_request(relative_file_path, line, column)
+    
+    @override
+    async def _send_definition_request(self, definition_params: DefinitionParams):
+        # TODO: same as above, also only a problem if the definition is in another file
+        sleep(1)
+        return await super()._send_definition_request(definition_params)

@@ -27,7 +27,7 @@ from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, searc
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
-from .lsp_protocol_handler.lsp_types import SymbolKind
+from .lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
 from .lsp_protocol_handler.server import (
     Error,
     LanguageServerHandler,
@@ -495,6 +495,9 @@ class LanguageServer:
         )
         return deleted_text
 
+    async def _send_definition_request(self, definition_params: DefinitionParams) -> Union[Definition, List[LocationLink], None]:
+        return await self.server.send.definition(definition_params)
+    
     async def request_definition(
         self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
@@ -518,19 +521,18 @@ class LanguageServer:
 
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
-            response = await self.server.send.definition(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {
-                        LSPConstants.URI: pathlib.Path(
-                            str(PurePath(self.repository_root_path, relative_file_path))
-                        ).as_uri()
-                    },
-                    LSPConstants.POSITION: {
-                        LSPConstants.LINE: line,
-                        LSPConstants.CHARACTER: column,
-                    },
-                }
-            )
+            definition_params = cast(DefinitionParams, {
+                LSPConstants.TEXT_DOCUMENT: {
+                    LSPConstants.URI: pathlib.Path(
+                        str(PurePath(self.repository_root_path, relative_file_path))
+                    ).as_uri()
+                },
+                LSPConstants.POSITION: {
+                    LSPConstants.LINE: line,
+                    LSPConstants.CHARACTER: column,
+                },
+            })
+            response = await self._send_definition_request(definition_params)
 
         ret: List[multilspy_types.Location] = []
         if isinstance(response, list):
