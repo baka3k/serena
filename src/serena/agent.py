@@ -81,7 +81,7 @@ class ProjectConfig(ToStringMixin):
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
     @classmethod
-    def rel_path_to_project_yml(cls):
+    def rel_path_to_project_yml(cls) -> str:
         return os.path.join(cls.SERENA_MANAGED_DIR, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
