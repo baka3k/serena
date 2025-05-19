@@ -180,7 +180,7 @@ class MultiLangPromptTemplateCollection:
         for fn in os.listdir(prompts_dir):
             path = os.path.join(prompts_dir, fn)
             if fn.endswith(".txt"):
-                with open(path) as file:
+                with open(path, encoding="utf-8") as file:
                     prompt_template_string = file.read()
                 self._add_prompt_template(fn[:-4], prompt_template_string)
             elif fn.endswith(".yml"):

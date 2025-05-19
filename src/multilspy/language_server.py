@@ -123,7 +123,7 @@ class LanguageServer:
                     raise ValueError(
                         f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry"
                     )
-                with open(gitignore_path) as f:
+                with open(gitignore_path, "r", encoding="utf-8") as f:
                     gitignore_file_content = f.read()
             config.gitignore_file_content = gitignore_file_content
 

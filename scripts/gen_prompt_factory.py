@@ -31,13 +31,13 @@ def main():
         )
 
     # write prompt factory with added methods
-    with open("code_templates/prompt_factory_template.py") as f:
+    with open("code_templates/prompt_factory_template.py", encoding="utf-8") as f:
         code = f.read()
     methods_str = "".join(methods)
     code = code.replace("# methods", methods_str)
 
     prompt_factory_module = f"{package}/llm/prompt_factory.py"
-    with open(prompt_factory_module, "w") as f:
+    with open(prompt_factory_module, "w", encoding="utf-8") as f:
         f.write(code)
     log.info(f"Prompt factory generated successfully in {prompt_factory_module}")
 
