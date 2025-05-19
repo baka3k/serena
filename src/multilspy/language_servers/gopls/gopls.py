@@ -5,13 +5,15 @@ import os
 import pathlib
 import subprocess
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, List
 
 from overrides import override
 
+from multilspy import multilspy_types
+from multilspy.multilspy_exceptions import MultilspyException
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
+from multilspy.lsp_protocol_handler.server import Error, ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
 from multilspy.multilspy_config import MultilspyConfig
 
@@ -57,28 +59,21 @@ class Gopls(LanguageServer):
         Check if required Go runtime dependencies are available.
         Raises RuntimeError with helpful message if dependencies are missing.
         """
-        missing_deps = []
-        
-        # Check for Go installation
         go_version = cls._get_go_version()
         if not go_version:
-            missing_deps.append(("Go", "https://golang.org/doc/install"))
+            raise RuntimeError("Go is not installed. Please install Go from https://golang.org/doc/install and make sure it is added to your PATH.")
         
-        # Check for gopls
         gopls_version = cls._get_gopls_version()
         if not gopls_version:
-            missing_deps.append(("gopls", "https://pkg.go.dev/golang.org/x/tools/gopls#section-readme"))
-        
-        if missing_deps:
-            error_msg = "Missing required dependencies:\n"
-            for dep, install_url in missing_deps:
-                error_msg += f"- {dep}: Please install from {install_url}\n"
-            raise RuntimeError(error_msg)
+            raise RuntimeError(
+                "Found a Go version but gopls is not installed.\n"
+                "Please install gopls as described in https://pkg.go.dev/golang.org/x/tools/gopls#section-readme\n\n"
+                "After installation, make sure it is added to your PATH (it might be installed in a different location than Go)."
+            )
         
         return True
 
     def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
-        # Check runtime dependencies before initializing
         self.setup_runtime_dependency()
         
         super().__init__(
@@ -159,3 +154,18 @@ class Gopls(LanguageServer):
 
             await self.server.shutdown()
             await self.server.stop()
+
+    @override
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
+        NUM_COLS_TO_TRY = 10
+        """selectionRange in Gopls always contains the wrong column, 
+        the one at the beginning of the declaration instead of the symbol. We do a dirty hack here (loop over some columns).
+        See https://github.com/golang/go/issues/73521
+        """
+        actual_column = column
+        for actual_column in range(column, column+NUM_COLS_TO_TRY):
+            try:
+                return await super()._send_references_request(relative_file_path, line, actual_column)
+            except (Error, RuntimeError, MultilspyException) as e:
+                self.logger.log(f"Cannot find symbol at {line=}, column={actual_column}, trying to bump column by 1", logging.INFO)
+        raise MultilspyException(f"Failed to find references for symbol in\n{relative_file_path=} at {line=}, {column=}")

@@ -1,6 +1,6 @@
 name: Tests on Ubuntu
 
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   cpu:
@@ -16,8 +16,14 @@ jobs:
         with:
           python-version: "${{ matrix.python-version }}"
 
-      # Include the appropriate package manager steps based on the selection
-      
+      # Add Go bin directory to PATH for this workflow
+      # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
+      # Writing to this file adds the directory to the PATH for subsequent steps
+      - name: Install gopls
+        run: |
+          go install golang.org/x/tools/gopls@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+          
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Create virtual environment

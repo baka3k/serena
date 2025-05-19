@@ -17,6 +17,8 @@ from enum import Enum
 from multilspy.multilspy_exceptions import MultilspyException
 from pathlib import PurePath, Path
 from multilspy.multilspy_logger import MultilspyLogger
+from multilspy.multilspy_types import UnifiedSymbolInformation
+
 
 class TextUtils:
     """
@@ -67,6 +69,7 @@ class TextUtils:
             c += len(text_to_be_inserted)
         return (l, c)
 
+
 class PathUtils:
     """
     Utilities for platform-agnostic path operations.
@@ -88,7 +91,14 @@ class PathUtils:
         parsed = urlparse(uri)
         host = "{0}{0}{mnt}{0}".format(os.path.sep, mnt=parsed.netloc)
         return os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
-    
+
+    @staticmethod
+    def path_to_uri(path: str) -> str:
+        """
+        Converts a file path to a file URI (file:///...).
+        """
+        return str(Path(path).absolute().as_uri())
+
     @staticmethod
     def is_glob_pattern(pattern: str) -> bool:
         """Check if a pattern contains glob-specific characters."""
@@ -104,6 +114,7 @@ class PathUtils:
             return str(PurePath(os.path.relpath(path, base_path)))
         return None
 
+
 class FileUtils:
     """
     Utility functions for file operations.
@@ -114,7 +125,10 @@ class FileUtils:
         """
         Reads the file at the given path and returns the contents as a string.
         """
-        encodings = ["utf-8-sig", "utf-16"]
+        if not os.path.exists(file_path):
+            logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
+            raise MultilspyException(f"File read '{file_path}' failed: File does not exist.")
+        encodings = ["utf-8-sig", "utf-16", "utf-8", "latin-1"]
         try:
             for encoding in encodings:
                 try:
@@ -122,6 +136,9 @@ class FileUtils:
                         return inp_file.read()
                 except UnicodeError:
                     continue
+            # Try system default encoding as a last resort
+            with open(file_path, "r") as inp_file:
+                return inp_file.read()
         except Exception as exc:
             logger.log(f"File read '{file_path}' failed: {exc}", logging.ERROR)
             raise MultilspyException("File read failed.") from None
@@ -179,6 +196,7 @@ class FileUtils:
                 if os.path.exists(tmp_file_name):
                     Path.unlink(Path(tmp_file_name))
 
+
 class PlatformId(str, Enum):
     """
     multilspy supported platforms
@@ -195,6 +213,7 @@ class PlatformId(str, Enum):
     LINUX_MUSL_x64 = "linux-musl-x64"
     LINUX_MUSL_arm64 = "linux-musl-arm64"
 
+
 class DotnetVersion(str, Enum):
     """
     multilspy supported dotnet versions
@@ -205,19 +224,22 @@ class DotnetVersion(str, Enum):
     V8 = "8"
     VMONO = "mono"
 
+
 class PlatformUtils:
     """
     This class provides utilities for platform detection and identification.
     """
 
-    @staticmethod
-    def get_platform_id() -> PlatformId:
+    @classmethod
+    def get_platform_id(cls) -> PlatformId:
         """
         Returns the platform id for the current system
         """
         system = platform.system()
         machine = platform.machine()
         bitness = platform.architecture()[0]
+        if system == "Windows" and machine == "":
+            machine = cls._determine_windows_machine_type()
         system_map = {"Windows": "win", "Darwin": "osx", "Linux": "linux"}
         machine_map = {"AMD64": "x64", "x86_64": "x64", "i386": "x86", "i686": "x86", "aarch64": "arm64", "arm64": "arm64"}
         if system in system_map and machine in machine_map:
@@ -229,6 +251,46 @@ class PlatformUtils:
             return PlatformId(platform_id)
         else:
             raise MultilspyException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
+
+    @staticmethod
+    def _determine_windows_machine_type():
+        import ctypes
+        from ctypes import wintypes
+
+        class SYSTEM_INFO(ctypes.Structure):
+            class _U(ctypes.Union):
+                class _S(ctypes.Structure):
+                    _fields_ = [("wProcessorArchitecture", wintypes.WORD),
+                        ("wReserved", wintypes.WORD)]
+                _fields_ = [("dwOemId", wintypes.DWORD),
+                    ("s", _S)]
+                _anonymous_ = ("s",)
+
+            _fields_ = [("u", _U),
+                ("dwPageSize", wintypes.DWORD),
+                ("lpMinimumApplicationAddress", wintypes.LPVOID),
+                ("lpMaximumApplicationAddress", wintypes.LPVOID),
+                ("dwActiveProcessorMask", wintypes.LPVOID),
+                ("dwNumberOfProcessors", wintypes.DWORD),
+                ("dwProcessorType", wintypes.DWORD),
+                ("dwAllocationGranularity", wintypes.DWORD),
+                ("wProcessorLevel", wintypes.WORD),
+                ("wProcessorRevision", wintypes.WORD)]
+            _anonymous_ = ("u",)
+
+        sys_info = SYSTEM_INFO()
+        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))
+
+        arch_map = {
+            9: 'AMD64',
+            5: 'ARM',
+            12: 'arm64',
+            6: 'Intel Itanium-based',
+            0: 'i386',
+        }
+
+        return arch_map.get(sys_info.wProcessorArchitecture, f'Unknown ({sys_info.wProcessorArchitecture})')
+
 
     @staticmethod
     def get_dotnet_version() -> DotnetVersion:
@@ -261,3 +323,13 @@ class PlatformUtils:
             except (FileNotFoundError, subprocess.CalledProcessError):
                 raise MultilspyException("dotnet or mono not found on the system")
 
+
+class SymbolUtils:
+    @staticmethod
+    def symbol_tree_contains_name(roots: list[UnifiedSymbolInformation], name: str) -> bool:
+        for symbol in roots:
+            if symbol["name"] == name:
+                return True
+            if SymbolUtils.symbol_tree_contains_name(symbol["children"], name):
+                return True
+        return False

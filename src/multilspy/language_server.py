@@ -14,32 +14,27 @@ import os
 import pathlib
 import pickle
 import re
-from site import abs_paths
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
-from typing import Dict, List, Optional, Tuple, Union
-from fnmatch import fnmatch
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
 
-from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files, search_text
+from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
 from .lsp_protocol_handler.lsp_types import SymbolKind
 from .lsp_protocol_handler.server import (
+    Error,
     LanguageServerHandler,
     ProcessLaunchInfo,
 )
 from .multilspy_config import Language, MultilspyConfig
 from .multilspy_exceptions import MultilspyException
-from .multilspy_utils import PathUtils, FileUtils, TextUtils
-from pathlib import PurePath
-from typing import AsyncIterator, Iterator, List, Dict, Optional, Union, Tuple
 from .multilspy_logger import MultilspyLogger
 from .multilspy_utils import FileUtils, PathUtils, TextUtils
 from .type_helpers import ensure_all_methods_implemented
@@ -584,6 +579,16 @@ class LanguageServer:
 
         return ret
 
+    # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int):
+        return await self.server.send.references(
+            {
+                "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
+                "position": {"line": line, "character": column},
+                "context": {"includeDeclaration": False},
+            }
+        )
+
     async def request_references(
         self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
@@ -598,7 +603,7 @@ class LanguageServer:
 
         :return: A list of locations where the symbol is referenced (excluding ignored directories)
         """
-
+        
         if not self.server_started:
             self.logger.log(
                 "request_references called before Language Server started",
@@ -608,21 +613,23 @@ class LanguageServer:
 
 
         with self.open_file(relative_file_path):
-            # sending request to the language server and waiting for response
-            response = await self.server.send.references(
-                {
-                    "context": {"includeDeclaration": False},
-                    "textDocument": {
-                        "uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
-                    },
-                    "position": {"line": line, "character": column},
-                }
-            )
+            try:
+                response = await self._send_references_request(relative_file_path, line=line, column=column)
+            except Exception as e:
+                # Catch LSP internal error (-32603) and raise a more informative exception
+                if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
+                    raise RuntimeError(
+                        f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "
+                        "This often occurs when requesting references for a symbol not referenced in the expected way. "
+                    ) from e
+                raise
+        if response is None:
+            return []
 
         ret: List[multilspy_types.Location] = []
-        assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
+        assert isinstance(response, list), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
         for item in response:
-            assert isinstance(item, dict)
+            assert isinstance(item, dict), f"Unexpected response from Language Server (expected dict, got {type(item)}): {item}"
             assert LSPConstants.URI in item
             assert LSPConstants.RANGE in item
 
@@ -825,8 +832,10 @@ class LanguageServer:
 
         def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
             item = cast(multilspy_types.UnifiedSymbolInformation, item)
+            absolute_path = os.path.join(self.repository_root_path, relative_file_path)
+            
+            # handle missing entries in location
             if "location" not in item:
-                absolute_path = os.path.join(self.repository_root_path, relative_file_path)
                 uri = pathlib.Path(absolute_path).as_uri()
                 assert "range" in item
                 tree_location = multilspy_types.Location(
@@ -836,8 +845,19 @@ class LanguageServer:
                     relativePath=relative_file_path,
                 )
                 item['location'] = tree_location
+            location = item["location"]
+            if "absolutePath" not in location:
+                location["absolutePath"] = absolute_path
+            if "relativePath" not in location:
+                location["relativePath"] = relative_file_path
             if include_body:
                 item['body'] = self.retrieve_symbol_body(item)
+            # handle missing selectionRange
+            if "selectionRange" not in item:
+                if "range" in item:
+                    item["selectionRange"] = item["range"]
+                else:
+                    item["selectionRange"] = item["location"]["range"]
             item[LSPConstants.CHILDREN] = item.get(LSPConstants.CHILDREN, [])
 
         flat_all_symbol_list: List[multilspy_types.UnifiedSymbolInformation] = []
@@ -956,14 +976,16 @@ class LanguageServer:
                     # TODO: Not sure if this is actually still needed given recent changes to relative path handling
                     def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
                         for node in nodes:
-                            path = Path(node["location"]["relativePath"])
-                            if path.is_absolute():
-                                try:
-                                    path = path.relative_to(self.repository_root_path)
-                                    node["location"]["relativePath"] = str(path)
-                                except:
-                                    pass
-                            fix_relative_path(node["children"])
+                            if "location" in node and "relativePath" in node["location"]:
+                                path = Path(node["location"]["relativePath"])
+                                if path.is_absolute():
+                                    try:
+                                        path = path.relative_to(self.repository_root_path)
+                                        node["location"]["relativePath"] = str(path)
+                                    except Exception:
+                                        pass
+                            if "children" in node:
+                                fix_relative_path(node["children"])
 
                     fix_relative_path(root_nodes)
 
@@ -1046,15 +1068,20 @@ class LanguageServer:
         Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
         _, document_roots = await self.request_document_symbols(relative_file_path)
-        return [
-            (
-                root["name"],
-                root["kind"],
-                root["selectionRange"]["start"]["line"], # type: ignore
-                root["selectionRange"]["start"]["character"] # type: ignore
-            )
-            for root in document_roots
-        ]
+        result = []
+        for root in document_roots:
+            try:
+                result.append(
+                   ( root["name"],
+                    root["kind"],
+                    root["selectionRange"]["start"]["line"],
+                    root["selectionRange"]["start"]["character"],)
+                )
+            except KeyError as e:
+                raise KeyError(
+                    f"Could not process symbol of name {root.get('name', 'unknown')} in {relative_file_path=}"
+                ) from e
+        return result
 
     async def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
@@ -1120,7 +1147,7 @@ class LanguageServer:
         assert "relativePath" in symbol["location"]
         symbol_file = self.retrieve_full_file_content(symbol["location"]["relativePath"])
         symbol_lines = symbol_file.split("\n")
-        symbol_body = "\n".join(symbol_lines[symbol_start_line:symbol_end_line])
+        symbol_body = "\n".join(symbol_lines[symbol_start_line:symbol_end_line+1])
 
         # remove leading indentation
         symbol_start_column = symbol["location"]["range"]["start"]["character"]
@@ -1704,10 +1731,20 @@ class SyncLanguageServer:
 
         :return List[multilspy_types.Location]: A list of locations where the symbol is referenced
         """
-        result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_references(file_path, line, column), self.loop
-        ).result(timeout=self.timeout)
+        try:
+            result = asyncio.run_coroutine_threadsafe(
+                self.language_server.request_references(file_path, line, column), self.loop
+            ).result(timeout=self.timeout)
+        except Exception as e:
+            from multilspy.lsp_protocol_handler.server import Error
+            if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
+                raise RuntimeError(
+                    f"LSP internal error (-32603) when requesting references for {file_path}:{line}:{column}. "
+                    "This often occurs when requesting references for a symbol not referenced in the expected way. "
+                ) from e
+            raise
         return result
+
 
     def request_references_with_content(
         self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
