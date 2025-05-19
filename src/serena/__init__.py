@@ -1,4 +1,4 @@
-__version__ = "2025-04-07"
+__version__ = "2025-05-19"
 
 
 def serena_root_path() -> str:

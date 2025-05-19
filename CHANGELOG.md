@@ -1,4 +1,4 @@
-# Latest
+# 2025-05-19
 
 Changes prior to the next official version change will appear here.
 
@@ -17,7 +17,7 @@ Changes prior to the next official version change will appear here.
 * Language Servers:
     * Add further file extensions considered by the language servers for Python (.pyi), JavaScript (.jsx) and TypeScript (.tsx, .jsx)
     * Updated multilspy, adding support for Kotlin, Dart and C/C++ and several improvements.
-    * Added support for PhP
+    * Added support for PHP
     
 
 # 2025-04-07
