@@ -9,8 +9,8 @@ import logging
 import os
 import subprocess
 import pathlib
-import stat
 from contextlib import asynccontextmanager
+from time import sleep
 from typing import AsyncIterator
 
 from overrides import override
@@ -21,16 +21,6 @@ from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
 from multilspy.multilspy_config import MultilspyConfig
 from multilspy.multilspy_utils import PlatformUtils, PlatformId
-
-# Platform-specific imports
-if os.name != 'nt':  # Unix-like systems
-    import pwd
-else:
-    # Dummy pwd module for Windows
-    class pwd:
-        @staticmethod
-        def getpwuid(uid):
-            return type('obj', (), {'pw_name': os.environ.get('USERNAME', 'unknown')})()
 
 class Intelephense(LanguageServer):
     """
@@ -91,6 +81,7 @@ class Intelephense(LanguageServer):
                     )
                 else:
                     # On Unix-like systems, run as non-root user
+                    import pwd
                     user = pwd.getpwuid(os.getuid()).pw_name
                     subprocess.run(
                         dependency["command"],
@@ -193,3 +184,14 @@ class Intelephense(LanguageServer):
 
             await self.server.shutdown()
             await self.server.stop()
+            
+    @override
+    # For some reason, the LS may need longer to process this, so we just retry
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int):
+        # TODO: The LS doesn't return references contained in other files if it doesn't sleep. This is
+        #   despite the LS having processed requests already. I don't know what causes this, but sleeping
+        #   one second helps. It may be that sleeping only once is enough but that's hard to reliably test.
+        #   It may be that even this 1sec is not enough in larger TS projects, at some point we should find what
+        #   causes this and solve it.
+        sleep(1)
+        return await super()._send_references_request(relative_file_path, line, column)
