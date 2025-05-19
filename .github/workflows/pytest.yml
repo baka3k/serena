@@ -38,4 +38,10 @@ jobs:
         run: uv pip install -e ".[dev]"
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        # Currently java Language Server is not working on macos
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            uv run pytest -m "not java"
+          else
+            uv run poe test
+          fi
