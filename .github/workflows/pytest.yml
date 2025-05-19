@@ -27,12 +27,7 @@ jobs:
         shell: bash
         run: |
           go install golang.org/x/tools/gopls@latest
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "$HOME/go/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          else
-            echo "$HOME/go/bin" >> $GITHUB_PATH
-          fi
-
+          echo "$HOME/go/bin" >> $GITHUB_PATH
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
