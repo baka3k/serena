@@ -87,3 +87,77 @@ class TestSerenaAgent:
         assert any(
             ref["location"]["relative_path"] == ref_file for ref in refs
         ), f"Expected to find reference to {symbol_name} in {ref_file} for {agent.project_config.language.name}. refs={refs}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,qualified_name,substring_matching,expected_symbol_name,expected_kind,expected_file",
+        [
+            pytest.param(
+                Language.PYTHON,
+                "OuterClass/NestedClass",
+                False,
+                "NestedClass",
+                "Class",
+                os.path.join("test_repo", "nested.py"),
+                id="exact_qualname_class",
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.PYTHON,
+                "OuterClass/NestedClass/find_me",
+                False,
+                "find_me",
+                "Method",
+                os.path.join("test_repo", "nested.py"),
+                id="exact_qualname_method",
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.PYTHON,
+                "OuterClass/NestedCl",  # Substring for NestedClass
+                True,
+                "NestedClass",
+                "Class",
+                os.path.join("test_repo", "nested.py"),
+                id="substring_qualname_class",
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.PYTHON,
+                "OuterClass/NestedClass/find_m",  # Substring for find_me
+                True,
+                "find_me",
+                "Method",
+                os.path.join("test_repo", "nested.py"),
+                id="substring_qualname_method",
+                marks=pytest.mark.python,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_qualified_name(
+        self,
+        serena_agent: SerenaAgent,
+        qualified_name: str,
+        substring_matching: bool,
+        expected_symbol_name: str,
+        expected_kind: str,
+        expected_file: str,
+    ):
+        agent = serena_agent
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply(
+            name=qualified_name,
+            depth=0,
+            within_relative_path=None,
+            include_body=False,
+            include_kinds=None,
+            exclude_kinds=None,
+            substring_matching=substring_matching,
+        )
+        symbols = json.loads(result)
+        assert any(
+            expected_symbol_name == s["name"]
+            and expected_kind.lower() in s["kind"].lower()
+            and expected_file in s["location"]["relative_path"]
+            for s in symbols
+        ), f"Expected to find {qualified_name} ({expected_kind}) in {expected_file} for {agent.project_config.language.name}. Symbols: {symbols}"

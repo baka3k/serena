@@ -50,18 +50,90 @@ class SymbolLocation:
 
 
 class Symbol(ToStringMixin):
-    def __init__(self, s: UnifiedSymbolInformation) -> None:
-        self.s = s
+    _QAULNAME_SEPARATOR = "/"
+
+    @staticmethod
+    def match_against_qualname(
+        name_pattern: str,
+        qual_name_parts: list[str],
+        substring_matching: bool,
+    ) -> bool:
+        """
+        Checks if a given name/pattern matches a symbol's qualified name parts.
+
+        :param name_pattern: The name or pattern to match. Can be a simple name
+            (e.g., "my_func") or a qualified name pattern
+            (e.g., "MyClass/my_method", "MyClass/").
+        :param qual_name_parts: A list of strings representing the parts of the
+            a qualified name.
+        :param substring_matching: If True, allows substring matching for the relevant part(s).
+            - For simple names, the whole `name_pattern` is checked as a substring
+                of the symbol's simple name (`qual_name_parts[-1]`).
+            - For qualified name patterns, only the *last* part of the
+                `name_to_match` pattern is checked as a substring.
+                Other parts must match exactly.
+        :return: True if the name matches, False otherwise.
+        """
+        assert name_pattern, "name_to_match must not be empty"
+        assert qual_name_parts, "symbol_qual_name_parts must not be empty"
+        qname_separator = Symbol._QAULNAME_SEPARATOR
+        is_qualified_pattern = qname_separator in name_pattern
+
+        if not is_qualified_pattern:
+            # Simple name matching
+            symbol_simple_name = qual_name_parts[-1]
+            if substring_matching:
+                return name_pattern in symbol_simple_name
+            else:
+                return name_pattern == symbol_simple_name
+        # Qualified name pattern matching
+        # A pattern like "Lib/" or "Lib/Class/" is treated as a prefix.
+        # We strip the trailing separator to get the core parts to match.
+        # For example, "Lib/" becomes "Lib", "Lib/Class/" becomes "Lib/Class".
+        # A pattern of just "/" becomes an empty string.
+        cleaned_name_pattern = name_pattern.rstrip(qname_separator)
+
+        # Splitting the cleaned pattern gives the segments to match.
+        # - "Lib" -> ["Lib"]
+        # - "Lib/Class" -> ["Lib", "Class"]
+        # - "" (from "/") -> [""] (split of empty string results in list with one empty string)
+        pattern_segments = cleaned_name_pattern.split(qname_separator)
+
+        # The number of segments in the pattern must match the number of parts in the symbol's qualified name.
+        # Example: pattern "Lib/Class" (2 segments) should match a symbol like `MyClass` in `MyLib` (2 qual_name_parts: ["MyLib", "MyClass"]).
+        # It should not match `MyMethod` in `MyClass` in `MyLib` (3 qual_name_parts).
+        # Also, pattern "Lib/" (effectively "Lib", 1 segment) should match `MyLib` (1 qual_name_part: ["MyLib"]).
+        if len(pattern_segments) != len(qual_name_parts):
+            return False
+
+        # Match all segments of the pattern except the last one. These must be exact matches.
+        # If pattern_segments has only one segment (e.g., "Lib", or from "Lib/", or from "/"), this loop is skipped.
+        for i in range(len(pattern_segments) - 1):
+            if pattern_segments[i] != qual_name_parts[i]:
+                return False
+
+        # Match the last segment of the pattern against the last part of the symbol's qualified name.
+        last_pattern_segment = pattern_segments[-1]
+        last_qual_name_segment = qual_name_parts[-1]
+
+        # The `substring_matching` flag applies to this last segment comparison.
+        if substring_matching:
+            return last_pattern_segment in last_qual_name_segment
+        else:
+            return last_pattern_segment == last_qual_name_segment
+
+    def __init__(self, symbol_root_from_ls: UnifiedSymbolInformation) -> None:
+        self.symbol_root = symbol_root_from_ls
 
     def _tostring_includes(self) -> list[str]:
         return []
 
     def _tostring_additional_entries(self) -> dict[str, Any]:
-        return dict(name=self.name, kind=self.kind, num_children=len(self.s["children"]))
+        return dict(name=self.name, kind=self.kind, num_children=len(self.symbol_root["children"]))
 
     @property
     def name(self) -> str:
-        return self.s["name"]
+        return self.symbol_root["name"]
 
     @property
     def kind(self) -> str:
@@ -69,11 +141,14 @@ class Symbol(ToStringMixin):
 
     @property
     def symbol_kind(self) -> SymbolKind:
-        return self.s["kind"]
+        return self.symbol_root["kind"]
 
     @property
     def relative_path(self) -> str | None:
-        return self.s["location"]["relativePath"]
+        location = self.symbol_root.get("location")
+        if location:
+            return location.get("relativePath")
+        return None
 
     @property
     def location(self) -> SymbolLocation:
@@ -83,36 +158,84 @@ class Symbol(ToStringMixin):
         return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
 
     @property
-    def body_start_position(self) -> Position:
-        return self.s["location"]["range"]["start"]
+    def body_start_position(self) -> Position | None:
+        location = self.symbol_root.get("location")
+        if location:
+            range_info = location.get("range")
+            if range_info:
+                start_pos = range_info.get("start")
+                if start_pos:
+                    return start_pos
+        return None
 
     @property
-    def body_end_position(self) -> Position:
-        return self.s["location"]["range"]["end"]
+    def body_end_position(self) -> Position | None:
+        location = self.symbol_root.get("location")
+        if location:
+            range_info = location.get("range")
+            if range_info:
+                end_pos = range_info.get("end")
+                if end_pos:
+                    return end_pos
+        return None
 
     @property
     def line(self) -> int | None:
-        if "selectionRange" in self.s:
-            return self.s["selectionRange"]["start"]["line"]
+        if "selectionRange" in self.symbol_root:
+            return self.symbol_root["selectionRange"]["start"]["line"]
         else:
             # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
             return None
 
     @property
     def column(self) -> int | None:
-        if "selectionRange" in self.s:
-            return self.s["selectionRange"]["start"]["character"]
+        if "selectionRange" in self.symbol_root:
+            return self.symbol_root["selectionRange"]["start"]["character"]
         else:
             # precise location is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
             return None
 
     @property
     def body(self) -> str | None:
-        return self.s.get("body")
+        return self.symbol_root.get("body")
 
-    def iter_children(self) -> Iterator["Symbol"]:
-        for c in self.s["children"]:
-            yield Symbol(c)
+    def get_qualified_name(self) -> str:
+        """
+        Get the qualified name of the symbol (e.g. "class/method/inner_function").
+        """
+        return self._QAULNAME_SEPARATOR.join(self.get_qualified_name_parts())
+
+    def get_qualified_name_parts(self) -> list[str]:
+        """
+        Get the parts of the qualified name of the symbol (e.g. ["class", "method", "inner_function"]).
+        """
+        ancestors_within_file = list(self.iter_ancestors(up_to_symbol_kind=SymbolKind.File))
+        ancestors_within_file.reverse()
+        return [a.name for a in ancestors_within_file] + [self.name]
+
+    def iter_children(self) -> Iterator[Self]:
+        for c in self.symbol_root["children"]:
+            yield self.__class__(c)
+
+    def iter_ancestors(self, up_to_symbol_kind: SymbolKind | None = None) -> Iterator[Self]:
+        """
+        Iterate over all ancestors of the symbol, starting with the parent and going up to the root or
+        the given symbol kind.
+
+        :param up_to_symbol_kind: if provided, iteration will stop *before* the first ancestor of the given kind.
+            A typical use case is to pass `SymbolKind.File` or `SymbolKind.Package`.
+        """
+        parent = self.get_parent()
+        if parent is not None:
+            if up_to_symbol_kind is None or parent.symbol_kind != up_to_symbol_kind:
+                yield parent
+                yield from parent.iter_ancestors(up_to_symbol_kind=up_to_symbol_kind)
+
+    def get_parent(self) -> Self | None:
+        parent_root = self.symbol_root.get("parent")
+        if parent_root is None:
+            return None
+        return self.__class__(parent_root)
 
     def find(
         self,
@@ -120,17 +243,45 @@ class Symbol(ToStringMixin):
         substring_matching: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
-    ) -> list["Symbol"]:
+    ) -> list[Self]:
+        """
+        Find all symbols within the symbol's subtree that match the given name.
+        The name matching behavior depends on whether a qualified name or a simple name is provided.
+        It is assumed that the provided name is a qualified name if it contains the `/` character.
+        If substring matching is allowed, only the last element of the qualified name will be checked against
+        the symbol name using substring matching.
+
+
+        Examples:
+        - Providing "foo" will find all symbols named "foo" regardless where they are contained in the symbol tree.
+        - Providing "bar/foo" will only find symbols named "foo" that are direct children of a symbol called "bar".
+        - Providing "foo/" will only find symbols named "foo" that are top-level symbols (have no parent).
+        - Allowing substring matching with "bar" will find symbols with names containing "foo" anywhere in the symbol tree.
+        - Allowing substring matching with "foo/" will find only top-level symbols with names containing "foo".
+        - Allowing substring matching with "bar/foo" will find only symbols with names containing "foo" that are direct children of a symbol named "bar".
+
+        :param name: the name of the symbol to find. Can use a qualified name (e.g. "class/method/inner_function")
+            to restrict the search.
+        :param substring_matching: whether to use substring matching for the symbol name.
+            If a qualified name is provided, the last element of the qualified name will be checked against
+            the symbol name using substring matching.
+        :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
+            If provided, only symbols of the given kinds will be included in the result.
+        :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
+
+        """
         result = []
 
         def should_include(s: "Symbol") -> bool:
-            if not ((substring_matching and name in s.name) or name == s.name):
-                return False
             if include_kinds is not None and s.symbol_kind not in include_kinds:
                 return False
             if exclude_kinds is not None and s.symbol_kind in exclude_kinds:
                 return False
-            return True
+            return Symbol.match_against_qualname(
+                name_pattern=name,
+                qual_name_parts=s.get_qualified_name_parts(),
+                substring_matching=substring_matching,
+            )
 
         def traverse(s: "Symbol") -> None:
             if should_include(s):
@@ -322,10 +473,13 @@ class SymbolManager:
             body += "\n"
         with self._edited_symbol_location(location) as symbol:
             assert location.relative_path is not None
-            self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
-            self.lang_server.insert_text_at_position(
-                location.relative_path, symbol.body_start_position["line"], symbol.body_start_position["character"], body
-            )
+            start_pos = symbol.body_start_position
+            end_pos = symbol.body_end_position
+            if start_pos is None or end_pos is None:
+                raise ValueError(f"Symbol at {location} does not have a defined body range.")
+            # At this point, start_pos and end_pos are guaranteed to be Position objects
+            self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
+            self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
 
     def insert_after(self, location: SymbolLocation, body: str) -> None:
         """
@@ -339,6 +493,9 @@ class SymbolManager:
             body += "\n"
         with self._edited_symbol_location(location) as symbol:
             pos = symbol.body_end_position
+            if pos is None:
+                raise ValueError(f"Symbol at {location} does not have a defined end position.")
+            # At this point, pos is guaranteed to be a Position object
             assert location.relative_path is not None
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
@@ -353,7 +510,11 @@ class SymbolManager:
         if not body.endswith("\n"):
             body += "\n"
         with self._edited_symbol_location(location) as symbol:
-            pos = copy(symbol.body_start_position)
+            original_start_pos = symbol.body_start_position
+            if original_start_pos is None:
+                raise ValueError(f"Symbol at {location} does not have a defined start position.")
+            # At this point, original_start_pos is guaranteed to be a Position object, so copying is safe.
+            pos = copy(original_start_pos)
             assert location.relative_path is not None
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
