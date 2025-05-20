@@ -801,7 +801,7 @@ class LanguageServer:
     async def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
         """
         Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
-        to find symbols in the given file. Wait for the zresponse and return the result.
+        to find symbols in the given file. Wait for the response and return the result.
 
         :param relative_file_path: The relative path of the file that has the symbols
         :param include_body: whether to include the body of the symbols in the result.
