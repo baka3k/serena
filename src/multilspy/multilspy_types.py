@@ -201,7 +201,8 @@ class UnifiedSymbolInformation(TypedDict):
     if necessary). It can't be used to re-infer a hierarchy for the document
     symbols. 
     
-    Note: within serena, the parent attribute was added and should be used instead. Most LS don't provide contianerName.
+    Note: within Serena, the parent attribute was added and should be used instead. 
+    Most LS don't provide containerName.
     """
 
     detail: NotRequired[str]
