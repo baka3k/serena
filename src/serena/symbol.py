@@ -87,36 +87,18 @@ class Symbol(ToStringMixin):
             else:
                 return name_pattern == symbol_simple_name
         # Qualified name pattern matching
-        # A pattern like "Lib/" or "Lib/Class/" is treated as a prefix.
-        # We strip the trailing separator to get the core parts to match.
-        # For example, "Lib/" becomes "Lib", "Lib/Class/" becomes "Lib/Class".
-        # A pattern of just "/" becomes an empty string.
-        cleaned_name_pattern = name_pattern.rstrip(qname_separator)
+        name_parts = name_pattern.rstrip(qname_separator).split(qname_separator)
 
-        # Splitting the cleaned pattern gives the segments to match.
-        # - "Lib" -> ["Lib"]
-        # - "Lib/Class" -> ["Lib", "Class"]
-        # - "" (from "/") -> [""] (split of empty string results in list with one empty string)
-        pattern_segments = cleaned_name_pattern.split(qname_separator)
-
-        # The number of segments in the pattern must match the number of parts in the symbol's qualified name.
-        # Example: pattern "Lib/Class" (2 segments) should match a symbol like `MyClass` in `MyLib` (2 qual_name_parts: ["MyLib", "MyClass"]).
-        # It should not match `MyMethod` in `MyClass` in `MyLib` (3 qual_name_parts).
-        # Also, pattern "Lib/" (effectively "Lib", 1 segment) should match `MyLib` (1 qual_name_part: ["MyLib"]).
-        if len(pattern_segments) != len(qual_name_parts):
+        if len(name_parts) != len(qual_name_parts):
             return False
 
-        # Match all segments of the pattern except the last one. These must be exact matches.
-        # If pattern_segments has only one segment (e.g., "Lib", or from "Lib/", or from "/"), this loop is skipped.
-        for i in range(len(pattern_segments) - 1):
-            if pattern_segments[i] != qual_name_parts[i]:
-                return False
+        # Segments before the last one must be exact matches
+        if name_parts[:-1] != qual_name_parts[:-1]:
+            return False
 
         # Match the last segment of the pattern against the last part of the symbol's qualified name.
-        last_pattern_segment = pattern_segments[-1]
+        last_pattern_segment = name_parts[-1]
         last_qual_name_segment = qual_name_parts[-1]
-
-        # The `substring_matching` flag applies to this last segment comparison.
         if substring_matching:
             return last_pattern_segment in last_qual_name_segment
         else:
