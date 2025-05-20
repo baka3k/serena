@@ -7,6 +7,7 @@ from multilspy.multilspy_config import Language
 from multilspy.multilspy_utils import SymbolUtils
 
 
+@pytest.mark.go
 class TestGoLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)
     def test_find_symbol(self, language_server: SyncLanguageServer) -> None:

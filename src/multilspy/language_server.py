@@ -38,6 +38,7 @@ from .multilspy_exceptions import MultilspyException
 from .multilspy_logger import MultilspyLogger
 from .multilspy_utils import FileUtils, PathUtils, TextUtils
 from .type_helpers import ensure_all_methods_implemented
+from .lsp_protocol_handler import lsp_types
 
 # Serena dependencies
 # We will need to watch out for circular imports, but it's probably better to not
@@ -582,7 +583,7 @@ class LanguageServer:
         return ret
 
     # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
-    async def _send_references_request(self, relative_file_path: str, line: int, column: int):
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[lsp_types.Location] | None:
         return await self.server.send.references(
             {
                 "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},

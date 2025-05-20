@@ -794,7 +794,7 @@ class FindSymbolTool(Tool):
         or to retrieve further information using other tools.
         If you already anticipate that you will need to reference children of the symbol (like methods or fields contained in a class),
         you can specify a depth > 0.
-        
+
         The name matching behavior depends on whether a qualified name or a simple name is provided.
         It is assumed that the provided name is a qualified name if it contains the `/` character.
         If substring matching is allowed, only the last element of the qualified name will be checked against
@@ -836,6 +836,7 @@ class FindSymbolTool(Tool):
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
         :return: a list of symbols (with symbol locations) that match the given name in JSON format
+
         """
         include_kinds = cast(list[SymbolKind] | None, include_kinds)
         exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
