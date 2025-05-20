@@ -794,8 +794,22 @@ class FindSymbolTool(Tool):
         or to retrieve further information using other tools.
         If you already anticipate that you will need to reference children of the symbol (like methods or fields contained in a class),
         you can specify a depth > 0.
+        
+        The name matching behavior depends on whether a qualified name or a simple name is provided.
+        It is assumed that the provided name is a qualified name if it contains the `/` character.
+        If substring matching is allowed, only the last element of the qualified name will be checked against
+        the symbol name using substring matching.
 
-        :param name: the name of the symbols to find
+        Examples:
+        - Providing "foo" will find all symbols named "foo" regardless where they are contained in the symbol tree.
+        - Providing "bar/foo" will only find symbols named "foo" that are direct children of a symbol called "bar".
+        - Providing "foo/" will only find symbols named "foo" that are top-level symbols (have no parent).
+        - Allowing substring matching with "bar" will find symbols with names containing "foo" anywhere in the symbol tree.
+        - Allowing substring matching with "foo/" will find only top-level symbols with names containing "foo".
+        - Allowing substring matching with "bar/foo" will find only symbols with names containing "foo" that are direct children of a symbol named "bar".
+
+        :param name: the name of the symbols to find. A "qualified" name that includes the symbol's parents
+            separated by `/` (e.g. "class/method/inner_function") can be used to restrict the search.
         :param depth: specifies the depth up to which descendants of the symbol are to be retrieved
             (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class).
             Provide a non-zero depth if you intend to subsequently query symbols that are contained in the

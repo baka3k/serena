@@ -233,7 +233,6 @@ class Symbol(ToStringMixin):
         If substring matching is allowed, only the last element of the qualified name will be checked against
         the symbol name using substring matching.
 
-
         Examples:
         - Providing "foo" will find all symbols named "foo" regardless where they are contained in the symbol tree.
         - Providing "bar/foo" will only find symbols named "foo" that are direct children of a symbol called "bar".
@@ -242,8 +241,8 @@ class Symbol(ToStringMixin):
         - Allowing substring matching with "foo/" will find only top-level symbols with names containing "foo".
         - Allowing substring matching with "bar/foo" will find only symbols with names containing "foo" that are direct children of a symbol named "bar".
 
-        :param name: the name of the symbol to find. Can use a qualified name (e.g. "class/method/inner_function")
-            to restrict the search.
+        :param name: the name of the symbols to find. A "qualified" name that includes the symbol's parents
+            separated by `/` (e.g. "class/method/inner_function") can be used to restrict the search.
         :param substring_matching: whether to use substring matching for the symbol name.
             If a qualified name is provided, the last element of the qualified name will be checked against
             the symbol name using substring matching.
@@ -290,7 +289,7 @@ class Symbol(ToStringMixin):
             and pass the children without passing the parent body to the LM.
         :return: a dictionary representation of the symbol
         """
-        result: dict[str, Any] = {"name": self.name}
+        result: dict[str, Any] = {"name": self.name, "qualname": self.get_qualified_name()}
 
         if kind:
             result["kind"] = self.kind
@@ -334,30 +333,16 @@ class SymbolManager:
     def find_by_name(
         self,
         name: str,
-        within_relative_path: str | None = None,
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
+        within_relative_path: str | None = None,
     ) -> list[Symbol]:
         """
-        Find all symbols that match the given name.
-
-        :param name: the name of the symbol to find
-        :param within_relative_path: pass a relative path to only consider symbols within this path.
-            If a file is passed, only the symbols within this file will be considered.
-            If a directory is passed, all files within this directory will be considered.
-            If None, the entire codebase will be considered.
-        :param include_body: whether to include the body of all symbols in the result.
-            Note: you can filter out the bodies of the children if you set include_children_body=False
-            in the to_dict method.
-        :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
-            If provided, only symbols of the given kinds will be included in the result.
-        :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
-            Takes precedence over include_kinds.
-        :param substring_matching: whether to use substring matching for the symbol name.
-            If True, the symbol name will be matched if it contains the given name as a substring.
-        :return: a list of symbols that match the given name
+        Find all symbols that match the given name. See docstring of `Symbol.find` for more details.
+        The only parameter not mentioned there is `within_relative_path`, which can be used to restrict the search
+        to symbols within a specific file or directory.
         """
         symbols: list[Symbol] = []
         symbol_roots = self.lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
