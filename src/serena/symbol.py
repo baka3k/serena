@@ -50,59 +50,43 @@ class SymbolLocation:
 
 
 class Symbol(ToStringMixin):
-    _QAULNAME_SEPARATOR = "/"
+    _NAME_PATH_SEP = "/"
 
     @staticmethod
-    def match_against_qualname(
-        name_pattern: str,
-        qual_name_parts: list[str],
+    def match_name_path(
+        name_path: str,
+        symbol_name_path_parts: list[str],
         substring_matching: bool,
     ) -> bool:
         """
-        Checks if a given name/pattern matches a symbol's qualified name parts.
-
-        :param name_pattern: The name or pattern to match. Can be a simple name
-            (e.g., "my_func") or a qualified name pattern
-            (e.g., "MyClass/my_method", "MyClass/").
-        :param qual_name_parts: A list of strings representing the parts of the
-            a qualified name.
-        :param substring_matching: If True, allows substring matching for the relevant part(s).
-            - For simple names, the whole `name_pattern` is checked as a substring
-                of the symbol's simple name (`qual_name_parts[-1]`).
-            - For qualified name patterns, only the *last* part of the
-                `name_to_match` pattern is checked as a substring.
-                Other parts must match exactly.
-        :return: True if the name matches, False otherwise.
+        Checks if a given `name_path` matches a symbol's qualified name parts.
+        See docstring of `Symbol.find` for more details.
         """
-        assert name_pattern, "name_to_match must not be empty"
-        assert qual_name_parts, "symbol_qual_name_parts must not be empty"
-        qname_separator = Symbol._QAULNAME_SEPARATOR
-        is_qualified_pattern = qname_separator in name_pattern
+        assert name_path, "name_path must not be empty"
+        assert symbol_name_path_parts, "symbol_name_path_parts must not be empty"
+        name_path_sep = Symbol._NAME_PATH_SEP
 
-        if not is_qualified_pattern:
-            # Simple name matching
-            symbol_simple_name = qual_name_parts[-1]
-            if substring_matching:
-                return name_pattern in symbol_simple_name
-            else:
-                return name_pattern == symbol_simple_name
-        # Qualified name pattern matching
-        name_parts = name_pattern.rstrip(qname_separator).split(qname_separator)
+        is_absolute_pattern = name_path.startswith(name_path_sep)
+        pattern_parts = name_path.lstrip(name_path_sep).rstrip(name_path_sep).split(name_path_sep)
 
-        if len(name_parts) != len(qual_name_parts):
+        # filtering based on ancestors
+        if len(pattern_parts) > len(symbol_name_path_parts):
+            # can't possibly match if pattern has more parts than symbol
+            return False
+        if is_absolute_pattern and len(pattern_parts) != len(symbol_name_path_parts):
+            # for absolute patterns, the number of parts must match exactly
+            return False
+        if symbol_name_path_parts[-len(pattern_parts) : -1] != pattern_parts[:-1]:
+            # ancestors must match
             return False
 
-        # Segments before the last one must be exact matches
-        if name_parts[:-1] != qual_name_parts[:-1]:
-            return False
-
-        # Match the last segment of the pattern against the last part of the symbol's qualified name.
-        last_pattern_segment = name_parts[-1]
-        last_qual_name_segment = qual_name_parts[-1]
+        # matching the last part of the symbol name
+        name_to_match = pattern_parts[-1]
+        symbol_name = symbol_name_path_parts[-1]
         if substring_matching:
-            return last_pattern_segment in last_qual_name_segment
+            return name_to_match in symbol_name
         else:
-            return last_pattern_segment == last_qual_name_segment
+            return name_to_match == symbol_name
 
     def __init__(self, symbol_root_from_ls: UnifiedSymbolInformation) -> None:
         self.symbol_root = symbol_root_from_ls
@@ -181,15 +165,15 @@ class Symbol(ToStringMixin):
     def body(self) -> str | None:
         return self.symbol_root.get("body")
 
-    def get_qualified_name(self) -> str:
+    def get_name_path(self) -> str:
         """
-        Get the qualified name of the symbol (e.g. "class/method/inner_function").
+        Get the name path of the symbol (e.g. "class/method/inner_function").
         """
-        return self._QAULNAME_SEPARATOR.join(self.get_qualified_name_parts())
+        return self._NAME_PATH_SEP.join(self.get_name_path_parts())
 
-    def get_qualified_name_parts(self) -> list[str]:
+    def get_name_path_parts(self) -> list[str]:
         """
-        Get the parts of the qualified name of the symbol (e.g. ["class", "method", "inner_function"]).
+        Get the parts of the name path of the symbol (e.g. ["class", "method", "inner_function"]).
         """
         ancestors_within_file = list(self.iter_ancestors(up_to_symbol_kind=SymbolKind.File))
         ancestors_within_file.reverse()
@@ -221,35 +205,39 @@ class Symbol(ToStringMixin):
 
     def find(
         self,
-        name: str,
+        name_path: str,
         substring_matching: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
     ) -> list[Self]:
         """
-        Find all symbols within the symbol's subtree that match the given name.
-        The name matching behavior depends on whether a qualified name or a simple name is provided.
-        It is assumed that the provided name is a qualified name if it contains the `/` character.
-        If substring matching is allowed, only the last element of the qualified name will be checked against
-        the symbol name using substring matching.
+        Find all symbols within the symbol's subtree that match the given `name_path`.
+        The matching behavior is determined by the structure of `name_path`, which can
+        either be a simple name (e.g. "method") or a name path like "class/method" (relative name path)
+        or "/class/method" (absolute name path).
 
-        Examples:
-        - Providing "foo" will find all symbols named "foo" regardless where they are contained in the symbol tree.
-        - Providing "bar/foo" will only find symbols named "foo" that are direct children of a symbol called "bar".
-        - Providing "foo/" will only find symbols named "foo" that are top-level symbols (have no parent).
-        - Allowing substring matching with "bar" will find symbols with names containing "foo" anywhere in the symbol tree.
-        - Allowing substring matching with "foo/" will find only top-level symbols with names containing "foo".
-        - Allowing substring matching with "bar/foo" will find only symbols with names containing "foo" that are direct children of a symbol named "bar".
+        Key aspects of the name path matching behavior:
+        - Trailing slashes in `name_path` play no role and are ignored.
+        - The name of the retrieved symbols will match (either exactly or as a substring)
+          the last segment of `name_path`, while other segments will restrict the search to symbols that
+          have a desired sequence of ancestors.
+        - If there is no starting or intermediate slash in `name_path`, there is no
+          restriction on the ancestor symbols. For example, passing `method` will match
+          against symbols with name paths like `method`, `class/method`, `class/nested_class/method`, etc.
+        - If `name_path` contains a `/` but doesn't start with a `/`, the matching is restricted to symbols
+          with the same ancestors as the last segment of `name_path`. For example, passing `class/method` will match against
+          `class/method` as well as `nested_class/class/method` but not `method`.
+        - If `name_path` starts with a `/`, it will be treated as an absolute name path pattern, meaning
+          that the first segment of it must match the first segment of the symbol's name path.
+          For example, passing `/class` will match only against top-level symbols like `class` but not against `nested_class/class`.
+          Passing `/class/method` will match against `class/method` but not `nested_class/class/method` or `method`.
 
-        :param name: the name of the symbols to find. A "qualified" name that includes the symbol's parents
-            separated by `/` (e.g. "class/method/inner_function") can be used to restrict the search.
-        :param substring_matching: whether to use substring matching for the symbol name.
-            If a qualified name is provided, the last element of the qualified name will be checked against
-            the symbol name using substring matching.
+        :param name_path: the name path to match against
+        :param substring_matching: whether to use substring matching (as opposed to exact matching)
+            of the last segment of `name_path` against the symbol name.
         :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
             If provided, only symbols of the given kinds will be included in the result.
         :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
-
         """
         result = []
 
@@ -258,9 +246,9 @@ class Symbol(ToStringMixin):
                 return False
             if exclude_kinds is not None and s.symbol_kind in exclude_kinds:
                 return False
-            return Symbol.match_against_qualname(
-                name_pattern=name,
-                qual_name_parts=s.get_qualified_name_parts(),
+            return Symbol.match_name_path(
+                name_path=name_path,
+                symbol_name_path_parts=s.get_name_path_parts(),
                 substring_matching=substring_matching,
             )
 
@@ -289,7 +277,7 @@ class Symbol(ToStringMixin):
             and pass the children without passing the parent body to the LM.
         :return: a dictionary representation of the symbol
         """
-        result: dict[str, Any] = {"name": self.name, "qualname": self.get_qualified_name()}
+        result: dict[str, Any] = {"name": self.name, "name_path": self.get_name_path()}
 
         if kind:
             result["kind"] = self.kind

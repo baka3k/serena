@@ -89,7 +89,7 @@ class TestSerenaAgent:
         ), f"Expected to find reference to {symbol_name} in {ref_file} for {agent.project_config.language.name}. refs={refs}"
 
     @pytest.mark.parametrize(
-        "serena_agent,qualified_name,substring_matching,expected_symbol_name,expected_kind,expected_file",
+        "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",
         [
             pytest.param(
                 Language.PYTHON,
@@ -131,13 +131,33 @@ class TestSerenaAgent:
                 id="substring_qualname_method",
                 marks=pytest.mark.python,
             ),
+            pytest.param(
+                Language.PYTHON,
+                "/OuterClass",  # Absolute path
+                False,
+                "OuterClass",
+                "Class",
+                os.path.join("test_repo", "nested.py"),
+                id="absolute_qualname_class",
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.PYTHON,
+                "/OuterClass/NestedClass/find_m",  # Absolute path with substring
+                True,
+                "find_me",
+                "Method",
+                os.path.join("test_repo", "nested.py"),
+                id="absolute_substring_qualname_method",
+                marks=pytest.mark.python,
+            ),
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol_qualified_name(
+    def test_find_symbol_name_path(
         self,
         serena_agent: SerenaAgent,
-        qualified_name: str,
+        name_path: str,
         substring_matching: bool,
         expected_symbol_name: str,
         expected_kind: str,
@@ -146,7 +166,7 @@ class TestSerenaAgent:
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply(
-            name=qualified_name,
+            name_path=name_path,
             depth=0,
             within_relative_path=None,
             include_body=False,
@@ -160,4 +180,39 @@ class TestSerenaAgent:
             and expected_kind.lower() in s["kind"].lower()
             and expected_file in s["location"]["relative_path"]
             for s in symbols
-        ), f"Expected to find {qualified_name} ({expected_kind}) in {expected_file} for {agent.project_config.language.name}. Symbols: {symbols}"
+        ), f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent.project_config.language.name}. Symbols: {symbols}"
+
+    @pytest.mark.parametrize(
+        "serena_agent,name_path",
+        [
+            pytest.param(
+                Language.PYTHON,
+                "/NestedClass",  # Absolute path, NestedClass is not top-level
+                id="absolute_path_non_top_level_no_match",
+                marks=pytest.mark.python,
+            ),
+            pytest.param(
+                Language.PYTHON,
+                "/NoSuchParent/NestedClass",  # Absolute path with non-existent parent
+                id="absolute_path_non_existent_parent_no_match",
+                marks=pytest.mark.python,
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_name_path_no_match(
+        self,
+        serena_agent: SerenaAgent,
+        name_path: str,
+    ):
+        agent = serena_agent
+        find_symbol_tool = agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply(
+            name_path=name_path,
+            depth=0,
+            substring_matching=True,
+        )
+        symbols = json.loads(result)
+        assert (
+            not symbols
+        ), f"Expected to find no symbols for {name_path} for {agent.project_config.language.name}. Symbols found: {symbols}"

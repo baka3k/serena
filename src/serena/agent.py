@@ -10,11 +10,11 @@ import sys
 import traceback
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from dataclasses import dataclass, field
 from logging import Logger
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
 
 import yaml
 from sensai.util import logging
@@ -778,7 +778,7 @@ class FindSymbolTool(Tool):
 
     def apply(
         self,
-        name: str,
+        name_path: str,
         depth: int = 0,
         within_relative_path: str | None = None,
         include_body: bool = False,
@@ -788,63 +788,56 @@ class FindSymbolTool(Tool):
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Retrieves information on all symbols/code entities, i.e. classes, methods, attributes, variables, etc.
-        with the given name.
-        The returned symbol location information can subsequently be used to edit the returned symbols
-        or to retrieve further information using other tools.
-        If you already anticipate that you will need to reference children of the symbol (like methods or fields contained in a class),
-        you can specify a depth > 0.
+        Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given `name_path`,
+        which represents a pattern for the symbol's path within the symbol tree of a single file.
+        The returned symbol location can be used for edits or further queries.
+        Specify `depth > 0` to retrieve children (e.g., methods of a class).
 
-        The name matching behavior depends on whether a qualified name or a simple name is provided.
-        It is assumed that the provided name is a qualified name if it contains the `/` character.
-        If substring matching is allowed, only the last element of the qualified name will be checked against
-        the symbol name using substring matching.
+        The matching behavior is determined by the structure of `name_path`, which can
+        either be a simple name (e.g. "method") or a name path like "class/method" (relative name path)
+        or "/class/method" (absolute name path). Note that the name path is not a path in the file system
+        but rather a path in the symbol tree **within a single file**. Thus, file or directory names should never
+        be included in the `name_path`. For restricting the search to a single file or directory,
+        the `within_relative_path` parameter should be used instead. The retrieved symbols' `name_path` attribute
+        will always be composed of symbol names, never file or directory names.
 
-        Examples:
-        - Providing "foo" will find all symbols named "foo" regardless where they are contained in the symbol tree.
-        - Providing "bar/foo" will only find symbols named "foo" that are direct children of a symbol called "bar".
-        - Providing "foo/" will only find symbols named "foo" that are top-level symbols (have no parent).
-        - Allowing substring matching with "bar" will find symbols with names containing "foo" anywhere in the symbol tree.
-        - Allowing substring matching with "foo/" will find only top-level symbols with names containing "foo".
-        - Allowing substring matching with "bar/foo" will find only symbols with names containing "foo" that are direct children of a symbol named "bar".
+        Key aspects of the name path matching behavior:
+        - Trailing slashes in `name_path` play no role and are ignored.
+        - The name of the retrieved symbols will match (either exactly or as a substring)
+          the last segment of `name_path`, while other segments will restrict the search to symbols that
+          have a desired sequence of ancestors.
+        - If there is no starting or intermediate slash in `name_path`, there is no
+          restriction on the ancestor symbols. For example, passing `method` will match
+          against symbols with name paths like `method`, `class/method`, `class/nested_class/method`, etc.
+        - If `name_path` contains a `/` but doesn't start with a `/`, the matching is restricted to symbols
+          with the same ancestors as the last segment of `name_path`. For example, passing `class/method` will match against
+          `class/method` as well as `nested_class/class/method` but not `method`.
+        - If `name_path` starts with a `/`, it will be treated as an absolute name path pattern, meaning
+          that the first segment of it must match the first segment of the symbol's name path.
+          For example, passing `/class` will match only against top-level symbols like `class` but not against `nested_class/class`.
+          Passing `/class/method` will match against `class/method` but not `nested_class/class/method` or `method`.
 
-        :param name: the name of the symbols to find. A "qualified" name that includes the symbol's parents
-            separated by `/` (e.g. "class/method/inner_function") can be used to restrict the search.
-        :param depth: specifies the depth up to which descendants of the symbol are to be retrieved
-            (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class).
-            Provide a non-zero depth if you intend to subsequently query symbols that are contained in the
-            retrieved symbol.
-        :param within_relative_path: pass a relative path to only consider symbols within this path.
-            If a file is passed, only the symbols within this file will be considered.
-            If a directory is passed, all files within this directory will be considered.
-            If None, the entire codebase will be considered.
-        :param include_body: whether to include the body of all symbols in the result. You should only use this
-            if you actually need the body of the symbol for the task at hand (for example, for a deep analysis
-            of the functionality or for an editing task).
-        :param include_kinds: an optional list of ints representing the LSP symbol kind.
-            If provided, only symbols of the given kinds will be included in the result.
-            Valid kinds:
-            1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
+
+        :param name_path: The name path pattern to search for, see above for details.
+        :param depth: Depth to retrieve descendants (e.g., 1 for class methods/attributes).
+        :param within_relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
+        :param include_body: If True, include the symbol's source code. Use judiciously.
+        :param include_kinds: Optional. List of LSP symbol kind integers to include. (e.g., 5 for Class, 12 for Function).
+            Valid kinds: 1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
             11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
             20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter
-        :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
-            Takes precedence over include_kinds.
-        :param substring_matching: whether to use substring matching for the symbol name.
-            If True, the symbol name will be matched if it contains the given name as a substring.
-        :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task. Instead, if the output is too long, you should
-            make a stricter query.
-        :return: a list of symbols (with symbol locations) that match the given name in JSON format
-
+        :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
+        :param substring_matching: If True, use substring matching for the last segment of `name`.
+        :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
+        :return: JSON string: a list of symbols (with locations) matching the name.
         """
-        include_kinds = cast(list[SymbolKind] | None, include_kinds)
-        exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
+        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
+        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbols = self.symbol_manager.find_by_name(
-            name,
+            name_path,
             include_body=include_body,
-            include_kinds=include_kinds,
-            exclude_kinds=exclude_kinds,
+            include_kinds=parsed_include_kinds,
+            exclude_kinds=parsed_exclude_kinds,
             substring_matching=substring_matching,
             within_relative_path=within_relative_path,
         )
@@ -895,13 +888,13 @@ class FindReferencingSymbolsTool(Tool):
             make a stricter query.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
-        include_kinds = cast(list[SymbolKind] | None, include_kinds)
-        exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
+        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
+        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbols = self.symbol_manager.find_referencing_symbols(
             SymbolLocation(relative_path, line, column),
             include_body=include_body,
-            include_kinds=include_kinds,
-            exclude_kinds=exclude_kinds,
+            include_kinds=parsed_include_kinds,
+            exclude_kinds=parsed_exclude_kinds,
         )
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=0, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
