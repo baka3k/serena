@@ -128,22 +128,12 @@ class FileUtils:
         if not os.path.exists(file_path):
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
             raise MultilspyException(f"File read '{file_path}' failed: File does not exist.")
-        encodings = ["utf-8-sig", "utf-16", "utf-8", "latin-1"]
         try:
-            for encoding in encodings:
-                try:
-                    with open(file_path, "r", encoding=encoding) as inp_file:
-                        return inp_file.read()
-                except UnicodeError:
-                    continue
-            # Try system default encoding as a last resort
-            with open(file_path, "r") as inp_file:
+            with open(file_path, "r", encoding="utf-8") as inp_file:
                 return inp_file.read()
         except Exception as exc:
-            logger.log(f"File read '{file_path}' failed: {exc}", logging.ERROR)
+            logger.log(f"File read '{file_path}' failed to read with encoding 'utf-8': {exc}", logging.ERROR)
             raise MultilspyException("File read failed.") from None
-        logger.log(f"File read '{file_path}' failed: Unsupported encoding.", logging.ERROR)
-        raise MultilspyException(f"File read '{file_path}' failed: Unsupported encoding.") from None
     
     @staticmethod
     def download_file(logger: MultilspyLogger, url: str, target_path: str) -> None:
