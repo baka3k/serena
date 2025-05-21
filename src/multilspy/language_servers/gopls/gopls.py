@@ -10,6 +10,7 @@ from typing import AsyncIterator, List
 from overrides import override
 
 from multilspy import multilspy_types
+from multilspy.lsp_protocol_handler import lsp_types
 from multilspy.multilspy_exceptions import MultilspyException
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
@@ -154,18 +155,3 @@ class Gopls(LanguageServer):
 
             await self.server.shutdown()
             await self.server.stop()
-
-    @override
-    async def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
-        NUM_COLS_TO_TRY = 10
-        """selectionRange in Gopls always contains the wrong column, 
-        the one at the beginning of the declaration instead of the symbol. We do a dirty hack here (loop over some columns).
-        See https://github.com/golang/go/issues/73521
-        """
-        actual_column = column
-        for actual_column in range(column, column+NUM_COLS_TO_TRY):
-            try:
-                return await super()._send_references_request(relative_file_path, line, actual_column)
-            except (Error, RuntimeError, MultilspyException) as e:
-                self.logger.log(f"Cannot find symbol at {line=}, column={actual_column}, trying to bump column by 1", logging.INFO)
-        raise MultilspyException(f"Failed to find references for symbol in\n{relative_file_path=} at {line=}, {column=}")
