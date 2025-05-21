@@ -1,6 +1,18 @@
-# 2025-05-19
-
+# Latest
 Changes prior to the next official version change will appear here.
+
+# 2025-05-21
+
+**Signficant improvement in symbol finding!**
+
+* Serena core:
+    * `FindSymbolTool` now can look for symbols by specifying paths to them, not just the symbol name
+* Language Servers:
+    * Fixed `gopls` initialization
+    * Symbols retrieved through the symbol tree or through overview methods now are linked to their parents
+
+
+# 2025-05-19
 
 * Serena core:
     * Bugfix in `FindSymbolTool` (a bug fixed in LS)

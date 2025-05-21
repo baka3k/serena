@@ -48,16 +48,15 @@ Language servers provide support for a wide range of programming languages.
 With Serena, we provide 
  * direct, out-of-the-box support for:
      * Python 
-     * Java (_Note_: startup is slow, initial startup especially so)
-     * TypeScript
+     * TypeScript/Javascript
      * PhP
      * Go (need to install go and gopls first)
      * Rust
      * C/C++
+     * Java (_Note_: startup is slow, initial startup especially so. There seem to be issues with java on macos)
  * indirect support (may require some code changes/manual installation) for:
      * Ruby (untested)
      * C# (untested)
-     * Rust (untested)
      * Kotlin (untested)
      * Dart (untested)
      
