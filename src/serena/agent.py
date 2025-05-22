@@ -29,7 +29,7 @@ from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
-from serena.llm.prompt_factory import PromptFactory
+from serena.prompt_factory import PromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.text_utils import search_files
 from serena.util.class_decorators import singleton

@@ -1,6 +1,6 @@
 name: editing
 description: All tools, with detailed instructions for code editing
-system_prompt_extension: |
+system_prompt: |
   You are operating in editing mode. Your task is to implement the requested changes while adhering to the project's
   code style and patterns. Use symbolic editing tools whenever possible for precise code modifications.
 excluded_tools: []

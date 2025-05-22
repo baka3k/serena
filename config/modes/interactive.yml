@@ -1,6 +1,6 @@
 name: interactive
 description: Interactive mode for clarification and step-by-step work
-system_prompt_extension: |
+system_prompt: |
   You are operating in interactive mode. You should engage with the user throughout the task, asking for clarification
   whenever anything is unclear, insufficiently specified, or ambiguous.
   
