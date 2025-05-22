@@ -198,25 +198,19 @@ class PromptCollection:
     All data will be read from the yamls directly contained in the given directory on initialization.
     It is thus assumed that you manage one directory per prompt collection.
 
-    The yamls are assumed to be either of the form (for single-language support):
-
-    ```yaml
-    <prompt_name>: <prompt_template_string>
-    <prompt_list_name>: [<prompt_template_string_1>, <prompt_template_string_2>, ...]
-    ```
-
-    or (necessary for multi-language support):
+    The yamls are assumed to be either of the form
 
     ```yaml
     lang: <language_code> # optional, defaults to "default"
     prompts:
       <prompt_name>:
         <prompt_template_string>
-      <prompt_list_name>: [<prompt_template_string_1>, <prompt_template_string_2>, ...]
+      <prompt_list_name>: [<prompt_string_1>, <prompt_string_2>, ...]
 
     ```
 
-    When specifying prompt templates for multiple languages, make sure that the parameters are the same for all languages
+    When specifying prompt templates for multiple languages, make sure that the Jinja template parameters
+    (inferred from the things inside the `{{ }}` in the template strings) are the same for all languages
     (you will get an exception otherwise).
 
     The prompt names must be unique (for the same language) within the collection.
