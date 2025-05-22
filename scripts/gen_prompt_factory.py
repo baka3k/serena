@@ -1,5 +1,5 @@
 """
-Autogenerates the `prompt_factory.py` module 
+Autogenerates the `prompt_factory.py` module
 """
 
 from pathlib import Path
@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 def main():
     autogenerate_prompt_factory_module(
         prompts_dir=PROMPT_TEMPLATES_DIR,
-        target_module_path=str(Path(REPO_ROOT) / "src" / "serena" / "prompt_factory.py"),
+        target_module_path=str(Path(REPO_ROOT) / "src" / "serena" / "generated" / "generated_prompt_factory.py"),
     )
 
 

@@ -29,7 +29,7 @@ from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
-from serena.prompt_factory import PromptFactory
+from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.text_utils import search_files
 from serena.util.class_decorators import singleton
@@ -225,7 +225,7 @@ class SerenaAgent:
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
         # Initialize the prompt factory
-        self.prompt_factory = PromptFactory()
+        self.prompt_factory = SerenaPromptFactory()
         self._project_activation_callback = project_activation_callback
 
         # Load context and mode configuration
@@ -311,20 +311,13 @@ class SerenaAgent:
 
         :param context: Name or path of the context to use
         """
-        try:
-            context_config = self.config_loader.get_context(context)
-            self.current_context = context_config
+        context_config = self.config_loader.get_context(context)
+        self.current_context = context_config
 
-            # Update the prompt factory with the new context
-            self.prompt_factory.set_context(context_config.system_prompt_extension)
+        # Update tool configurations
+        self._update_active_tools()
 
-            # Update tool configurations
-            self._update_active_tools()
-
-            log.info(f"Set context to '{context_config.name}': {context_config.description}")
-        except Exception as e:
-            log.error(f"Failed to set context '{context}': {e}")
-            raise
+        log.info(f"Set context to '{context_config.name}': {context_config.description}")
 
     def set_modes(self, modes: list[str]) -> None:
         """
@@ -332,29 +325,29 @@ class SerenaAgent:
 
         :param modes: List of mode names or paths to use
         """
-        try:
-            # Check for tool activation conflicts between modes
-            mode_configs = [self.config_loader.get_mode(mode) for mode in modes]
+        mode_configs = [self.config_loader.get_mode(mode) for mode in modes]
+        self._check_mode_conflicts(mode_configs)
+        self.current_modes = mode_configs
+        self._update_active_tools()
 
-            # Check for conflicts in tool exclusions between modes
-            self._check_mode_conflicts(mode_configs)
+        log.info(f"Set modes to {[mode.name for mode in mode_configs]}")
 
-            self.current_modes = mode_configs
+    def _get_modes_system_prompt(self) -> str:
+        return "\n".join([mode.system_prompt_extension for mode in self.current_modes])
 
-            # Update the prompt factory with the new modes
-            mode_extensions = [mode.system_prompt_extension for mode in mode_configs]
-            self.prompt_factory.set_modes(mode_extensions)
+    def _get_context_system_prompt(self) -> str:
+        return self.current_context.system_prompt_extension
 
-            # Update tool configurations
-            self._update_active_tools()
+    def create_system_prompt(self) -> str:
+        context_system_prompt = self._get_context_system_prompt()
+        mode_system_prompt = self._get_modes_system_prompt()
+        return self.prompt_factory.create_system_prompt(
+            context_system_prompt=context_system_prompt,
+            mode_system_prompt=mode_system_prompt,
+        )
 
-            mode_names = [mode.name for mode in mode_configs]
-            log.info(f"Set modes to {mode_names}")
-        except Exception as e:
-            log.error(f"Failed to set modes {modes}: {e}")
-            raise
-
-    def _check_mode_conflicts(self, mode_configs: list["ConfigData"]) -> None:
+    @staticmethod
+    def _check_mode_conflicts(mode_configs: list["ConfigData"]) -> None:
         """
         Check for conflicts in tool exclusions between modes.
 
@@ -1549,7 +1542,7 @@ class InitialInstructionsTool(Tool):
         Get the initial instructions for the current coding project.
         You should always call this tool before starting to work (including using any other tool) on any programming task!
         """
-        return self.agent.prompt_factory.create_system_prompt()
+        return self.agent.create_system_prompt()
 
 
 def iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:

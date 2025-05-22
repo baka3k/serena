@@ -357,10 +357,11 @@ def autogenerate_prompt_factory_module(prompts_dir: str, target_module_path: str
     :param target_module_path: the path to the target module file. Important: The module will be overwritten!
     """
     generated_code = """
-# NOTE: This class is auto-generated from interprompt.autogenerate_prompt_factory_module, do not edit manually!
 # ruff: noqa
 # black: skip
 # mypy: ignore-errors
+
+# NOTE: This module is auto-generated from interprompt.autogenerate_prompt_factory_module, do not edit manually!
 
 from interprompt.promt_template import PromptFactoryBase, PromptList
 from typing import Any
@@ -390,7 +391,7 @@ class PromptFactory(PromptFactoryBase):
     def get_list_{prompt_list_name}(self) -> PromptList:
         return self._get_prompt_list('{prompt_list_name}')
 """
-
+    os.makedirs(os.path.dirname(target_module_path), exist_ok=True)
     with open(target_module_path, "w", encoding="utf-8") as f:
         f.write(generated_code)
     log.info(f"Prompt factory generated successfully in {target_module_path}")

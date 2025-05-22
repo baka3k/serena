@@ -1,34 +1,11 @@
+from serena.constants import PROMPT_TEMPLATES_DIR
+from serena.generated.generated_prompt_factory import PromptFactory
 
-# NOTE: This class is auto-generated from interprompt.autogenerate_prompt_factory_module, do not edit manually!
-# ruff: noqa
-# black: skip
-# mypy: ignore-errors
 
-from interprompt.promt_template import PromptFactoryBase, PromptList
-from typing import Any
-
-class PromptFactory(PromptFactoryBase):
+class SerenaPromptFactory(PromptFactory):
     """
     A class for retrieving and rendering prompt templates and prompt lists.
     """
 
-    def create_onboarding_prompt(self, *, system: Any) -> str:
-        return self._render_prompt("onboarding_prompt", system=system)
-
-    def create_think_about_collected_information(self) -> str:
-        return self._render_prompt("think_about_collected_information")
-
-    def create_think_about_task_adherence(self) -> str:
-        return self._render_prompt("think_about_task_adherence")
-
-    def create_think_about_whether_you_are_done(self) -> str:
-        return self._render_prompt("think_about_whether_you_are_done")
-
-    def create_summarize_changes(self) -> str:
-        return self._render_prompt("summarize_changes")
-
-    def create_prepare_for_new_conversation(self) -> str:
-        return self._render_prompt("prepare_for_new_conversation")
-
-    def create_system_prompt(self) -> str:
-        return self._render_prompt("system_prompt")
+    def __init__(self):
+        super().__init__(PROMPT_TEMPLATES_DIR)
