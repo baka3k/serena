@@ -388,19 +388,21 @@ class SerenaAgent:
     def _update_active_tools(self) -> None:
         """
         Update the active tools based on context, modes, and project configuration.
-
-        Priority order:
-        1. Project-specific exclusions (highest priority)
-        2. Context exclusions
-        3. Mode exclusions
+        All tool exclusions are merged together.
         """
-        # Collect all excluded tools with the desired priority mode < context < project
         excluded_tool_classes: set[type[Tool]] = set()
+        # modes
         for mode in self._modes:
             excluded_tool_classes.update(mode.get_excluded_tool_classes())
+        # context
         excluded_tool_classes.update(self._context.get_excluded_tool_classes())
+        # project config
         if self.project_config is not None:
             excluded_tool_classes.update(self.project_config.get_excluded_tool_classes())
+            if self.project_config.read_only:
+                for tool_class in self._all_tools:
+                    if tool_class.can_edit():
+                        excluded_tool_classes.add(tool_class)
 
         self._active_tools = {
             tool_class: tool_instance for tool_class, tool_instance in self._all_tools.items() if tool_class not in excluded_tool_classes
@@ -719,7 +721,7 @@ class Tool(Component):
 
         try:
             if not self.is_active():
-                return f"Error: Tool '{self.get_name()}' is not active."
+                return f"Error: Tool '{self.get_name()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
         except Exception as e:
             return f"RuntimeError while checking if tool {self.get_name()} is active: {e}"
 
@@ -736,21 +738,6 @@ class Tool(Component):
                 if not self.agent.is_language_server_running():
                     log.info("Language server is not running. Starting it ...")
                     self.agent.reset_language_server()
-
-            # check whether the tool is enabled
-            if self.agent.project_config is not None and self.get_name() in self.agent.project_config.excluded_tools:
-                return (
-                    f"Error: Tool '{self.get_name()}' is disabled for the active project ('{self.project_config.project_name}'); "
-                    f"active tools: {self.agent.get_active_tool_names()}"
-                )
-
-            # check if the project is in read-only mode and this is an editing tool
-            if self.agent.project_config is not None and self.agent.project_config.read_only and self.__class__.can_edit():
-                return (
-                    f"Error: Tool '{self.get_name()}' cannot be used because the project '{self.project_config.project_name}' "
-                    f"is in read-only mode. Editing operations are not allowed."
-                )
-
             # apply the actual tool
             result = apply_fn(**kwargs)
 

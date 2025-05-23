@@ -71,7 +71,9 @@ class SerenaAgnoAgentProvider:
 
             parser = argparse.ArgumentParser(description="Serena coding assistant")
             parser.add_argument(
-                "--project", required=False, help="Path to the project (or project.yml file), either absolute or relative to the root directory"
+                "--project",
+                required=False,
+                help="Path to the project (or project.yml file).",
             )
             args = parser.parse_args()
 
