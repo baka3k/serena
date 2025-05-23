@@ -12,4 +12,4 @@ prompt: |
 excluded_tools:
   - get_current_config
   - activate_project
-  - activate_modes
+  - switch_modes

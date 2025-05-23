@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Self
 import yaml
 from sensai.util import logging
 
-from serena.constants import CONTEXT_YAMLS_DIR, MODE_YAMLS_DIR
+from serena.constants import CONTEXT_YAMLS_DIR, DEFAULT_CONTEXT, DEFAULT_MODES, MODE_YAMLS_DIR
 
 if TYPE_CHECKING:
     from serena.agent import Tool
@@ -69,7 +69,7 @@ class SerenaAgentMode:
     @classmethod
     def load_default_modes(cls) -> list[Self]:
         """Load the default modes (interactive and editing)."""
-        return [cls.from_name("interactive"), cls.from_name("editing")]
+        return [cls.from_name(mode) for mode in DEFAULT_MODES]
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
@@ -111,8 +111,8 @@ class SerenaAgentContext:
         yaml_path = os.path.join(CONTEXT_YAMLS_DIR, f"{name}.yml")
         if not os.path.exists(yaml_path):
             raise FileNotFoundError(
-                f"Context {Path(yaml_path).stem} not found in {CONTEXT_YAMLS_DIR}. You can load a custom context by using from_yaml() instead. "
-                f"Available contexts: {cls.list_registered_context_names()}"
+                f"Context {Path(yaml_path).stem} not found in {CONTEXT_YAMLS_DIR}. You can load a custom context by using from_yaml() instead.\n"
+                f"Available contexts:\n{cls.list_registered_context_names()}"
             )
         return cls.from_yaml(yaml_path)
 
@@ -131,7 +131,7 @@ class SerenaAgentContext:
     @classmethod
     def load_default(cls) -> Self:
         """Load the default context."""
-        return cls.from_name("default")
+        return cls.from_name(DEFAULT_CONTEXT)
 
     def print_overview(self) -> None:
         """Print an overview of the mode."""

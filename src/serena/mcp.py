@@ -20,6 +20,7 @@ from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
 from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -94,9 +95,13 @@ def make_tool(
     )
 
 
-def create_mcp_server(
-    project_file_path: str | None, host: str = "0.0.0.0", port: int = 8000, context: str = "default", modes: Sequence[str] = ("default",)
-) -> FastMCP:
+def create_mcp_server_and_agent(
+    project_file_path: str | None,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    context: str = DEFAULT_CONTEXT,
+    modes: Sequence[str] = DEFAULT_MODES,
+) -> tuple[FastMCP, SerenaAgent]:
     """
     Create an MCP server.
 
@@ -147,7 +152,7 @@ def create_mcp_server(
 
     update_tools()
 
-    return mcp
+    return mcp, agent
 
 
 @click.command()
@@ -169,7 +174,8 @@ def create_mcp_server(
 @click.option(
     "--context",
     type=str,
-    default="desktop-app",
+    show_default=True,
+    default=DEFAULT_CONTEXT,
     help="Context to use. This can be a name of a built-in context ('desktop-app', 'agent', 'ide-assistant') "
     "or a path to a custom context YAML file.",
 )
@@ -178,7 +184,8 @@ def create_mcp_server(
     "modes",
     type=str,
     multiple=True,
-    default=["editing", "interactive"],
+    default=DEFAULT_MODES,
+    show_default=True,
     help="Mode(s) to use. This can be names of built-in modes ('planning', 'editing', 'one-shot', 'interactive') "
     "or paths to custom mode YAML files. Can be specified multiple times to combine modes.",
 )
@@ -192,22 +199,22 @@ def create_mcp_server(
 @click.option(
     "--host",
     type=str,
-    default="0.0.0.0",
     show_default=True,
+    default="0.0.0.0",
     help="Host to bind to (for SSE transport).",
 )
 @click.option(
     "--port",
     type=int,
-    default=8000,
     show_default=True,
+    default=8000,
     help="Port to bind to (for SSE transport).",
 )
 def start_mcp_server(
     project_file_opt: str | None,
     project_file_arg: str | None,
-    context: str,
-    modes: tuple[str, ...],
+    context: str = DEFAULT_CONTEXT,
+    modes: tuple[str, ...] = DEFAULT_MODES,
     transport: Literal["stdio", "sse"] = "stdio",
     host: str = "0.0.0.0",
     port: int = 8000,
@@ -222,7 +229,7 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
-    mcp_server = create_mcp_server(project_file_path=project_file, host=host, port=port, context=context, modes=modes)
+    mcp_server, agent = create_mcp_server_and_agent(project_file_path=project_file, host=host, port=port, context=context, modes=modes)
 
     # log after server creation such that the log appears in the GUI
     if project_file_arg is not None:
@@ -232,10 +239,6 @@ def start_mcp_server(
             f"Used path: {project_file}"
         )
 
-    # Log selected context and modes
-    if context:
-        log.info(f"Using context: {context}")
-    if modes:
-        log.info(f"Using modes: {', '.join(modes)}")
+    log.info(f"Starting serena agent in MCP server with config:\n{agent.get_current_config_overview()}")
 
     mcp_server.run(transport=transport)

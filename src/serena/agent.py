@@ -321,8 +321,8 @@ class SerenaAgent:
             context = SerenaAgentContext.load_default()
         if modes is None:
             modes = SerenaAgentMode.load_default_modes()
-        self.context = context
-        self.modes = modes
+        self._context = context
+        self._modes = modes
         self._update_active_tools()
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name() for tool in self._all_tools.values()])}")
 
@@ -368,15 +368,21 @@ class SerenaAgent:
 
         :param modes: List of mode names or paths to use
         """
-        self.current_modes = modes
+        self._modes = modes
         self._update_active_tools()
 
         log.info(f"Set modes to {[mode.name for mode in modes]}")
 
+    def get_active_modes(self) -> list[SerenaAgentMode]:
+        """
+        :return: the list of active modes
+        """
+        return list(self._modes)
+
     def create_system_prompt(self) -> str:
         return self.prompt_factory.create_system_prompt(
-            context_system_prompt=self.context.prompt,
-            mode_system_prompts=[mode.prompt for mode in self.current_modes],
+            context_system_prompt=self._context.prompt,
+            mode_system_prompts=[mode.prompt for mode in self._modes],
         )
 
     def _update_active_tools(self) -> None:
@@ -390,9 +396,9 @@ class SerenaAgent:
         """
         # Collect all excluded tools with the desired priority mode < context < project
         excluded_tool_classes: set[type[Tool]] = set()
-        for mode in self.current_modes:
+        for mode in self._modes:
             excluded_tool_classes.update(mode.get_excluded_tool_classes())
-        excluded_tool_classes.update(self.context.get_excluded_tool_classes())
+        excluded_tool_classes.update(self._context.get_excluded_tool_classes())
         if self.project_config is not None:
             excluded_tool_classes.update(self.project_config.get_excluded_tool_classes())
 
@@ -439,6 +445,24 @@ class SerenaAgent:
         :return: the list of names of the active tools for the current project
         """
         return sorted([tool.get_name() for tool in self._active_tools.values()])
+
+    def get_current_config_overview(self) -> str:
+        """
+        :return: a string overview of the current configuration, including the active project, context, modes, and tools
+        """
+        result_str = "Current configuration:\n"
+        if self.project_config is not None:
+            result_str += f"Active project: {self.project_config.project_name}\n"
+        result_str += f"Active context: {self._context.name}\n"
+        result_str += "Active modes: {}\n".format(", ".join([mode.name for mode in self.get_active_modes()]))
+        result_str += "Active tools (after all exclusions from the project, context, and modes):\n"
+        active_tool_names = self.get_active_tool_names()
+        # print the tool names in chunks
+        chunk_size = 4
+        for i in range(0, len(active_tool_names), chunk_size):
+            chunk = active_tool_names[i : i + chunk_size]
+            result_str += "  " + ", ".join(chunk) + "\n"
+        return result_str
 
     def is_language_server_running(self) -> bool:
         return self.language_server is not None and self.language_server.is_running()
@@ -1528,14 +1552,7 @@ class GetCurrentConfigTool(Tool):
         """
         Print the current configuration of the agent, including the active modes, tools, and context.
         """
-        result_str = "Current configuration:\n"
-        if self.agent.project_config is not None:
-            result_str += f"Active project: {self.agent.project_config.project_name}\n"
-        result_str += f"Active context: {self.agent.context.name}\n"
-        result_str += "Active modes: {}\n".format(", ".join([mode.name for mode in self.agent.current_modes]))
-        result_str += "Active tools (exclusions from the project, context, and modes):\n"
-        result_str += "\n".join(self.agent.get_active_tool_names())
-        return result_str
+        return self.agent.get_current_config_overview()
 
 
 class InitialInstructionsTool(Tool):
