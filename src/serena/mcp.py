@@ -96,7 +96,7 @@ def make_tool(
 
 
 def create_mcp_server_and_agent(
-    project_file_path: str | None,
+    project: str | None,
     host: str = "0.0.0.0",
     port: int = 8000,
     context: str = DEFAULT_CONTEXT,
@@ -105,7 +105,7 @@ def create_mcp_server_and_agent(
     """
     Create an MCP server.
 
-    :param project_file_path: The path to the project file, or None.
+    :param project: The path to the project directory or the `project.yml` file therein, or None.
     :param host: The host to bind to
     :param port: The port to bind to
     :param context: The context name or path to context file
@@ -117,7 +117,7 @@ def create_mcp_server_and_agent(
 
     try:
         agent = SerenaAgent(
-            project_file_path,
+            project_config=project,
             # Callback disabled for the time being (see above)
             # project_activation_callback=update_tools
             context=context_instance,
@@ -156,18 +156,30 @@ def create_mcp_server_and_agent(
 
 
 @click.command()
+# Add --project option as the primary, more intuitive interface
 @click.option(
-    "--project-file",
-    "project_file_opt",  # Rename to avoid conflict with argument
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    "--project",
+    "project_file_opt",  # Use same destination variable to avoid conflicts
+    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
     default=None,
-    help="Optional path to the .yml project file via option."
+    help="Path to the .yml project file. "
     "Does not need to be provided at startup since you can activate a project later by simply asking the agent to do so "
     "(there is a dedicated tool for this purpose).",
 )
+# Keep --project-file for backwards compatibility
+@click.option(
+    "--project-file",
+    "project_file_opt",  # Use same destination variable to avoid conflicts
+    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+    default=None,
+    help="[DEPRECATED] Use --project instead. Optional path to the .yml project file via option."
+    "Does not need to be provided at startup since you can activate a project later by simply asking the agent to do so "
+    "(there is a dedicated tool for this purpose).",
+)
+# Positional argument for backwards compatibility
 @click.argument(
     "project_file_arg",
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
     required=False,
     default=None,
 )
@@ -221,7 +233,7 @@ def start_mcp_server(
 ) -> None:
     """Starts the Serena MCP server.
 
-    Accepts the project file path either via the --project-file option or as a positional argument.
+    Accepts a path to the project directory or the `project.yml` file therein via the --project option.
 
     Use --context to specify the execution environment and --mode to specify behavior mode(s).
     """
@@ -229,13 +241,13 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
-    mcp_server, agent = create_mcp_server_and_agent(project_file_path=project_file, host=host, port=port, context=context, modes=modes)
+    mcp_server, agent = create_mcp_server_and_agent(project=project_file, host=host, port=port, context=context, modes=modes)
 
     # log after server creation such that the log appears in the GUI
     if project_file_arg is not None:
         log.warning(
-            "The positional argument for the project file path is deprecated and will be removed in the future!"
-            "Please pass the project file path via the `--project-file` option instead.\n"
+            "The positional argument for the project file path is deprecated and will be removed in the future! "
+            "Please pass the project file path via the `--project` option instead.\n"
             f"Used path: {project_file}"
         )
 
