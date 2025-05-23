@@ -440,11 +440,27 @@ class SerenaAgent:
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
+    def get_active_tool_classes(self) -> list[type["Tool"]]:
+        """
+        :return: the list of active tool classes for the current project
+        """
+        return list(self._active_tools.keys())
+
     def get_active_tool_names(self) -> list[str]:
         """
         :return: the list of names of the active tools for the current project
         """
-        return sorted([tool.get_name() for tool in self._active_tools.values()])
+        return sorted([tool.get_name() for tool in self.get_active_tool_classes()])
+
+    def tool_is_active(self, tool_class: type["Tool"] | str) -> bool:
+        """
+        :param tool_class: the class or name of the tool to check
+        :return: True if the tool is active, False otherwise
+        """
+        if isinstance(tool_class, str):
+            return tool_class in self.get_active_tool_names()
+        else:
+            return tool_class in self.get_active_tool_classes()
 
     def get_current_config_overview(self) -> str:
         """
@@ -454,7 +470,18 @@ class SerenaAgent:
         if self.project_config is not None:
             result_str += f"Active project: {self.project_config.project_name}\n"
         result_str += f"Active context: {self._context.name}\n"
-        result_str += "Active modes: {}\n".format(", ".join([mode.name for mode in self.get_active_modes()]))
+
+        # Active modes
+        active_mode_names = [mode.name for mode in self.get_active_modes()]
+        result_str += "Active modes: {}\n".format(", ".join(active_mode_names))
+
+        # Available but not active modes
+        all_available_modes = SerenaAgentMode.list_registered_mode_names()
+        inactive_modes = [mode for mode in all_available_modes if mode not in active_mode_names]
+        if inactive_modes:
+            result_str += "Available but not active modes: {}\n".format(", ".join(inactive_modes))
+
+        # Active tools
         result_str += "Active tools (after all exclusions from the project, context, and modes):\n"
         active_tool_names = self.get_active_tool_names()
         # print the tool names in chunks
@@ -462,6 +489,16 @@ class SerenaAgent:
         for i in range(0, len(active_tool_names), chunk_size):
             chunk = active_tool_names[i : i + chunk_size]
             result_str += "  " + ", ".join(chunk) + "\n"
+
+        # Available but not active tools
+        all_tool_names = sorted([tool.get_name() for tool in self._all_tools.values()])
+        inactive_tool_names = [tool for tool in all_tool_names if tool not in active_tool_names]
+        if inactive_tool_names:
+            result_str += "Available but not active tools:\n"
+            for i in range(0, len(inactive_tool_names), chunk_size):
+                chunk = inactive_tool_names[i : i + chunk_size]
+                result_str += "  " + ", ".join(chunk) + "\n"
+
         return result_str
 
     def is_language_server_running(self) -> bool:
@@ -671,15 +708,23 @@ class Tool(Component):
             )
         return result
 
+    def is_active(self) -> bool:
+        return self.agent.tool_is_active(self.__class__)
+
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with the given arguments
         """
         apply_fn = self.get_apply_fn()
 
+        try:
+            if not self.is_active():
+                return f"Error: Tool '{self.get_name()}' is not active."
+        except Exception as e:
+            return f"RuntimeError while checking if tool {self.get_name()} is active: {e}"
+
         if log_call:
             self._log_tool_application(inspect.currentframe())
-
         try:
             # check whether the tool requires an active project and language server
             if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
