@@ -89,6 +89,7 @@ implementation.
   * [API-Based Coding Agents](#api-based-coding-agents)
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
 - [Onboarding and Memories](#onboarding-and-memories)
+- [Modes and Contexts](#modes-and-contexts)
 - [Combination with Other MCP Servers](#combination-with-other-mcp-servers)
 - [Recommendations on Using Serena](#recommendations-on-using-serena)
   * [Which Model to Choose?](#which-model-to-choose)
@@ -191,8 +192,12 @@ want to use Serena.
    }
    ```
    
-   :info: passing the project file is optional if you have set `enable_project_activation` in your configuration,
-   as this setting will allow you to simply instruct Claude to activate the project you want to work on.
+   :info: Passing the project file is optional if you have set `enable_project_activation` in your configuration, as this setting will allow you to simply instruct Claude to activate the project you want to work on.
+   * For **Claude Desktop** (as shown above), Serena's default context (`desktop-app`) and modes (e.g., `interactive`, `editing`) are typically suitable for general use. You usually don't need to specify them explicitly in the `args` unless you want to override the defaults.
+   * For **IDE integrations** (like VSCode, Cursor, Cline, etc., configured by adding Serena as an MCP server), you **should explicitly pass the `ide-assistant` context** by adding `"--context", "ide-assistant"` to the `args` in your MCP client's configuration. You can also specify initial modes if desired (e.g., `"--mode", "editing"`).
+   * For specific **one-shot tasks** across any client (e.g., generating a report or a plan in a single interaction), you might want to instruct Serena (once connected) to switch to modes like `planning` and `one-shot` using the `switch_modes` tool, or set these initially via the `--mode` flags if configuring the server launch command directly for such tasks.
+
+   See the [Modes and Contexts](#modes-and-contexts) section for more details on available options and customization.
 
    If you are using paths containing backslashes for paths on Windows 
    (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
@@ -244,9 +249,9 @@ claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mc
 ### Other MCP Clients - Cline, Roo-Code, Cursor, Windsurf etc.
 
 Being an MCP Server, Serena can be included in any MCP Client. The same config as above,
-maybe with small client-specific modifications should work. Most of the popular
+maybe with small client-specific modifications, should work. Most of the popular
 existing coding assistants (IDE extensions or VSCode-like IDEs) accept connecting
-to MCP Servers. Including Serena generally boosts their performance
+to MCP Servers. It is ** recommended to use the `ide-assistant` context** for these integrations by adding `"--context", "ide-assistant"` to the `args` in your MCP client's configuration. Including Serena generally boosts their performance
 by providing them tools for symbolic operations.
 
 In this case, the billing for the usage continues to be controlled by the client of your choice
@@ -365,7 +370,8 @@ it was done by us for agno in the [SerenaAgnoToolkit](/src/serena/agno.py).
 ## Serena's Tools and Configuration
 
 Serena combines tools for semantic code retrieval with editing capabilities and shell execution.
-Find the complete list of tools [below](#serenas-tools-and-configuration).
+Serena's behavior can be further customized through [Modes and Contexts](#modes-and-contexts).
+Find the complete list of tools [below](#full-list-of-tools).
 
 The use of all tools is generally recommended, as this allows Serena to provide the most value:
 Only by executing shell commands (in particular, tests) can Serena identify and correct mistakes 
@@ -462,6 +468,51 @@ Every file in the `.serena/memories/` directory is a memory file.
 
 We found the memories to significantly improve the user experience with Serena.
 By itself, Serena is instructed to create new memories whenever appropriate.
+
+## Modes and Contexts
+
+Serena's behavior and toolset can be adjusted using **contexts** and **modes**. These allow for a high degree of customization to best suit your workflow and the environment Serena is operating in.
+
+### Contexts
+
+A **context** defines the general environment in which Serena is operating. It influences the initial system prompt and the set of available tools. A context is set at startup when launching Serena (e.g., via CLI options for an MCP server or in the agent script) and cannot be changed during an active session.
+
+Serena comes with pre-defined contexts:
+*   `desktop-app`: Tailored for use with desktop applications like Claude Desktop. This is often the default.
+*   `agent`: Designed for scenarios where Serena acts as a more autonomous agent, for example, when used with Agno.
+*   `ide-assistant`: Optimized for integration into IDEs like VSCode, Cursor, or Cline, focusing on in-editor coding assistance.
+
+You should choose the context that best matches your integration.
+
+### Modes
+
+**Modes** further refine Serena's behavior for specific types of tasks or interaction styles. Multiple modes can be active simultaneously, allowing you to combine their effects. Modes influence the system prompt and can also alter the set of available tools by excluding certain ones.
+
+Examples of built-in modes include:
+*   `planning`: Focuses Serena on planning and analysis tasks.
+*   `editing`: Optimizes Serena for direct code modification tasks.
+*   `interactive`: Suitable for a conversational, back-and-forth interaction style.
+*   `one-shot`: Configures Serena for tasks that should be completed in a single response, often used with `planning` for generating reports or initial plans.
+*   `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session.
+*   `onboarding`: (Usually triggered automatically) Focuses on the project onboarding process.
+
+Modes can be set at startup (similar to contexts) but can also be **switched dynamically** during a session. You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "switch to planning and one-shot modes").
+
+:warning: **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
+
+### Customizing Contexts and Modes
+
+You can create your own contexts and modes to precisely tailor Serena to your needs:
+1.  **Adding to your Serena clone**: Create new `.yml` files in the `config/contexts/` or `config/modes/` directories within your local Serena repository. These custom contexts/modes will be automatically registered and available for use by their filename (without the `.yml` extension). They will also appear in listings of available contexts/modes.
+2.  **Using external YAML files**: When starting Serena, you can provide an absolute path to a custom `.yml` file for a context or mode.
+
+A context or mode YAML file typically defines:
+*   `name`: (Optional if filename is used) The name of the context/mode.
+*   `prompt`: A string that will be incorporated into Serena's system prompt.
+*   `description`: (Optional) A brief description.
+*   `excluded_tools`: A list of tool names (strings) to disable when this context/mode is active.
+
+This customization allows for deep integration and adaptation of Serena to specific project requirements or personal preferences.
 
 ## Combination with Other MCP Servers
 
@@ -642,32 +693,37 @@ For details on contributing, see [here](/CONTRIBUTING.md).
 
 Here is the full list of Serena's tools with a short description (output of `uv run serena-list-tools`):
 
-* `activate_project`: Activates a project by name.
-* `check_onboarding_performed`: Checks whether the onboarding was already performed.
-* `create_text_file`: Creates/overwrites a file in the project directory.
-* `delete_lines`: Deletes a range of lines within a file.
-* `delete_memory`: Deletes a memory from Serena's project-specific memory store.
-* `execute_shell_command`: Executes a shell command.
-* `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
-* `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
-* `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
-* `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
-* `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
-* `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
-* `insert_at_line`: Inserts content at a given line in a file.
-* `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
-* `list_dir`: Lists files and directories in the given directory (optionally with recursion).
-* `list_memories`: Lists memories in Serena's project-specific memory store.
-* `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
-* `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
-* `read_file`: Reads a file within the project directory.
-* `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
-* `replace_lines`: Replaces a range of lines within a file with new content.
-* `replace_symbol_body`: Replaces the full definition of a symbol.
-* `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
-* `search_for_pattern`: Performs a search for a pattern in the project.
-* `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
-* `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
-* `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
-* `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
-* `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
+ * `activate_project`: Activates a project by name.
+ * `check_onboarding_performed`: Checks whether project onboarding was already performed.
+ * `create_text_file`: Creates/overwrites a file in the project directory.
+ * `delete_lines`: Deletes a range of lines within a file.
+ * `delete_memory`: Deletes a memory from Serena's project-specific memory store.
+ * `execute_shell_command`: Executes a shell command.
+ * `find_referencing_code_snippets`: Finds code snippets in which the symbol at the given location is referenced.
+ * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
+ * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
+ * `get_active_project`: Gets the name of the currently active project (if any) and lists existing projects
+ * `get_current_config`: Prints the current configuration of the agent, including the active modes, tools, and context.
+ * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file or directory.
+ * `initial_instructions`: Gets the initial instructions for the current project.
+    Should only be used in settings where the system prompt cannot be set,
+    e.g. in clients you have no control over, like Claude Desktop.
+ * `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
+ * `insert_at_line`: Inserts content at a given line in a file.
+ * `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
+ * `list_dir`: Lists files and directories in the given directory (optionally with recursion).
+ * `list_memories`: Lists memories in Serena's project-specific memory store.
+ * `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
+ * `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
+ * `read_file`: Reads a file within the project directory.
+ * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
+ * `replace_lines`: Replaces a range of lines within a file with new content.
+ * `replace_symbol_body`: Replaces the full definition of a symbol.
+ * `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
+ * `search_for_pattern`: Performs a search for a pattern in the project.
+ * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
+ * `switch_modes`: Activates modes by providing a list of their names
+ * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
+ * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
+ * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
+ * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
