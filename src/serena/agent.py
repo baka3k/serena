@@ -323,8 +323,10 @@ class SerenaAgent:
             modes = SerenaAgentMode.load_default_modes()
         self._context = context
         self._modes = modes
-        self._update_active_tools()
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name() for tool in self._all_tools.values()])}")
+        
+        self._active_tools: dict[type[Tool], Tool] = {}
+        self._update_active_tools()
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
@@ -413,23 +415,8 @@ class SerenaAgent:
     def activate_project(self, project_config: ProjectConfig) -> None:
         log.info(f"Activating {project_config}")
         self.project_config = project_config
-
-        # handle project-specific tool exclusions (if any) - highest priority
-        excluded_by_project = set()
-        if self.project_config.excluded_tools:
-            excluded_by_project = self.project_config.excluded_tools
-            self._active_tools = {key: tool for key, tool in self._active_tools.items() if tool.get_name() not in excluded_by_project}
-            log.info(f"Tools excluded by project: {sorted(excluded_by_project)}")
-            log.info(f"Active tools after project exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
-
-        # if read_only mode is enabled, exclude all editing tools
-        if self.project_config.read_only:
-            editing_tools_before = {key for key, tool in self._active_tools.items() if key.can_edit()}
-            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
-            editing_tools_excluded = {self._all_tools[key].get_name() for key in editing_tools_before}
-            log.info(f"Editing tools excluded due to read-only mode: {sorted(editing_tools_excluded)}")
-            log.info(f"Project is in read-only mode. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
-
+        self._update_active_tools()
+        
         # start the language server
         self.reset_language_server()
         assert self.language_server is not None
