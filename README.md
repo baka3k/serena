@@ -185,7 +185,7 @@ want to use Serena.
        "mcpServers": {
            "serena": {
                "command": "/abs/path/to/uv",
-               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "--project-file", "/abs/path/to/myproject.yml"]
+               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "--project", "/abs/path/to/project"]
            }
        }
    }
@@ -205,9 +205,9 @@ Some client/OS/setup configurations were reported to cause issues when using Ser
 If you experience such problems, you can start Serena in `sse` mode by running, e.g.,
 
 ```shell
-uv run --directory /path/to/serena serena-mcp-server --transport sse --port 9121 --project-file /path/to/project.yml
+uv run --directory /path/to/serena serena-mcp-server --transport sse --port 9121 --project /path/to/project
 ```
-(the `--project-file` option is optional). Then configure your client to connect to `http://localhost:9121`.
+(the `--project` option is optional). Then configure your client to connect to `http://localhost:9121`.
 
 Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
@@ -237,7 +237,7 @@ several examples for that and have heard very positive feedback so far. Claude C
 add serena with
 
 ```shell
-claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --project-file /path/to/project.yml
+claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --project-file /path/to/project
 ```
 
 
@@ -274,7 +274,7 @@ Follow the instructions [here](https://block.github.io/goose/docs/getting-starte
 After that, use `goose configure` to add an extension. For adding Serena, choose the option `Command-line Extension`, name it `Serena` and add the following as command:
 
 ```
-/abs/path/to/uv run --directory /abs/path/to/serena serena-mcp-server /optional/abs/path/to/project.yml
+/abs/path/to/uv run --directory /abs/path/to/serena serena-mcp-server --project /optional/abs/path/to/project
 ```
 
 Since Serena can do all necessary editing and command operations, you should disable the `developer` extension that goose enables by default.
@@ -603,7 +603,7 @@ manually, if needed.
 ### Serena Logging
 
 To help with troubleshooting, we have written a small GUI utility for logging. For most clients, we recommend that you enable it
-through the project configuration (`myproject.yml`) if you encounter problems. Many clients also write MCP logs that can help identify issues.
+through the project configuration (`project.yml`) if you encounter problems. Many clients also write MCP logs that can help identify issues.
 
 The logging GUI may not work for all clients and on all systems. Currently, it does not work on macOS or within VSCode extensions like Cline.
 
