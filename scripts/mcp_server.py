@@ -1,6 +1,4 @@
-from serena.mcp import create_mcp_server
-
-mcp = create_mcp_server()
+from serena.mcp import start_mcp_server
 
 if __name__ == "__main__":
-    mcp.run()
+    start_mcp_server()

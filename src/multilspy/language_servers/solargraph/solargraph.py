@@ -56,7 +56,7 @@ class Solargraph(LanguageServer):
         if platform_id in [PlatformId.WIN_x64, PlatformId.WIN_arm64, PlatformId.WIN_x86]:
             which_cmd = "where"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r", encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -100,7 +100,7 @@ class Solargraph(LanguageServer):
         """
         Returns the initialize params for the Solargraph Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

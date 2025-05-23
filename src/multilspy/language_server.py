@@ -14,35 +14,31 @@ import os
 import pathlib
 import pickle
 import re
-from site import abs_paths
 import threading
 from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
-from typing import Dict, List, Optional, Tuple, Union
-from fnmatch import fnmatch
 from pathlib import Path, PurePath
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
 
-from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files, search_text
+from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
-from .lsp_protocol_handler.lsp_types import SymbolKind
+from .lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
 from .lsp_protocol_handler.server import (
+    Error,
     LanguageServerHandler,
     ProcessLaunchInfo,
 )
 from .multilspy_config import Language, MultilspyConfig
 from .multilspy_exceptions import MultilspyException
-from .multilspy_utils import PathUtils, FileUtils, TextUtils
-from pathlib import PurePath
-from typing import AsyncIterator, Iterator, List, Dict, Optional, Union, Tuple
 from .multilspy_logger import MultilspyLogger
 from .multilspy_utils import FileUtils, PathUtils, TextUtils
 from .type_helpers import ensure_all_methods_implemented
+from .lsp_protocol_handler import lsp_types
 
 # Serena dependencies
 # We will need to watch out for circular imports, but it's probably better to not
@@ -128,7 +124,7 @@ class LanguageServer:
                     raise ValueError(
                         f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry"
                     )
-                with open(gitignore_path) as f:
+                with open(gitignore_path, "r", encoding="utf-8") as f:
                     gitignore_file_content = f.read()
             config.gitignore_file_content = gitignore_file_content
 
@@ -188,6 +184,10 @@ class LanguageServer:
             from multilspy.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
 
             return ClangdLanguageServer(config, logger, repository_root_path)
+        elif config.code_language == Language.PHP:
+            from multilspy.language_servers.intelephense.intelephense import Intelephense
+
+            return Intelephense(config, logger, repository_root_path)
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise MultilspyException(f"Language {config.code_language} is not supported")
@@ -496,6 +496,9 @@ class LanguageServer:
         )
         return deleted_text
 
+    async def _send_definition_request(self, definition_params: DefinitionParams) -> Union[Definition, List[LocationLink], None]:
+        return await self.server.send.definition(definition_params)
+    
     async def request_definition(
         self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
@@ -519,19 +522,18 @@ class LanguageServer:
 
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
-            response = await self.server.send.definition(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {
-                        LSPConstants.URI: pathlib.Path(
-                            str(PurePath(self.repository_root_path, relative_file_path))
-                        ).as_uri()
-                    },
-                    LSPConstants.POSITION: {
-                        LSPConstants.LINE: line,
-                        LSPConstants.CHARACTER: column,
-                    },
-                }
-            )
+            definition_params = cast(DefinitionParams, {
+                LSPConstants.TEXT_DOCUMENT: {
+                    LSPConstants.URI: pathlib.Path(
+                        str(PurePath(self.repository_root_path, relative_file_path))
+                    ).as_uri()
+                },
+                LSPConstants.POSITION: {
+                    LSPConstants.LINE: line,
+                    LSPConstants.CHARACTER: column,
+                },
+            })
+            response = await self._send_definition_request(definition_params)
 
         ret: List[multilspy_types.Location] = []
         if isinstance(response, list):
@@ -580,6 +582,16 @@ class LanguageServer:
 
         return ret
 
+    # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[lsp_types.Location] | None:
+        return await self.server.send.references(
+            {
+                "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
+                "position": {"line": line, "character": column},
+                "context": {"includeDeclaration": False},
+            }
+        )
+
     async def request_references(
         self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
@@ -594,7 +606,7 @@ class LanguageServer:
 
         :return: A list of locations where the symbol is referenced (excluding ignored directories)
         """
-
+        
         if not self.server_started:
             self.logger.log(
                 "request_references called before Language Server started",
@@ -604,21 +616,23 @@ class LanguageServer:
 
 
         with self.open_file(relative_file_path):
-            # sending request to the language server and waiting for response
-            response = await self.server.send.references(
-                {
-                    "context": {"includeDeclaration": False},
-                    "textDocument": {
-                        "uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
-                    },
-                    "position": {"line": line, "character": column},
-                }
-            )
+            try:
+                response = await self._send_references_request(relative_file_path, line=line, column=column)
+            except Exception as e:
+                # Catch LSP internal error (-32603) and raise a more informative exception
+                if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
+                    raise RuntimeError(
+                        f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "
+                        "This often occurs when requesting references for a symbol not referenced in the expected way. "
+                    ) from e
+                raise
+        if response is None:
+            return []
 
         ret: List[multilspy_types.Location] = []
-        assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
+        assert isinstance(response, list), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
         for item in response:
-            assert isinstance(item, dict)
+            assert isinstance(item, dict), f"Unexpected response from Language Server (expected dict, got {type(item)}): {item}"
             assert LSPConstants.URI in item
             assert LSPConstants.RANGE in item
 
@@ -793,8 +807,11 @@ class LanguageServer:
         :param relative_file_path: The relative path of the file that has the symbols
         :param include_body: whether to include the body of the symbols in the result.
         :return: A list of symbols in the file, and a list of root symbols that represent the tree structure of the symbols.
-            Each symbol in hierarchy starting from the roots has a children attribute.
-            All symbols will have a location and a children attribute.
+            All symbols will have a location, a children, and a parent attribute,
+            where the parent attribute is None for root symbols.
+            Note that this is slightly different from the call to request_full_symbol_tree,
+            where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
+            If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
         self.logger.log(f"Requesting document symbols for {relative_file_path} for the first time", logging.DEBUG)
         # TODO: it's kinda dumb to not use the cache if include_body is False after include_body was True once
@@ -847,24 +864,32 @@ class LanguageServer:
                     item["selectionRange"] = item["range"]
                 else:
                     item["selectionRange"] = item["location"]["range"]
-            item[LSPConstants.CHILDREN] = item.get(LSPConstants.CHILDREN, [])
+            children = item.get(LSPConstants.CHILDREN, [])
+            for child in children:
+                child["parent"] = item
+            item[LSPConstants.CHILDREN] = children
 
         flat_all_symbol_list: List[multilspy_types.UnifiedSymbolInformation] = []
         assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
         root_nodes: List[multilspy_types.UnifiedSymbolInformation] = []
-        for item in response:
-            if "range" not in item and "location" not in item:
-                if item["kind"] in [SymbolKind.File, SymbolKind.Module]:
+        for root_item in response:
+            if "range" not in root_item and "location" not in root_item:
+                if root_item["kind"] in [SymbolKind.File, SymbolKind.Module]:
                     ...
 
-            turn_item_into_symbol_with_children(item)
-            item = cast(multilspy_types.UnifiedSymbolInformation, item)
-            root_nodes.append(item)
-            assert isinstance(item, dict)
-            assert LSPConstants.NAME in item
-            assert LSPConstants.KIND in item
+            # mutation is more convenient than creating a new dict,
+            # so we cast and rename the var after the mutating call to turn_item_into_symbol_with_children
+            # which turned and item into a "symbol"
+            turn_item_into_symbol_with_children(root_item)
+            root_symbol = cast(multilspy_types.UnifiedSymbolInformation, root_item)
+            root_symbol["parent"] = None
+            
+            root_nodes.append(root_symbol)
+            assert isinstance(root_symbol, dict)
+            assert LSPConstants.NAME in root_symbol
+            assert LSPConstants.KIND in root_symbol
 
-            if LSPConstants.CHILDREN in item:
+            if LSPConstants.CHILDREN in root_symbol:
                 # TODO: l_tree should be a list of TreeRepr. Define the following function to return TreeRepr as well
                 
                 def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> List[multilspy_types.UnifiedSymbolInformation]:
@@ -878,9 +903,9 @@ class LanguageServer:
                         l.extend(visit_tree_nodes_and_build_tree_repr(child))
                     return l
                 
-                flat_all_symbol_list.extend(visit_tree_nodes_and_build_tree_repr(item))
+                flat_all_symbol_list.extend(visit_tree_nodes_and_build_tree_repr(root_symbol))
             else:
-                flat_all_symbol_list.append(multilspy_types.UnifiedSymbolInformation(**item))
+                flat_all_symbol_list.append(multilspy_types.UnifiedSymbolInformation(**root_symbol))
 
         result = flat_all_symbol_list, root_nodes
         self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
@@ -890,17 +915,19 @@ class LanguageServer:
     
     async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
-        Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
+        Will go through all files in the project or within a relative path and build a tree of symbols. 
+        Note: this may be slow the first time it is called, especially if `within_relative_path` is not used to restrict the search.
 
-        For each file, a symbol of kind Module (3) will be created. For directories, a symbol of kind Package (4) will be created.
+        For each file, a symbol of kind File (2) will be created. For directories, a symbol of kind Package (4) will be created.
         All symbols will have a children attribute, thereby representing the tree structure of all symbols in the project
         that are within the repository.
+        All symbols except the root packages will have a parent attribute.
         Will ignore directories starting with '.', language-specific defaults
         and user-configured directories (e.g. from .gitignore).
 
         :param within_relative_path: pass a relative path to only consider symbols within this path.
-                If a file is passed, only the symbols within this file will be considered.
-                If a directory is passed, all files within this directory will be considered.
+            If a file is passed, only the symbols within this file will be considered.
+            If a directory is passed, all files within this directory will be considered.
         :param include_body: whether to include the body of the symbols in the result.
 
         :return: A list of root symbols representing the top-level packages/modules in the project.
@@ -919,17 +946,17 @@ class LanguageServer:
                     return root_nodes
 
         # Helper function to recursively process directories
-        async def process_directory(dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
-            abs_dir_path = self.repository_root_path if dir_path == "." else os.path.join(self.repository_root_path, dir_path)
+        async def process_directory(rel_dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
+            abs_dir_path = self.repository_root_path if rel_dir_path == "." else os.path.join(self.repository_root_path, rel_dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
             if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
-                self.logger.log(f"Skipping directory: {dir_path}\n(because it should be ignored)", logging.DEBUG)
+                self.logger.log(f"Skipping directory: {rel_dir_path}\n(because it should be ignored)", logging.DEBUG)
                 return []
 
             result = []
             try:
-                items = os.listdir(abs_dir_path)
+                contained_dir_or_file_names = os.listdir(abs_dir_path)
             except OSError:
                 return []
 
@@ -947,20 +974,45 @@ class LanguageServer:
             )
             result.append(package_symbol)
 
-            for item in items:
-                item_path = os.path.join(abs_dir_path, item)
-                abs_item_path = os.path.join(self.repository_root_path, item_path)
-                rel_item_path = str(Path(abs_item_path).resolve().relative_to(self.repository_root_path))
-                if self.is_ignored_path(rel_item_path):
-                    self.logger.log(f"Skipping item: {rel_item_path}\n(because it should be ignored)", logging.DEBUG)
+            for contained_dir_or_file_name in contained_dir_or_file_names:
+                contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
+                contained_dir_or_file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
+                if self.is_ignored_path(contained_dir_or_file_rel_path):
+                    self.logger.log(f"Skipping item: {contained_dir_or_file_rel_path}\n(because it should be ignored)", logging.DEBUG)
                     continue
 
-                if os.path.isdir(abs_item_path):
-                    child_symbols = await process_directory(item_path)
+                if os.path.isdir(contained_dir_or_file_abs_path):
+                    child_symbols = await process_directory(contained_dir_or_file_rel_path)
                     package_symbol["children"].extend(child_symbols)
+                    for child in child_symbols:
+                        child["parent"] = package_symbol
+                        
+                elif os.path.isfile(contained_dir_or_file_abs_path):
+                    _, file_root_nodes = await self.request_document_symbols(contained_dir_or_file_rel_path, include_body=include_body)
+                    
+                    # Create file symbol, link with children
+                    file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
+                    with self.open_file(file_rel_path) as file_data:
+                        fileRange = self._get_range_from_file_content(file_data.contents)
+                    file_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
+                        name=os.path.splitext(contained_dir_or_file_name)[0],
+                        kind=multilspy_types.SymbolKind.File,
+                        range=fileRange,
+                        selectionRange=fileRange,
+                        location=multilspy_types.Location(
+                            uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
+                            range=fileRange,
+                            absolutePath=str(contained_dir_or_file_abs_path),
+                            relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                        ),
+                        children=file_root_nodes,
+                        parent=package_symbol,
+                    )
+                    for child in file_root_nodes:
+                        child["parent"] = file_symbol
 
-                elif os.path.isfile(abs_item_path):
-                    _, root_nodes = await self.request_document_symbols(item_path, include_body=include_body)
+                    # Link file symbol with package
+                    package_symbol["children"].append(file_symbol)
 
                     # TODO: Not sure if this is actually still needed given recent changes to relative path handling
                     def fix_relative_path(nodes: List[multilspy_types.UnifiedSymbolInformation]):
@@ -976,33 +1028,13 @@ class LanguageServer:
                             if "children" in node:
                                 fix_relative_path(node["children"])
 
-                    fix_relative_path(root_nodes)
-
-                    # Create file symbol
-                    file_rel_path = str(Path(abs_item_path).resolve().relative_to(self.repository_root_path))
-                    with self.open_file(file_rel_path) as file_data:
-                        fileRange = self._get_range_from_file_content(file_data.contents)
-                    file_symbol = multilspy_types.UnifiedSymbolInformation( # type: ignore
-                        name=os.path.splitext(item)[0],
-                        kind=multilspy_types.SymbolKind.File,
-                        range=fileRange,
-                        selectionRange=fileRange,
-                        location=multilspy_types.Location(
-                            uri=str(pathlib.Path(abs_item_path).as_uri()),
-                            range=fileRange,
-                            absolutePath=str(abs_item_path),
-                            relativePath=str(Path(abs_item_path).resolve().relative_to(self.repository_root_path)),
-                        ),
-                        children=root_nodes
-                    )
-
-                    package_symbol["children"].append(file_symbol)
+                    fix_relative_path(file_root_nodes)
 
             return result
 
         # Start from the root or the specified directory
-        start_path = within_relative_path or "."
-        return await process_directory(start_path)
+        start_rel_path = within_relative_path or "."
+        return await process_directory(start_rel_path)
 
     @staticmethod
     def _get_range_from_file_content(file_content: str) -> multilspy_types.Range:
@@ -1444,11 +1476,11 @@ class LanguageServer:
             column_condition = True
             if strict:
                 line_condition = end["line"] >= line > start["line"]
-                if column is not None:
+                if column is not None and line == start["line"]:
                     column_condition = column > start["character"]
             else:
                 line_condition = end["line"] >= line >= start["line"]
-                if column is not None:
+                if column is not None and line == start["line"]:
                     column_condition = column >= start["character"]
             return line_condition and column_condition
 
@@ -1483,12 +1515,16 @@ class LanguageServer:
 
     async def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
-        Finds the container of the given symbol if there is one.
+        Finds the container of the given symbol if there is one. If the parent attribute is present, the parent is returned
+        without further searching.
 
         :param symbol: The symbol to find the container of.
         :param include_body: whether to include the body of the symbol in the result.
+        :return: The container of the given symbol or None if no container is found.
         """
-        assert "location" in symbol
+        if "parent" in symbol:
+            return symbol["parent"]
+        assert "location" in symbol, f"Symbol {symbol} has no location and no parent attribute"
         return await self.request_containing_symbol(
             symbol["location"]["relativePath"],
             symbol["location"]["range"]["start"]["line"],
@@ -1543,7 +1579,7 @@ class LanguageServer:
 
     @property
     def _cache_path(self) -> Path:
-        return Path(self.repository_root_path) / ".serena" / "cache" / "document_symbols_cache.pkl"
+        return Path(self.repository_root_path) / ".serena" / "cache" / "document_symbols_cache_v20-05-25.pkl"
 
     def save_cache(self):
         if self._cache_has_changed:
@@ -1581,7 +1617,7 @@ class LanguageServer:
 
         :param query: The query string to filter symbols by
 
-        :return Union[List[multilspy_types.UnifiedSymbolInformation], None]: A list of matching symbols
+        :return: A list of matching symbols
         """
         response = await self.server.send.workspace_symbol({"query": query})
         if response is None:
@@ -1720,10 +1756,20 @@ class SyncLanguageServer:
 
         :return List[multilspy_types.Location]: A list of locations where the symbol is referenced
         """
-        result = asyncio.run_coroutine_threadsafe(
-            self.language_server.request_references(file_path, line, column), self.loop
-        ).result(timeout=self.timeout)
+        try:
+            result = asyncio.run_coroutine_threadsafe(
+                self.language_server.request_references(file_path, line, column), self.loop
+            ).result(timeout=self.timeout)
+        except Exception as e:
+            from multilspy.lsp_protocol_handler.server import Error
+            if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
+                raise RuntimeError(
+                    f"LSP internal error (-32603) when requesting references for {file_path}:{line}:{column}. "
+                    "This often occurs when requesting references for a symbol not referenced in the expected way. "
+                ) from e
+            raise
         return result
+
 
     def request_references_with_content(
         self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0

@@ -10,11 +10,12 @@ import sys
 import traceback
 from abc import ABC
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from copy import copy
+from dataclasses import dataclass, field
 from logging import Logger
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
 
 import yaml
 from sensai.util import logging
@@ -30,7 +31,6 @@ from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.text_utils import search_files
-from serena.util.class_decorators import singleton
 from serena.util.file_system import scan_directory
 from serena.util.inspection import iter_subclasses
 from serena.util.shell import execute_shell_command
@@ -69,22 +69,40 @@ class SerenaConfigError(Exception):
     pass
 
 
+@dataclass
 class ProjectConfig(ToStringMixin):
+    project_name: str
+    language: Language
+    project_root: str
+    ignored_paths: list[str] = field(default_factory=list)
+    excluded_tools: set[str] = field(default_factory=set)
+    read_only: bool = False
+    ignore_all_files_in_gitignore: bool = True
+
     SERENA_MANAGED_DIR = ".serena"
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
-    def __init__(self, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None):
-        self.project_name: str = project_name
+    @classmethod
+    def rel_path_to_project_yml(cls) -> str:
+        return os.path.join(cls.SERENA_MANAGED_DIR, cls.SERENA_DEFAULT_PROJECT_FILE)
+
+    @classmethod
+    def from_config_dict(cls, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None) -> Self:
+        """
+        Create a ProjectConfig instance from a configuration dictionary
+        """
         try:
-            self.language: Language = Language(config_dict["language"].lower())
+            language = Language(config_dict["language"].lower())
         except ValueError as e:
             raise ValueError(f"Invalid language: {config_dict['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+
         if project_root is None:
             project_root = Path(config_dict["project_root"])
-        self.project_root: str = str(project_root.resolve())
-        self.ignored_paths: list[str] = config_dict.get("ignored_paths", [])
-        self.excluded_tools: set[str] = set(config_dict.get("excluded_tools", []))
-        self.read_only: bool = config_dict.get("read_only", False)
+        project_root_str = str(project_root.resolve())
+
+        ignored_paths = config_dict.get("ignored_paths", [])
+        excluded_tools = set(config_dict.get("excluded_tools", []))
+        read_only = config_dict.get("read_only", False)
 
         if "ignore_all_files_in_gitignore" not in config_dict:
             raise SerenaConfigError(
@@ -92,7 +110,7 @@ class ProjectConfig(ToStringMixin):
                 "Please update your `.yml` configuration file for this project. "
                 "It is recommended to set this to `True`."
             )
-        self.ignore_all_files_in_gitignore = config_dict["ignore_all_files_in_gitignore"]
+        ignore_all_files_in_gitignore = config_dict["ignore_all_files_in_gitignore"]
 
         # Raise errors for deprecated keys
         if "ignored_dirs" in config_dict:
@@ -101,9 +119,24 @@ class ProjectConfig(ToStringMixin):
                 "Note that you can also set `ignore_all_files_in_gitignore` to `True`, which will be enough for most cases."
             )
 
+        return cls(
+            project_name=project_name,
+            language=language,
+            project_root=project_root_str,
+            ignored_paths=ignored_paths,
+            excluded_tools=excluded_tools,
+            read_only=read_only,
+            ignore_all_files_in_gitignore=ignore_all_files_in_gitignore,
+        )
+
     @classmethod
-    def from_yml(cls, yml_path: Path) -> Self:
+    def _from_yml(cls, yml_path: Path) -> Self:
+        """
+        Create a ProjectConfig instance from a YAML file
+        """
         log.info(f"Loading project configuration from {yml_path}")
+        if not yml_path.exists():
+            raise FileNotFoundError(f"Project file not found: {yml_path}")
         try:
             with open(yml_path, encoding="utf-8") as f:
                 config_dict = yaml.safe_load(f)
@@ -113,9 +146,22 @@ class ProjectConfig(ToStringMixin):
             else:
                 project_root = None
                 project_name = yml_path.stem
-            return cls(config_dict, project_name=project_name, project_root=project_root)
+            return cls.from_config_dict(config_dict, project_name=project_name, project_root=project_root)
         except Exception as e:
             raise ValueError(f"Error loading project configuration from {yml_path}: {e}") from e
+
+    @classmethod
+    def from_path(cls, path: Path | str) -> Self:
+        """
+        Create a ProjectConfig instance from a path. Can either be a path to a yaml file or a directory
+        containing `.serena/project.yml`.
+        """
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path}")
+        if path.is_dir():
+            path = path / cls.SERENA_MANAGED_DIR / cls.SERENA_DEFAULT_PROJECT_FILE
+        return cls._from_yml(path)
 
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
@@ -124,18 +170,29 @@ class ProjectConfig(ToStringMixin):
         return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
 
 
-@singleton
+@dataclass
 class SerenaConfig:
     """
     Handles user-defined Serena configuration based on the configuration file
     """
 
+    projects: dict[str, ProjectConfig] = field(default_factory=dict)
+    project_names: list[str] = field(default_factory=list)
+    gui_log_window_enabled: bool = False
+    gui_log_window_level: int = logging.INFO
+    enable_project_activation: bool = True
+
     CONFIG_FILE = "serena_config.yml"
 
-    def __init__(self) -> None:
-        config_file = os.path.join(serena_root_path(), self.CONFIG_FILE)
+    @classmethod
+    def from_config_file(cls) -> "SerenaConfig":
+        """
+        Static constructor to create SerenaConfig from the configuration file
+        """
+        config_file = os.path.join(serena_root_path(), cls.CONFIG_FILE)
         if not os.path.exists(config_file):
             raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
+
         with open(config_file, encoding="utf-8") as f:
             try:
                 log.info(f"Loading Serena configuration from {config_file}")
@@ -143,10 +200,13 @@ class SerenaConfig:
             except Exception as e:
                 raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
 
+        # Create instance
+        instance = cls()
+
         # read projects
-        self.projects: dict[str, ProjectConfig] = {}
         if "projects" not in config_yaml:
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
+        projects = {}
         for project_config_path in config_yaml["projects"]:
             project_config_path = Path(project_config_path)
             if not project_config_path.is_absolute():
@@ -156,15 +216,18 @@ class SerenaConfig:
             if not project_config_path.is_file():
                 raise FileNotFoundError(f"Project file not found: {project_config_path}")
             log.info(f"Loading project configuration from {project_config_path}")
-            project_config = ProjectConfig.from_yml(project_config_path)
-            self.projects[project_config.project_name] = project_config
-        self.project_names = list(self.projects.keys())
+            project_config = ProjectConfig.from_path(project_config_path)
+            projects[project_config.project_name] = project_config
 
-        self.gui_log_window_enabled = config_yaml.get("gui_log_window", False)
-        self.gui_log_window_level = config_yaml.get("gui_log_level", logging.INFO)
-        self.enable_project_activation = config_yaml.get("enable_project_activation", True)
+        instance.projects = projects
+        instance.project_names = list(projects.keys())
+        instance.gui_log_window_enabled = config_yaml.get("gui_log_window", False)
+        instance.gui_log_window_level = config_yaml.get("gui_log_level", logging.INFO)
+        instance.enable_project_activation = config_yaml.get("enable_project_activation", True)
 
-    def get_project_configuration(self, project_name: str) -> ProjectConfig:
+        return instance
+
+    def get_project_configuration(self, project_name: str) -> "ProjectConfig":
         if project_name not in self.projects:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
         return self.projects[project_name]
@@ -189,13 +252,15 @@ class LinesRead:
 class SerenaAgent:
     def __init__(
         self,
-        project_file_path: str | None = None,
+        project_config: ProjectConfig | str | Path | None = None,
         project_activation_callback: Callable[[], None] | None = None,
+        serena_config: SerenaConfig | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
     ):
         """
-        :param project_file_path: the configuration file (.yml) of the project to load immediately;
+        :param project_config: the project to load immediately; may be a path to the project configuration file
+            or a configuration instance;
             if None, do not load any project (must use project selection tool to activate a project).
             If a project is provided, the corresponding language server will be started.
         :param project_activation_callback: a callback function to be called when a project is activated.
@@ -203,9 +268,10 @@ class SerenaAgent:
             The context may adjust prompts, tool availability, and tool descriptions.
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
+        :param serena_config: the Serena configuration or None to read the configuration from the default location.
         """
         # obtain serena configuration
-        self.serena_config = SerenaConfig()
+        self.serena_config = serena_config or SerenaConfig.from_config_file()
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
@@ -266,20 +332,20 @@ class SerenaAgent:
             self._gui_log_handler.log_viewer.set_tool_names(tool_names)
 
         # activate a project configuration (if provided or if there is only a single project available)
-        project_config: ProjectConfig | None = None
-        if project_file_path is not None:
-            if not os.path.exists(project_file_path):
-                raise FileNotFoundError(f"Project file not found: {project_file_path}")
-            log.info(f"Loading project configuration from {project_file_path}")
-            project_config = ProjectConfig.from_yml(Path(project_file_path))
+        project_config_to_load: ProjectConfig | None = None
+        if project_config is not None:
+            if isinstance(project_config, (str, Path)):
+                project_config_to_load = ProjectConfig.from_path(project_config)
+            else:
+                project_config_to_load = project_config
         else:
             match len(self.serena_config.projects):
                 case 0:
                     raise RuntimeError(f"No projects found in {SerenaConfig.CONFIG_FILE} and no project file specified.")
                 case 1:
-                    project_config = self.serena_config.get_project_configuration(self.serena_config.project_names[0])
-        if project_config is not None:
-            self.activate_project(project_config)
+                    project_config_to_load = self.serena_config.get_project_configuration(self.serena_config.project_names[0])
+        if project_config_to_load is not None:
+            self.activate_project(project_config_to_load)
         else:
             if not self.serena_config.enable_project_activation:
                 raise ValueError("Tool-based project activation is disabled in the configuration but no project file was provided.")
@@ -774,7 +840,7 @@ class FindSymbolTool(Tool):
 
     def apply(
         self,
-        name: str,
+        name_path: str,
         depth: int = 0,
         within_relative_path: str | None = None,
         include_body: bool = False,
@@ -784,48 +850,56 @@ class FindSymbolTool(Tool):
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Retrieves information on all symbols/code entities, i.e. classes, methods, attributes, variables, etc.
-        with the given name.
-        The returned symbol location information can subsequently be used to edit the returned symbols
-        or to retrieve further information using other tools.
-        If you already anticipate that you will need to reference children of the symbol (like methods or fields contained in a class),
-        you can specify a depth > 0.
+        Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given `name_path`,
+        which represents a pattern for the symbol's path within the symbol tree of a single file.
+        The returned symbol location can be used for edits or further queries.
+        Specify `depth > 0` to retrieve children (e.g., methods of a class).
 
-        :param name: the name of the symbols to find
-        :param depth: specifies the depth up to which descendants of the symbol are to be retrieved
-            (e.g. depth 1 will retrieve methods and attributes for the case where the symbol refers to a class).
-            Provide a non-zero depth if you intend to subsequently query symbols that are contained in the
-            retrieved symbol.
-        :param within_relative_path: pass a relative path to only consider symbols within this path.
-            If a file is passed, only the symbols within this file will be considered.
-            If a directory is passed, all files within this directory will be considered.
-            If None, the entire codebase will be considered.
-        :param include_body: whether to include the body of all symbols in the result. You should only use this
-            if you actually need the body of the symbol for the task at hand (for example, for a deep analysis
-            of the functionality or for an editing task).
-        :param include_kinds: an optional list of ints representing the LSP symbol kind.
-            If provided, only symbols of the given kinds will be included in the result.
-            Valid kinds:
-            1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
+        The matching behavior is determined by the structure of `name_path`, which can
+        either be a simple name (e.g. "method") or a name path like "class/method" (relative name path)
+        or "/class/method" (absolute name path). Note that the name path is not a path in the file system
+        but rather a path in the symbol tree **within a single file**. Thus, file or directory names should never
+        be included in the `name_path`. For restricting the search to a single file or directory,
+        the `within_relative_path` parameter should be used instead. The retrieved symbols' `name_path` attribute
+        will always be composed of symbol names, never file or directory names.
+
+        Key aspects of the name path matching behavior:
+        - Trailing slashes in `name_path` play no role and are ignored.
+        - The name of the retrieved symbols will match (either exactly or as a substring)
+          the last segment of `name_path`, while other segments will restrict the search to symbols that
+          have a desired sequence of ancestors.
+        - If there is no starting or intermediate slash in `name_path`, there is no
+          restriction on the ancestor symbols. For example, passing `method` will match
+          against symbols with name paths like `method`, `class/method`, `class/nested_class/method`, etc.
+        - If `name_path` contains a `/` but doesn't start with a `/`, the matching is restricted to symbols
+          with the same ancestors as the last segment of `name_path`. For example, passing `class/method` will match against
+          `class/method` as well as `nested_class/class/method` but not `method`.
+        - If `name_path` starts with a `/`, it will be treated as an absolute name path pattern, meaning
+          that the first segment of it must match the first segment of the symbol's name path.
+          For example, passing `/class` will match only against top-level symbols like `class` but not against `nested_class/class`.
+          Passing `/class/method` will match against `class/method` but not `nested_class/class/method` or `method`.
+
+
+        :param name_path: The name path pattern to search for, see above for details.
+        :param depth: Depth to retrieve descendants (e.g., 1 for class methods/attributes).
+        :param within_relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
+        :param include_body: If True, include the symbol's source code. Use judiciously.
+        :param include_kinds: Optional. List of LSP symbol kind integers to include. (e.g., 5 for Class, 12 for Function).
+            Valid kinds: 1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
             11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
             20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter
-        :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
-            Takes precedence over include_kinds.
-        :param substring_matching: whether to use substring matching for the symbol name.
-            If True, the symbol name will be matched if it contains the given name as a substring.
-        :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task. Instead, if the output is too long, you should
-            make a stricter query.
-        :return: a list of symbols (with symbol locations) that match the given name in JSON format
+        :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
+        :param substring_matching: If True, use substring matching for the last segment of `name`.
+        :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
+        :return: JSON string: a list of symbols (with locations) matching the name.
         """
-        include_kinds = cast(list[SymbolKind] | None, include_kinds)
-        exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
+        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
+        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbols = self.symbol_manager.find_by_name(
-            name,
+            name_path,
             include_body=include_body,
-            include_kinds=include_kinds,
-            exclude_kinds=exclude_kinds,
+            include_kinds=parsed_include_kinds,
+            exclude_kinds=parsed_exclude_kinds,
             substring_matching=substring_matching,
             within_relative_path=within_relative_path,
         )
@@ -876,13 +950,13 @@ class FindReferencingSymbolsTool(Tool):
             make a stricter query.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
-        include_kinds = cast(list[SymbolKind] | None, include_kinds)
-        exclude_kinds = cast(list[SymbolKind] | None, exclude_kinds)
+        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
+        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         symbols = self.symbol_manager.find_referencing_symbols(
             SymbolLocation(relative_path, line, column),
             include_body=include_body,
-            include_kinds=include_kinds,
-            exclude_kinds=exclude_kinds,
+            include_kinds=parsed_include_kinds,
+            exclude_kinds=parsed_exclude_kinds,
         )
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=0, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
