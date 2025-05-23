@@ -117,7 +117,7 @@ class SerenaAgnoAgentProvider:
                 # To see detailed logs, you should use the serena logger (configure it in the project file path)
                 show_tool_calls=False,
                 markdown=True,
-                system_message=serena_agent.prompt_factory.create_system_prompt(),
+                system_message=serena_agent.create_system_prompt(),
                 telemetry=False,
                 memory=AgentMemory(),
                 add_history_to_messages=True,

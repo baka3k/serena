@@ -1,8 +1,6 @@
-name: agent
 description: All tools except InitialInstructionsTool for agent context
-system_prompt: |
+prompt: |
   You are running in agent context where the system prompt is provided externally. You should use symbolic
   tools when possible for code understanding and modification.
 excluded_tools:
   - initial_instructions
-tool_description_overrides: {}

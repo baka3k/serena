@@ -8,6 +8,13 @@ prompts:
     files containing general information about the codebase. You operate in a frugal and intelligent manner, always
     keeping in mind to not read or generate content that is not needed for the task at hand.
 
+    The context and modes of operation are described below. From them you can infer how to interact with your user
+    and which tasks and kinds of interactions are expected of you.
+
+    Context description:
     {{ context_system_prompt }}
 
-    {{ mode_system_prompt }}
+    Modes descriptions:
+    {% for prompt in mode_system_prompts %}
+    - {{ prompt }}
+    {% endfor %}

@@ -3,7 +3,7 @@ The Serena Model Context Protocol (MCP) Server
 """
 
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
@@ -19,6 +19,7 @@ from sensai.util import logging
 from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
+from serena.config import SerenaAgentContext, SerenaAgentMode
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -94,7 +95,7 @@ def make_tool(
 
 
 def create_mcp_server(
-    project_file_path: str | None, host: str = "0.0.0.0", port: int = 8000, context: str | None = None, modes: list[str] | None = None
+    project_file_path: str | None, host: str = "0.0.0.0", port: int = 8000, context: str = "default", modes: Sequence[str] = ("default",)
 ) -> FastMCP:
     """
     Create an MCP server.
@@ -106,14 +107,16 @@ def create_mcp_server(
     :param modes: List of mode names or paths to mode files
     """
     mcp: FastMCP | None = None
+    context_instance = SerenaAgentContext.load(context)
+    modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
     try:
         agent = SerenaAgent(
             project_file_path,
             # Callback disabled for the time being (see above)
             # project_activation_callback=update_tools
-            context=context,
-            modes=modes,
+            context=context_instance,
+            modes=modes_instances,
         )
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -166,19 +169,18 @@ def create_mcp_server(
 @click.option(
     "--context",
     type=str,
-    default=None,
+    default="desktop-app",
     help="Context to use. This can be a name of a built-in context ('desktop-app', 'agent', 'ide-assistant') "
-    "or a path to a custom context YAML file. Defaults to 'desktop-app' if not specified.",
+    "or a path to a custom context YAML file.",
 )
 @click.option(
     "--mode",
     "modes",
     type=str,
     multiple=True,
-    default=[],
+    default=["editing", "interactive"],
     help="Mode(s) to use. This can be names of built-in modes ('planning', 'editing', 'one-shot', 'interactive') "
-    "or paths to custom mode YAML files. Can be specified multiple times to combine modes. "
-    "Defaults to 'interactive' if not specified.",
+    "or paths to custom mode YAML files. Can be specified multiple times to combine modes.",
 )
 @click.option(
     "--transport",
@@ -204,11 +206,11 @@ def create_mcp_server(
 def start_mcp_server(
     project_file_opt: str | None,
     project_file_arg: str | None,
-    context: str | None,
+    context: str,
     modes: tuple[str, ...],
-    transport: Literal["stdio", "sse"],
-    host: str,
-    port: int,
+    transport: Literal["stdio", "sse"] = "stdio",
+    host: str = "0.0.0.0",
+    port: int = 8000,
 ) -> None:
     """Starts the Serena MCP server.
 
@@ -220,10 +222,7 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
-    # Convert modes tuple to list
-    modes_list = list(modes) if modes else None
-
-    mcp_server = create_mcp_server(project_file_path=project_file, host=host, port=port, context=context, modes=modes_list)
+    mcp_server = create_mcp_server(project_file_path=project_file, host=host, port=port, context=context, modes=modes)
 
     # log after server creation such that the log appears in the GUI
     if project_file_arg is not None:

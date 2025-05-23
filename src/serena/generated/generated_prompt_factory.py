@@ -31,5 +31,5 @@ class PromptFactory(PromptFactoryBase):
     def create_prepare_for_new_conversation(self) -> str:
         return self._render_prompt("prepare_for_new_conversation")
 
-    def create_system_prompt(self, *, context_system_prompt: Any, mode_system_prompt: Any) -> str:
-        return self._render_prompt("system_prompt", context_system_prompt=context_system_prompt, mode_system_prompt=mode_system_prompt)
+    def create_system_prompt(self, *, context_system_prompt: Any, mode_system_prompts: Any) -> str:
+        return self._render_prompt("system_prompt", context_system_prompt=context_system_prompt, mode_system_prompts=mode_system_prompts)
