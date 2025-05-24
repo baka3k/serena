@@ -12,7 +12,4 @@ prompt: |
 
   It may be that you have not received a task yet. In this case, wait for the user to provide a task, this will be the 
   only time you should wait for user interaction.
-excluded_tools:
-  - get_current_config
-  - activate_project
-  - switch_modes
+excluded_tools: []
