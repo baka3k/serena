@@ -3,7 +3,7 @@ The Serena Model Context Protocol (MCP) Server
 """
 
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
@@ -19,6 +19,8 @@ from sensai.util import logging
 from sensai.util.helper import mark_used
 
 from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
+from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -93,21 +95,33 @@ def make_tool(
     )
 
 
-def create_mcp_server(project_file_path: str | None, host: str = "0.0.0.0", port: int = 8000) -> FastMCP:
+def create_mcp_server_and_agent(
+    project: str | None,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    context: str = DEFAULT_CONTEXT,
+    modes: Sequence[str] = DEFAULT_MODES,
+) -> tuple[FastMCP, SerenaAgent]:
     """
     Create an MCP server.
 
-    :param project_file_path: The path to the project file, or None.
+    :param project: The path to the project directory or the `project.yml` file therein, or None.
     :param host: The host to bind to
     :param port: The port to bind to
+    :param context: The context name or path to context file
+    :param modes: List of mode names or paths to mode files
     """
     mcp: FastMCP | None = None
+    context_instance = SerenaAgentContext.load(context)
+    modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
     try:
         agent = SerenaAgent(
-            project_file_path,
+            project_config=project,
             # Callback disabled for the time being (see above)
             # project_activation_callback=update_tools
+            context=context_instance,
+            modes=modes_instances,
         )
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -138,24 +152,54 @@ def create_mcp_server(project_file_path: str | None, host: str = "0.0.0.0", port
 
     update_tools()
 
-    return mcp
+    return mcp, agent
 
 
 @click.command()
+# Add --project option as the primary, more intuitive interface
 @click.option(
-    "--project-file",
-    "project_file_opt",  # Rename to avoid conflict with argument
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    "--project",
+    "project_file_opt",  # Use same destination variable to avoid conflicts
+    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
     default=None,
-    help="Optional path to the .yml project file via option."
+    help="Path to the .yml project file. "
     "Does not need to be provided at startup since you can activate a project later by simply asking the agent to do so "
     "(there is a dedicated tool for this purpose).",
 )
+# Keep --project-file for backwards compatibility
+@click.option(
+    "--project-file",
+    "project_file_opt",  # Use same destination variable to avoid conflicts
+    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+    default=None,
+    help="[DEPRECATED] Use --project instead. Optional path to the .yml project file via option."
+    "Does not need to be provided at startup since you can activate a project later by simply asking the agent to do so "
+    "(there is a dedicated tool for this purpose).",
+)
+# Positional argument for backwards compatibility
 @click.argument(
     "project_file_arg",
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
     required=False,
     default=None,
+)
+@click.option(
+    "--context",
+    type=str,
+    show_default=True,
+    default=DEFAULT_CONTEXT,
+    help="Context to use. This can be a name of a built-in context ('desktop-app', 'agent', 'ide-assistant') "
+    "or a path to a custom context YAML file.",
+)
+@click.option(
+    "--mode",
+    "modes",
+    type=str,
+    multiple=True,
+    default=DEFAULT_MODES,
+    show_default=True,
+    help="Mode(s) to use. This can be names of built-in modes ('planning', 'editing', 'one-shot', 'interactive') "
+    "or paths to custom mode YAML files. Can be specified multiple times to combine modes.",
 )
 @click.option(
     "--transport",
@@ -167,34 +211,46 @@ def create_mcp_server(project_file_path: str | None, host: str = "0.0.0.0", port
 @click.option(
     "--host",
     type=str,
-    default="0.0.0.0",
     show_default=True,
+    default="0.0.0.0",
     help="Host to bind to (for SSE transport).",
 )
 @click.option(
     "--port",
     type=int,
-    default=8000,
     show_default=True,
+    default=8000,
     help="Port to bind to (for SSE transport).",
 )
 def start_mcp_server(
-    project_file_opt: str | None, project_file_arg: str | None, transport: Literal["stdio", "sse"], host: str, port: int
+    project_file_opt: str | None,
+    project_file_arg: str | None,
+    context: str = DEFAULT_CONTEXT,
+    modes: tuple[str, ...] = DEFAULT_MODES,
+    transport: Literal["stdio", "sse"] = "stdio",
+    host: str = "0.0.0.0",
+    port: int = 8000,
 ) -> None:
     """Starts the Serena MCP server.
 
-    Accepts the project file path either via the --project-file option or as a positional argument.
+    Accepts a path to the project directory or the `project.yml` file therein via the --project option.
+
+    Use --context to specify the execution environment and --mode to specify behavior mode(s).
     """
     # Prioritize the positional argument if provided
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
-    mcp_server = create_mcp_server(project_file_path=project_file, host=host, port=port)
+
+    mcp_server, agent = create_mcp_server_and_agent(project=project_file, host=host, port=port, context=context, modes=modes)
 
     # log after server creation such that the log appears in the GUI
     if project_file_arg is not None:
         log.warning(
-            "The positional argument for the project file path is deprecated and will be removed in the future!"
-            "Please pass the project file path via the `--project-file` option instead.\n"
+            "The positional argument for the project file path is deprecated and will be removed in the future! "
+            "Please pass the project file path via the `--project` option instead.\n"
             f"Used path: {project_file}"
         )
+
+    log.info(f"Starting serena agent in MCP server with config:\n{agent.get_current_config_overview()}")
+
     mcp_server.run(transport=transport)

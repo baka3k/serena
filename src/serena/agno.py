@@ -16,6 +16,7 @@ from sensai.util.logging import LogTime
 
 from serena import serena_root_path
 from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
+from serena.config import SerenaAgentContext
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +71,9 @@ class SerenaAgnoAgentProvider:
 
             parser = argparse.ArgumentParser(description="Serena coding assistant")
             parser.add_argument(
-                "--project-file", required=False, help="Path to the project file, either absolute or relative to the root directory"
+                "--project",
+                required=False,
+                help="Path to the project (or project.yml file).",
             )
             args = parser.parse_args()
 
@@ -89,7 +92,7 @@ class SerenaAgnoAgentProvider:
 
             with LogTime("Loading Serena agent"):
                 try:
-                    serena_agent = SerenaAgent(project_file)
+                    serena_agent = SerenaAgent(project_file, context=SerenaAgentContext.load("agent"))
                 except Exception as e:
                     show_fatal_exception_safe(e)
                     raise
@@ -117,7 +120,7 @@ class SerenaAgnoAgentProvider:
                 # To see detailed logs, you should use the serena logger (configure it in the project file path)
                 show_tool_calls=False,
                 markdown=True,
-                system_message=serena_agent.prompt_factory.create_system_prompt(),
+                system_message=serena_agent.create_system_prompt(),
                 telemetry=False,
                 memory=AgentMemory(),
                 add_history_to_messages=True,

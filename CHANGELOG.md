@@ -1,6 +1,12 @@
 # Latest
 Changes prior to the next official version change will appear here.
 
+# 2025-05-24
+
+Important new feature: configurability of mode and context, allowing better integration in a variety of clients.
+
+Also some improvements to prompts.
+
 # 2025-05-21
 
 **Signficant improvement in symbol finding!**

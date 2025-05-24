@@ -8,15 +8,15 @@ enable_project_activation: True
 
 # Add your list of projects here (which you can switch between using "activate_project").
 # Every list item must be either
-#   - a path to a .yml file, absolute or relative to the directory this
+#   - [Recommended] a path to the project's root directory (e.g. "/path/to/myproject"), with the
+#     configuration file being located in "/path/to/myproject/.serena/project.yml".
+#     In this case, the name of the project will be the name of the directory ("myproject").
+#   - or a path to a .yml file, absolute or relative to the directory this
 #     configuration file is in (e.g. "myproject.yml" or "/path/to/wherever/myproject.yml").
 #     In this case, the name of the project will be the base filename of the .yml file
 #     (e.g. "myproject" for "myproject.yml").
-#   - or a path to the project's root directory (e.g. "/path/to/myproject"), with the
-#     configuration file being located in "/path/to/myproject/.serena/project.yml".
-#     In this case, the name of the project will be the name of the directory ("myproject").
 projects:
-  - myproject.yml
+  - /path/to/myproject
 
 # Whether to open a graphical window with Serena's logs (not supported on macOS).
 # This is useful both for troubleshooting and for monitoring the tool calls,

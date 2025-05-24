@@ -11,6 +11,7 @@ import traceback
 from abc import ABC
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
+from copy import copy
 from dataclasses import dataclass, field
 from logging import Logger
 from pathlib import Path
@@ -26,7 +27,8 @@ from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
-from serena.llm.prompt_factory import PromptFactory
+from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.text_utils import search_files
 from serena.util.file_system import scan_directory
@@ -164,6 +166,9 @@ class ProjectConfig(ToStringMixin):
     def get_serena_managed_dir(self) -> str:
         return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
 
+    def get_excluded_tool_classes(self) -> set[type["Tool"]]:
+        return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
+
 
 @dataclass
 class SerenaConfig:
@@ -250,13 +255,19 @@ class SerenaAgent:
         project_config: ProjectConfig | str | Path | None = None,
         project_activation_callback: Callable[[], None] | None = None,
         serena_config: SerenaConfig | None = None,
-    ) -> None:
+        context: SerenaAgentContext | None = None,
+        modes: list[SerenaAgentMode] | None = None,
+    ):
         """
         :param project_config: the project to load immediately; may be a path to the project configuration file
             or a configuration instance;
             if None, do not load any project (must use project selection tool to activate a project).
             If a project is provided, the corresponding language server will be started.
         :param project_activation_callback: a callback function to be called when a project is activated.
+        :param context: the context in which the agent is operating, None for default context.
+            The context may adjust prompts, tool availability, and tool descriptions.
+        :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
+            The modes may adjust prompts, tool availability, and tool descriptions.
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
         """
         # obtain serena configuration
@@ -282,7 +293,8 @@ class SerenaAgent:
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
-        self.prompt_factory = PromptFactory()
+        # Initialize the prompt factory
+        self.prompt_factory = SerenaPromptFactory()
         self._project_activation_callback = project_activation_callback
 
         # project-specific instances, which will be initialized upon project activation
@@ -294,15 +306,27 @@ class SerenaAgent:
 
         # find all tool classes and instantiate them
         self._all_tools: dict[type[Tool], Tool] = {}
-        for tool_class in iter_tool_classes():
+        """maps tool classes to their instances (which are linked to the agent instance)"""
+
+        for tool_class in ToolRegistry.get_all_tool_classes():
             tool_instance = tool_class(self)
             if not self.serena_config.enable_project_activation:
                 if tool_class in (GetActiveProjectTool, ActivateProjectTool):
                     log.info(f"Excluding tool '{tool_instance.get_name()}' because project activation is disabled in configuration")
                     continue
             self._all_tools[tool_class] = tool_instance
-        self._active_tools = dict(self._all_tools)
+
+        # Apply context and mode tool configurations
+        if context is None:
+            context = SerenaAgentContext.load_default()
+        if modes is None:
+            modes = SerenaAgentMode.load_default_modes()
+        self._context = context
+        self._modes = modes
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name() for tool in self._all_tools.values()])}")
+        
+        self._active_tools: dict[type[Tool], Tool] = {}
+        self._update_active_tools()
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
@@ -340,26 +364,59 @@ class SerenaAgent:
             # When project activation is not enabled, we only expose the active tools
             return list(self._active_tools.values())
 
+    def set_modes(self, modes: list[SerenaAgentMode]) -> None:
+        """
+        Set the current mode configurations.
+
+        :param modes: List of mode names or paths to use
+        """
+        self._modes = modes
+        self._update_active_tools()
+
+        log.info(f"Set modes to {[mode.name for mode in modes]}")
+
+    def get_active_modes(self) -> list[SerenaAgentMode]:
+        """
+        :return: the list of active modes
+        """
+        return list(self._modes)
+
+    def create_system_prompt(self) -> str:
+        return self.prompt_factory.create_system_prompt(
+            context_system_prompt=self._context.prompt,
+            mode_system_prompts=[mode.prompt for mode in self._modes],
+        )
+
+    def _update_active_tools(self) -> None:
+        """
+        Update the active tools based on context, modes, and project configuration.
+        All tool exclusions are merged together.
+        """
+        excluded_tool_classes: set[type[Tool]] = set()
+        # modes
+        for mode in self._modes:
+            excluded_tool_classes.update(mode.get_excluded_tool_classes())
+        # context
+        excluded_tool_classes.update(self._context.get_excluded_tool_classes())
+        # project config
+        if self.project_config is not None:
+            excluded_tool_classes.update(self.project_config.get_excluded_tool_classes())
+            if self.project_config.read_only:
+                for tool_class in self._all_tools:
+                    if tool_class.can_edit():
+                        excluded_tool_classes.add(tool_class)
+
+        self._active_tools = {
+            tool_class: tool_instance for tool_class, tool_instance in self._all_tools.items() if tool_class not in excluded_tool_classes
+        }
+
+        log.info(f"Active tools after all exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+
     def activate_project(self, project_config: ProjectConfig) -> None:
         log.info(f"Activating {project_config}")
         self.project_config = project_config
-
-        # handle project-specific tool exclusions (if any)
-        if self.project_config.excluded_tools:
-            self._active_tools = {
-                key: tool for key, tool in self._all_tools.items() if tool.get_name() not in project_config.excluded_tools
-            }
-            log.info(f"Active tools after exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
-        else:
-            self._active_tools = dict(self._all_tools)
-
-        # if read_only mode is enabled, exclude all editing tools
-        if self.project_config.read_only:
-            self._active_tools = {key: tool for key, tool in self._active_tools.items() if not key.can_edit()}
-            log.info(
-                f"Project is in read-only mode. Editing tools excluded. Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}"
-            )
-
+        self._update_active_tools()
+        
         # start the language server
         self.reset_language_server()
         assert self.language_server is not None
@@ -372,11 +429,66 @@ class SerenaAgent:
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
+    def get_active_tool_classes(self) -> list[type["Tool"]]:
+        """
+        :return: the list of active tool classes for the current project
+        """
+        return list(self._active_tools.keys())
+
     def get_active_tool_names(self) -> list[str]:
         """
         :return: the list of names of the active tools for the current project
         """
-        return sorted([tool.get_name() for tool in self._active_tools.values()])
+        return sorted([tool.get_name() for tool in self.get_active_tool_classes()])
+
+    def tool_is_active(self, tool_class: type["Tool"] | str) -> bool:
+        """
+        :param tool_class: the class or name of the tool to check
+        :return: True if the tool is active, False otherwise
+        """
+        if isinstance(tool_class, str):
+            return tool_class in self.get_active_tool_names()
+        else:
+            return tool_class in self.get_active_tool_classes()
+
+    def get_current_config_overview(self) -> str:
+        """
+        :return: a string overview of the current configuration, including the active project, context, modes, and tools
+        """
+        result_str = "Current configuration:\n"
+        if self.project_config is not None:
+            result_str += f"Active project: {self.project_config.project_name}\n"
+        result_str += f"Active context: {self._context.name}\n"
+
+        # Active modes
+        active_mode_names = [mode.name for mode in self.get_active_modes()]
+        result_str += "Active modes: {}\n".format(", ".join(active_mode_names))
+
+        # Available but not active modes
+        all_available_modes = SerenaAgentMode.list_registered_mode_names()
+        inactive_modes = [mode for mode in all_available_modes if mode not in active_mode_names]
+        if inactive_modes:
+            result_str += "Available but not active modes: {}\n".format(", ".join(inactive_modes))
+
+        # Active tools
+        result_str += "Active tools (after all exclusions from the project, context, and modes):\n"
+        active_tool_names = self.get_active_tool_names()
+        # print the tool names in chunks
+        chunk_size = 4
+        for i in range(0, len(active_tool_names), chunk_size):
+            chunk = active_tool_names[i : i + chunk_size]
+            result_str += "  " + ", ".join(chunk) + "\n"
+
+        # Available but not active tools
+        all_tool_names = sorted([tool.get_name() for tool in self._all_tools.values()])
+        inactive_tool_names = [tool for tool in all_tool_names if tool not in active_tool_names]
+        if inactive_tool_names:
+            result_str += "Available but not active tools:\n"
+            for i in range(0, len(inactive_tool_names), chunk_size):
+                chunk = inactive_tool_names[i : i + chunk_size]
+                result_str += "  " + ", ".join(chunk) + "\n"
+
+        return result_str
 
     def is_language_server_running(self) -> bool:
         return self.language_server is not None and self.language_server.is_running()
@@ -410,7 +522,7 @@ class SerenaAgent:
         return self._all_tools[tool_class]  # type: ignore
 
     def print_tool_overview(self) -> None:
-        _print_tool_overview(self._active_tools.values())
+        ToolRegistry.print_tool_overview(self._active_tools.values())
 
     def mark_file_modified(self, relativ_path: str) -> None:
         assert self.lines_read is not None
@@ -585,15 +697,23 @@ class Tool(Component):
             )
         return result
 
+    def is_active(self) -> bool:
+        return self.agent.tool_is_active(self.__class__)
+
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with the given arguments
         """
         apply_fn = self.get_apply_fn()
 
+        try:
+            if not self.is_active():
+                return f"Error: Tool '{self.get_name()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
+        except Exception as e:
+            return f"RuntimeError while checking if tool {self.get_name()} is active: {e}"
+
         if log_call:
             self._log_tool_application(inspect.currentframe())
-
         try:
             # check whether the tool requires an active project and language server
             if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
@@ -605,21 +725,6 @@ class Tool(Component):
                 if not self.agent.is_language_server_running():
                     log.info("Language server is not running. Starting it ...")
                     self.agent.reset_language_server()
-
-            # check whether the tool is enabled
-            if self.agent.project_config is not None and self.get_name() in self.agent.project_config.excluded_tools:
-                return (
-                    f"Error: Tool '{self.get_name()}' is disabled for the active project ('{self.project_config.project_name}'); "
-                    f"active tools: {self.agent.get_active_tool_names()}"
-                )
-
-            # check if the project is in read-only mode and this is an editing tool
-            if self.agent.project_config is not None and self.agent.project_config.read_only and self.__class__.can_edit():
-                return (
-                    f"Error: Tool '{self.get_name()}' cannot be used because the project '{self.project_config.project_name}' "
-                    f"is in read-only mode. Editing operations are not allowed."
-                )
-
             # apply the actual tool
             result = apply_fn(**kwargs)
 
@@ -1127,8 +1232,6 @@ class CheckOnboardingPerformedTool(Tool):
         Checks whether project onboarding was already performed.
         You should always call this tool before beginning to actually work on the project/after activating a project,
         but after calling the initial instructions tool.
-        If onboarding was already performed, you will receive a list of available memories.
-        Don't read the memories immediately after if not needed, just remember that they exist and that you can read them later.
         """
         list_memories_tool = self.agent.get_tool(ListMemoriesTool)
         memories = json.loads(list_memories_tool.apply())
@@ -1138,7 +1241,13 @@ class CheckOnboardingPerformedTool(Tool):
                 + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
             )
         else:
-            return json.dumps({"result": "Onboarding already performed.", "available_memories": memories})
+            return f"""The onboarding was already performed, below is the list of available memories.
+            Do not read them immediately, just remember that they exist and that you can read them later, if it is necessary
+            for the current task.
+            Some memories may be based on previous conversations, others may be general for the current project.
+            You should be able to tell which one you need based on the name of the memory.
+            
+            {memories}"""
 
 
 class OnboardingTool(Tool):
@@ -1436,6 +1545,39 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         return SUCCESS_RESULT
 
 
+class SwitchModesTool(Tool):
+    """
+    Activates modes by providing a list of their names
+    """
+
+    def apply(self, modes: list[str]) -> str:
+        """
+        Activates the desired modes, like ["editing", "interactive"] or ["planning", "one-shot"]
+
+        :param modes: the names of the modes to activate
+        """
+        mode_instances = [SerenaAgentMode.load(mode) for mode in modes]
+        self.agent.set_modes(mode_instances)
+
+        # Inform the Agent about the activated modes and the currently active tools
+        result_str = f"Successfully activated modes: {', '.join([mode.name for mode in mode_instances])}" + "\n"
+        result_str += "\n".join([mode_instance.prompt for mode_instance in mode_instances]) + "\n"
+        result_str += f"Currently active tools: {', '.join(self.agent.get_active_tool_names())}"
+        return result_str
+
+
+class GetCurrentConfigTool(Tool):
+    """
+    Prints the current configuration of the agent, including the active modes, tools, and context.
+    """
+
+    def apply(self) -> str:
+        """
+        Print the current configuration of the agent, including the active modes, tools, and context.
+        """
+        return self.agent.get_current_config_overview()
+
+
 class InitialInstructionsTool(Tool):
     """
     Gets the initial instructions for the current project.
@@ -1448,10 +1590,10 @@ class InitialInstructionsTool(Tool):
         Get the initial instructions for the current coding project.
         You should always call this tool before starting to work (including using any other tool) on any programming task!
         """
-        return self.agent.prompt_factory.create_system_prompt()
+        return self.agent.create_system_prompt()
 
 
-def iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:
+def _iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:
     """
     Iterate over Tool subclasses.
 
@@ -1464,17 +1606,46 @@ def iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], No
         yield tool_class
 
 
-def print_tool_overview() -> None:
-    _print_tool_overview(iter_tool_classes())
+_TOOL_REGISTRY_DICT: dict[str, type[Tool]] = {tool_class.get_name(): tool_class for tool_class in _iter_tool_classes()}
+"""maps tool name to the corresponding tool class"""
 
 
-def _print_tool_overview(tools: Iterable[type[Tool] | Tool]) -> None:
-    tool_dict: dict[str, type[Tool] | Tool] = {}
-    for tool in tools:
-        tool_dict[tool.get_name()] = tool
-    for tool_name in sorted(tool_dict.keys()):
-        tool = tool_dict[tool_name]
-        print(f" * `{tool_name}`: {tool.get_tool_description().strip()}")
+class ToolRegistry:
+    @staticmethod
+    def get_tool_class_by_name(tool_name: str) -> type[Tool]:
+        try:
+            return _TOOL_REGISTRY_DICT[tool_name]
+        except KeyError as e:
+            available_tools = "\n".join(ToolRegistry.get_tool_names())
+            raise ValueError(f"Tool with name {tool_name} not found. Available tools:\n{available_tools}") from e
+
+    @staticmethod
+    def get_all_tool_classes() -> list[type[Tool]]:
+        return list(_TOOL_REGISTRY_DICT.values())
+
+    @staticmethod
+    def get_tool_names() -> list[str]:
+        return list(_TOOL_REGISTRY_DICT.keys())
+
+    @staticmethod
+    def tool_dict() -> dict[str, type[Tool]]:
+        """Maps tool name to the corresponding tool class"""
+        return copy(_TOOL_REGISTRY_DICT)
+
+    @staticmethod
+    def print_tool_overview(tools: Iterable[type[Tool] | Tool] | None = None) -> None:
+        """
+        Print a summary of the tools. If no tools are passed, a summary of all tools is printed.
+        """
+        if tools is None:
+            tools = _TOOL_REGISTRY_DICT.values()
+
+        tool_dict: dict[str, type[Tool] | Tool] = {}
+        for tool_class in tools:
+            tool_dict[tool_class.get_name()] = tool_class
+        for tool_name in sorted(tool_dict.keys()):
+            tool_class = tool_dict[tool_name]
+            print(f" * `{tool_name}`: {tool_class.get_tool_description().strip()}")
 
 
 def _tuple_to_info(name: str, symbol_type: SymbolKind, line: int, column: int) -> dict[str, int | str]:
