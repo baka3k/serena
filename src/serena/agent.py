@@ -1232,8 +1232,6 @@ class CheckOnboardingPerformedTool(Tool):
         Checks whether project onboarding was already performed.
         You should always call this tool before beginning to actually work on the project/after activating a project,
         but after calling the initial instructions tool.
-        If onboarding was already performed, you will receive a list of available memories.
-        Don't read the memories immediately after if not needed, just remember that they exist and that you can read them later.
         """
         list_memories_tool = self.agent.get_tool(ListMemoriesTool)
         memories = json.loads(list_memories_tool.apply())
@@ -1243,7 +1241,13 @@ class CheckOnboardingPerformedTool(Tool):
                 + "You should perform onboarding by calling the `onboarding` tool before proceeding with the task."
             )
         else:
-            return json.dumps({"result": "Onboarding already performed.", "available_memories": memories})
+            return f"""The onboarding was already performed, below is the list of available memories.
+            Do not read them immediately, just remember that they exist and that you can read them later, if it is necessary
+            for the current task.
+            Some memories may be based on previous conversations, others may be general for the current project.
+            You should be able to tell which one you need based on the name of the memory.
+            
+            {memories}"""
 
 
 class OnboardingTool(Tool):
@@ -1556,8 +1560,8 @@ class SwitchModesTool(Tool):
         self.agent.set_modes(mode_instances)
 
         # Inform the Agent about the activated modes and the currently active tools
-        result_str = f"Successfully activated modes: {', '.join([mode.name for mode in mode_instances])}"
-        result_str += "\n".join([mode_instance.prompt for mode_instance in mode_instances])
+        result_str = f"Successfully activated modes: {', '.join([mode.name for mode in mode_instances])}" + "\n"
+        result_str += "\n".join([mode_instance.prompt for mode_instance in mode_instances]) + "\n"
         result_str += f"Currently active tools: {', '.join(self.agent.get_active_tool_names())}"
         return result_str
 
