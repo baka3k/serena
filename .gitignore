@@ -149,3 +149,4 @@ pylint.html
 tmp/
 
 .serena/
+.vscode/
