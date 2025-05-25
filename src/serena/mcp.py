@@ -144,8 +144,10 @@ def create_mcp_server_and_agent(
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
+        nonlocal agent
         mark_used(mcp_server)
         yield
+        del agent
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
     mcp = FastMCP(**mcp_settings.model_dump())
