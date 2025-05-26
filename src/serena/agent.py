@@ -250,12 +250,16 @@ class SerenaConfig:
 
         return instance
 
-    def get_project(self, project_name: str) -> Project:
-        # currently, expects no duplicate project names
+    def find_project(self, project_root_or_name: str) -> Project | None:
         for project in self.projects:
-            if project.project_config.project_name == project_name:
+            if project.project_config.project_name == project_root_or_name:
                 return project
-        raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
+        if os.path.isdir(project_root_or_name):
+            project_root = Path(project_root_or_name).resolve()
+            for project in self.projects:
+                if Path(project.project_root).resolve() == project_root:
+                    return project
+        return None
 
     def save(self, preserve_comments: bool = True) -> None:
         loaded_original_yaml = deepcopy(self.loaded_original_yaml)
@@ -564,11 +568,7 @@ class SerenaAgent:
         """
         new_project_generated = False
         new_project_config_generated = False
-        project_instance: Project | None = None
-        for registered_project in self.serena_config.projects:
-            if project_root_or_name in (registered_project.project_name, registered_project.project_root):
-                project_instance = registered_project
-                break
+        project_instance: Project | None = self.serena_config.find_project(project_root_or_name)
         if project_instance is not None:
             log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
         else:
