@@ -428,7 +428,7 @@ class SerenaAgent:
         for tool_class in ToolRegistry.get_all_tool_classes():
             tool_instance = tool_class(self)
             if not self.serena_config.enable_project_activation:
-                if tool_class in (GetActiveProjectTool, ActivateProjectTool):
+                if tool_class == ActivateProjectTool:
                     log.info(f"Excluding tool '{tool_instance.get_name()}' because project activation is disabled in configuration")
                     continue
             self._all_tools[tool_class] = tool_instance
@@ -570,11 +570,14 @@ class SerenaAgent:
 
     def get_current_config_overview(self) -> str:
         """
-        :return: a string overview of the current configuration, including the active project, context, modes, and tools
+        :return: a string overview of the current configuration, including the active and available configuration options
         """
         result_str = "Current configuration:\n"
         if self.project_config is not None:
             result_str += f"Active project: {self.project_config.project_name}\n"
+        else:
+            result_str += "No active project\n"
+        result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names))
         result_str += f"Active context: {self._context.name}\n"
 
         # Active modes
@@ -1625,24 +1628,6 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
         return self._limit_length(result, max_answer_chars)
 
 
-class GetActiveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
-    """
-    Gets the name of the currently active project (if any) and lists existing projects
-    """
-
-    def apply(
-        self,
-    ) -> str:
-        """
-        Gets the name of the currently active project (if any) and returns the list of all available projects.
-        To change the current project, use the `activate_project` tool.
-
-        :return: an object containing the name of the currently activated project (if any) and the list of all available projects
-        """
-        active_project = None if self.agent.project_config is None else self.agent.project_config.project_name
-        return json.dumps({"active_project": active_project, "available_projects": self.agent.serena_config.project_names})
-
-
 class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """
     Activates a project by name.
@@ -1656,34 +1641,14 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         """
         project_config = self.agent.serena_config.get_project_configuration(project_name)
         self.agent.activate_project(project_config)
-        return "Activated project "
-
-
-class ListProjectsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
-    """
-    Lists all configured projects in the Serena configuration.
-    """
-
-    def apply(self) -> str:
-        """
-        List all configured projects with their details including names, paths, and status.
-        """
-        if not self.agent.serena_config.projects:
-            return "No projects configured."
-
-        result = []
-        result.append("Configured projects:")
-        result.append("")
-
-        for project_name, project_config in self.agent.serena_config.projects.items():
-            status = "✓ Active" if (self.agent.project_config and self.agent.project_config.project_name == project_name) else "  Available"
-            result.append(f"{status} {project_name}")
-            result.append(f"     Path: {project_config.project_root}")
-            result.append(f"     Language: {project_config.language.value}")
-            result.append(f"     Read-only: {project_config.read_only}")
-            result.append("")
-
-        return "\n".join(result)
+        result_str = f"Activated project {project_name}"
+        result_str += f"\nAdditional project information:\n {project_config.project_info_prompt}"
+        result_str += (
+            f"\nAvailable memories:\n {json.dumps(list(self.memories_manager.list_memories()))}"
+            + "You should not read these memories directly, but rather use the `read_memory` tool to read them later if needed for the task."
+        )
+        result_str += f"\nAvailable tools:\n {json.dumps(self.agent.get_active_tool_names())}"
+        return result_str
 
 
 class AddProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
@@ -1750,12 +1715,12 @@ class SwitchModesTool(Tool):
 
 class GetCurrentConfigTool(Tool):
     """
-    Prints the current configuration of the agent, including the active modes, tools, and context.
+    Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
     """
 
     def apply(self) -> str:
         """
-        Print the current configuration of the agent, including the active modes, tools, and context.
+        Print the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
         """
         return self.agent.get_current_config_overview()
 
