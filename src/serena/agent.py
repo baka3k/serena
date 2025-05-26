@@ -6,6 +6,7 @@ import inspect
 import json
 import os
 import platform
+import shutil
 import sys
 import traceback
 from abc import ABC, abstractmethod
@@ -241,14 +242,54 @@ class SerenaConfig:
         if "projects" not in loaded_original_yaml:
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
 
-        # projects entries are paths to the project root
-        instance.projects = [Project.load(project_root) for project_root in loaded_original_yaml["projects"]]
+        # load list of known projects
+        instance.projects = []
+        num_project_migrations = 0
+        for path in loaded_original_yaml["projects"]:
+            path = Path(path).resolve()
+            if not path.exists():
+                log.warning(f"Project path {path} does not exist, skipping.")
+                continue
+            if path.is_file():
+                path = cls._migrate_out_of_project_config_file(path)
+                if path is None:
+                    continue
+                num_project_migrations += 1
+            project = Project.load(path)
+            instance.projects.append(project)
 
         instance.gui_log_window_enabled = loaded_original_yaml.get("gui_log_window", False)
         instance.gui_log_window_level = loaded_original_yaml.get("gui_log_level", logging.INFO)
         instance.loaded_original_yaml = loaded_original_yaml
 
+        # re-save the configuration file if any migrations were performed
+        if num_project_migrations > 0:
+            log.info(
+                f"Migrated {num_project_migrations} project configurations from legacy format to in-project configuration; re-saving configuration"
+            )
+            instance.save()
+
         return instance
+
+    @classmethod
+    def _migrate_out_of_project_config_file(self, path: Path) -> Path | None:
+        """
+        Migrates a legacy project configuration file (which is a YAML file containing the project root) to the
+        in-project configuration file (project.yml) inside the project root directory.
+
+        :param path: the path to the legacy project configuration file
+        :return: the project root path if the migration was successful, None otherwise.
+        """
+        log.info(f"Found legacy project configuration file {path}, migrating to in-project configuration.")
+        try:
+            with open(path, encoding="utf-8") as f:
+                project_config_data = yaml.safe_load(f)
+            project_root = project_config_data["project_root"]
+            shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))
+            return Path(project_root).resolve()
+        except Exception as e:
+            log.error(f"Error migrating configuration file: {e}")
+            return None
 
     def find_project(self, project_root_or_name: str) -> Project | None:
         for project in self.projects:
