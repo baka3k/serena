@@ -572,6 +572,11 @@ class SerenaAgent:
         if project_instance is not None:
             log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
         else:
+            if not os.path.isdir(project_root_or_name):
+                raise ValueError(
+                    f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
+                    f"Existing project names: {self.serena_config.project_names}"
+                )
             project_instance, new_project_config_generated = self.serena_config.add_project_from_path(
                 project_root_or_name, update_config_file=True
             )
