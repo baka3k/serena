@@ -140,7 +140,15 @@ class ProjectConfig(ToStringMixin):
             yaml_data["language"] = Language(yaml_data["language"].lower())
         except ValueError as e:
             raise ValueError(f"Invalid language: {yaml_data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
-        return cls(**yaml_data)
+        return cls(
+            project_name=yaml_data["project_name"],
+            language=yaml_data["language"],
+            ignored_paths=yaml_data.get("ignored_paths", []),
+            excluded_tools=set(yaml_data.get("excluded_tools", [])),
+            read_only=yaml_data.get("read_only", False),
+            ignore_all_files_in_gitignore=yaml_data.get("ignore_all_files_in_gitignore", True),
+            initial_prompt=yaml_data.get("initial_prompt", ""),
+        )
 
     @classmethod
     def load(cls, project_root: Path | str) -> Self:
