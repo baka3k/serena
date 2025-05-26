@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serena Log Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <style>
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin: 0;
+        }
+        
+        .log-container {
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            height: 600px;
+            overflow-y: auto;
+            overflow-x: auto;
+            padding: 10px;
+            white-space: pre-wrap;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .controls {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .logo {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .btn {
+            background-color: #eaa45d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            background-color: #dca662;
+        }
+        
+        .btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        /* Log level colors matching the GUI viewer */
+        .log-debug {
+            color: #808080; /* Gray */
+        }
+        
+        .log-info {
+            color: #000000; /* Black */
+        }
+        
+        .log-warning {
+            color: #FF8C00; /* Dark Orange */
+        }
+        
+        .log-error {
+            color: #FF0000; /* Red */
+        }
+        
+        .log-default {
+            color: #000000; /* Black */
+        }
+        
+        /* Tool name highlighting */
+        .tool-name {
+            background-color: #ffff00; /* Yellow background */
+            font-weight: bold;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .error-message {
+            color: #FF0000;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="serena-logs.png" alt="Serena" style="max-width: 400px; height: auto;">
+    </div>
+    
+    <div class="controls">
+        <button id="load-logs" class="btn">Load Logs</button>
+        <button id="clear-logs" class="btn">Clear Display</button>
+    </div>
+    
+    <div id="error-container"></div>
+    <div id="log-container" class="log-container"></div>
+
+    <script>
+        $(document).ready(function() {
+            // Variables to track state
+            let toolNames = [];
+            let currentMaxIdx = -1;
+            let pollInterval = null;
+            
+            // Determine log level from message
+            function determineLogLevel(message) {
+                const messageUpper = message.toUpperCase();
+                if (messageUpper.startsWith('DEBUG')) {
+                    return 'debug';
+                } else if (messageUpper.startsWith('INFO')) {
+                    return 'info';
+                } else if (messageUpper.startsWith('WARNING')) {
+                    return 'warning';
+                } else if (messageUpper.startsWith('ERROR')) {
+                    return 'error';
+                } else {
+                    return 'default';
+                }
+            }
+            
+            // Highlight tool names in a message
+            function highlightToolNames(message) {
+                let highlightedMessage = message;
+                toolNames.forEach(function(toolName) {
+                    const regex = new RegExp('\\b' + toolName + '\\b', 'gi');
+                    highlightedMessage = highlightedMessage.replace(regex, '<span class="tool-name">' + toolName + '</span>');
+                });
+                return highlightedMessage;
+            }
+            
+            // Format and display a log message
+            function displayLogMessage(message) {
+                const logLevel = determineLogLevel(message);
+                const highlightedMessage = highlightToolNames(message);
+                const logEntry = $('<div>').addClass('log-' + logLevel).html(highlightedMessage + '\n');
+                $('#log-container').append(logEntry);
+            }
+            
+            // Load tool names from the API
+            function loadToolNames() {
+                return $.ajax({
+                    url: '/get_tool_names',
+                    type: 'GET',
+                    success: function(response) {
+                        toolNames = response.tool_names || [];
+                        console.log('Loaded tool names:', toolNames);
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error loading tool names:', error);
+                        // Use fallback tool names if API fails
+                        toolNames = [
+                            'find_symbol', 'read_file', 'create_text_file', 'replace_symbol_body',
+                            'insert_after_symbol', 'insert_before_symbol', 'search_for_pattern',
+                            'execute_shell_command', 'get_symbols_overview', 'find_referencing_symbols'
+                        ];
+                    }
+                });
+            }
+            
+            // Load logs from the API (full reload)
+            function loadLogs() {
+                const $loadBtn = $('#load-logs');
+                const $errorContainer = $('#error-container');
+                
+                // Disable button and show loading state
+                $loadBtn.prop('disabled', true).text('Loading...');
+                $errorContainer.empty();
+                
+                // Make API call
+                $.ajax({
+                    url: '/get_log_messages',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        start_idx: 0
+                    }),
+                    success: function(response) {
+                        // Clear existing logs
+                        $('#log-container').empty();
+                        
+                        // Update max_idx
+                        currentMaxIdx = response.max_idx || -1;
+                        
+                        // Display each log message
+                        if (response.messages && response.messages.length > 0) {
+                            response.messages.forEach(function(message) {
+                                displayLogMessage(message);
+                            });
+                            
+                            // Auto-scroll to bottom
+                            const logContainer = $('#log-container')[0];
+                            logContainer.scrollTop = logContainer.scrollHeight;
+                        } else {
+                            $('#log-container').html('<div class="loading">No log messages found.</div>');
+                        }
+                        
+                        // Start periodic polling for new logs
+                        startPeriodicPolling();
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error loading logs:', error);
+                        $errorContainer.html('<div class="error-message">Error loading logs: ' + 
+                                           (xhr.responseJSON ? xhr.responseJSON.detail : error) + '</div>');
+                    },
+                    complete: function() {
+                        // Re-enable button
+                        $loadBtn.prop('disabled', false).text('Load Logs');
+                    }
+                });
+            }
+            
+            // Poll for new log messages
+            function pollForNewLogs() {
+                console.log("poll");
+                $.ajax({
+                    url: '/get_log_messages',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        start_idx: currentMaxIdx + 1
+                    }),
+                    success: function(response) {
+                        // Only append new messages if we have any
+                        if (response.messages && response.messages.length > 0) {
+                            let wasAtBottom = false;
+                            const logContainer = $('#log-container')[0];
+                            
+                            // Check if user was at the bottom before adding new logs
+                            if (logContainer.scrollHeight > 0) {
+                                wasAtBottom = (logContainer.scrollTop + logContainer.clientHeight) >= (logContainer.scrollHeight - 10);
+                            }
+                            
+                            // Append new messages
+                            response.messages.forEach(function(message) {
+                                displayLogMessage(message);
+                            });
+                            
+                            // Update max_idx
+                            currentMaxIdx = response.max_idx || currentMaxIdx;
+                            
+                            // Auto-scroll to bottom if user was already at bottom
+                            if (wasAtBottom) {
+                                logContainer.scrollTop = logContainer.scrollHeight;
+                            }
+                        } else {
+                            // Update max_idx even if no new messages
+                            currentMaxIdx = response.max_idx || currentMaxIdx;
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error polling for new logs:', error);
+                        // Continue polling even on error (API might be temporarily unavailable)
+                    }
+                });
+            }
+            
+            // Start periodic polling
+            function startPeriodicPolling() {
+                // Clear any existing interval
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                }
+                
+                // Start polling every second (1000ms)
+                pollInterval = setInterval(pollForNewLogs, 1000);
+            }
+            
+            // Stop periodic polling
+            function stopPeriodicPolling() {
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+            }
+            
+            // Clear the log display
+            function clearLogs() {
+                stopPeriodicPolling();
+                $('#log-container').empty();
+                $('#error-container').empty();
+                currentMaxIdx = -1;
+            }
+            
+            // Event handlers
+            $('#load-logs').click(loadLogs);
+            $('#clear-logs').click(clearLogs);
+            
+            // Initialize the application
+            loadToolNames().then(function() {
+                // Load logs on page load after tool names are loaded
+                loadLogs();
+            });
+            
+            // Stop polling when page is about to unload
+            $(window).on('beforeunload', function() {
+                stopPeriodicPolling();
+            });
+        });
+    </script>
+</body>
+</html>

@@ -9,6 +9,7 @@ import platform
 import shutil
 import sys
 import traceback
+import webbrowser
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
@@ -32,6 +33,7 @@ from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import SERENA_MANAGED_DIR_NAME
+from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.text_utils import search_files
@@ -480,6 +482,16 @@ class SerenaAgent:
                 self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=log_level, format_string=LOG_FORMAT)
                 Logger.root.addHandler(self._gui_log_handler)
 
+        # instantiate all tool classes
+        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
+
+        # start the dashboard (web frontend) and register its log handler
+        memory_log_handler = MemoryLogHandler()
+        Logger.root.addHandler(memory_log_handler)
+        tool_names = [tool.get_name() for tool in self._all_tools.values()]
+        self._dashboard_thread, port = SerenaDashboardAPI(memory_log_handler, tool_names).run_in_thread()
+        webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
+
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
@@ -494,9 +506,6 @@ class SerenaAgent:
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
-
-        # instantiate all tool classes
-        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
 
         # Apply context and mode tool configurations
         if context is None:
