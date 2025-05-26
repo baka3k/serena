@@ -8,11 +8,12 @@ import os
 import platform
 import sys
 import traceback
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
+from functools import cached_property
 from logging import Logger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
@@ -29,6 +30,7 @@ from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.constants import SERENA_MANAGED_DIR_NAME
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
 from serena.text_utils import search_files
@@ -71,140 +73,117 @@ class SerenaConfigError(Exception):
     pass
 
 
+def get_serena_managed_dir(project_root: str | Path) -> str:
+    return os.path.join(project_root, SERENA_MANAGED_DIR_NAME)
+
+
 @dataclass
 class ProjectConfig(ToStringMixin):
     project_name: str
     language: Language
-    project_root: str
     ignored_paths: list[str] = field(default_factory=list)
     excluded_tools: set[str] = field(default_factory=set)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
-    project_info_prompt: str = ""
+    initial_prompt: str = ""
 
-    SERENA_MANAGED_DIR = ".serena"
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
     @classmethod
-    def autogenerate(cls, project_root: str | Path, save_to_disk: bool = True) -> Self:
+    def autogenerate(cls, project_root: str | Path, project_name: str | None = None, save_to_disk: bool = True) -> Self:
         """
         Autogenerate a project configuration for a given project root.
+
+        :param project_root: the path to the project root
+        :param project_name: the name of the project; if None, the name of the project will be the name of the directory
+            containing the project
+        :param save_to_disk: whether to save the project configuration to disk
+        :return: the project configuration
         """
-        project_root = os.path.abspath(project_root)
-        if not os.path.exists(project_root):
+        project_root = Path(project_root).resolve()
+        if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_name = Path(project_root).name
-        language_composition = determine_programming_language_composition(project_root)
+        project_name = project_name or project_root.name
+        language_composition = determine_programming_language_composition(str(project_root))
         # find the language with the highest percentage
         dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
         result = cls(
             project_name=project_name,
             language=Language(dominant_language),
-            project_root=project_root,
         )
         if save_to_disk:
-            result.save()
+            result.save(project_root)
         return result
 
-    def save(self) -> None:
+    def save(self, project_root: str | Path) -> None:
         """
         Save the project configuration to the project root.
         """
-        config_path = os.path.join(self.project_root, self.rel_path_to_project_yml())
-        os.makedirs(os.path.dirname(config_path), exist_ok=True)
-        serialized_self = asdict(self)
-        serialized_self["language"] = self.language.value
-        serialized_self["excluded_tools"] = list(self.excluded_tools)
-        save_yaml(config_path, serialized_self)
+        project_root = Path(project_root).resolve()
+        config_path = project_root / self.rel_path_to_project_yml()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        serializable_self = asdict(self)
+        serializable_self["language"] = self.language.value
+        serializable_self["excluded_tools"] = list(self.excluded_tools)
+        save_yaml(str(config_path), serializable_self)
 
     @classmethod
     def rel_path_to_project_yml(cls) -> str:
-        return os.path.join(cls.SERENA_MANAGED_DIR, cls.SERENA_DEFAULT_PROJECT_FILE)
+        return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
-    def from_config_dict(cls, config_dict: dict[str, Any], project_name: str, project_root: Path | None = None) -> Self:
+    def _from_yml_data(cls, yaml_data: dict[str, Any]) -> Self:
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
         try:
-            language = Language(config_dict["language"].lower())
+            yaml_data["language"] = Language(yaml_data["language"].lower())
         except ValueError as e:
-            raise ValueError(f"Invalid language: {config_dict['language']}.\nValid languages are: {[l.value for l in Language]}") from e
-
-        if project_root is None:
-            project_root = Path(config_dict["project_root"])
-        project_root_str = str(project_root.resolve())
-
-        ignored_paths = config_dict.get("ignored_paths", [])
-        excluded_tools = set(config_dict.get("excluded_tools", []))
-        read_only = config_dict.get("read_only", False)
-        project_info_prompt = config_dict.get("project_info_prompt", "")
-
-        if "ignore_all_files_in_gitignore" not in config_dict:
-            raise SerenaConfigError(
-                f"`ignore_all_files_in_gitignore` key not found in configuration of project '{project_name}'. "
-                "Please update your `.yml` configuration file for this project. "
-                "It is recommended to set this to `True`."
-            )
-        ignore_all_files_in_gitignore = config_dict["ignore_all_files_in_gitignore"]
-
-        # Raise errors for deprecated keys
-        if "ignored_dirs" in config_dict:
-            raise SerenaConfigError(
-                f"Use of `ignored_dirs` key in configuration of project '{project_name}' deprecated. Please use `ignored_paths` instead. "
-                "Note that you can also set `ignore_all_files_in_gitignore` to `True`, which will be enough for most cases."
-            )
-
-        return cls(
-            project_name=project_name,
-            language=language,
-            project_root=project_root_str,
-            ignored_paths=ignored_paths,
-            excluded_tools=excluded_tools,
-            read_only=read_only,
-            ignore_all_files_in_gitignore=ignore_all_files_in_gitignore,
-            project_info_prompt=project_info_prompt,
-        )
+            raise ValueError(f"Invalid language: {yaml_data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+        return cls(**yaml_data)
 
     @classmethod
-    def _from_yml(cls, yml_path: Path) -> Self:
+    def load(cls, project_root: Path | str) -> Self:
         """
-        Create a ProjectConfig instance from a YAML file
+        Load a ProjectConfig instance from the path to the project root.
         """
-        log.info(f"Loading project configuration from {yml_path}")
-        if not yml_path.exists():
-            raise FileNotFoundError(f"Project file not found: {yml_path}")
-        try:
-            with open(yml_path, encoding="utf-8") as f:
-                config_dict = yaml.safe_load(f)
-            if yml_path.parent.name == cls.SERENA_MANAGED_DIR:
-                project_root = yml_path.parent.parent
-                project_name = project_root.name
-            else:
-                project_root = None
-                project_name = yml_path.stem
-            return cls.from_config_dict(config_dict, project_name=project_name, project_root=project_root)
-        except Exception as e:
-            raise ValueError(f"Error loading project configuration from {yml_path}: {e}") from e
-
-    @classmethod
-    def load(cls, path: Path | str) -> Self:
-        """
-        Load a ProjectConfig instance. Input can either be a path to a yaml file or a directory
-        containing `.serena/project.yml`.
-        """
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(f"Path not found: {path}")
-        if path.is_dir():
-            path = path / cls.SERENA_MANAGED_DIR / cls.SERENA_DEFAULT_PROJECT_FILE
-        return cls._from_yml(path)
-
-    def get_serena_managed_dir(self) -> str:
-        return os.path.join(self.project_root, self.SERENA_MANAGED_DIR)
+        project_root = Path(project_root)
+        yaml_path = project_root / cls.rel_path_to_project_yml()
+        if not yaml_path.exists():
+            raise FileNotFoundError(f"Project configuration file not found: {yaml_path}")
+        with open(yaml_path, encoding="utf-8") as f:
+            yaml_data = yaml.safe_load(f)
+        if "project_name" not in yaml_data:
+            yaml_data["project_name"] = project_root.name
+        return cls._from_yml_data(yaml_data)
 
     def get_excluded_tool_classes(self) -> set[type["Tool"]]:
         return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
+
+
+@dataclass
+class Project:
+    project_root: str
+    project_config: ProjectConfig
+
+    @property
+    def project_name(self) -> str:
+        return self.project_config.project_name
+
+    @property
+    def language(self) -> Language:
+        return self.project_config.language
+
+    @classmethod
+    def load(cls, project_root: str | Path) -> Self:
+        project_root = Path(project_root).resolve()
+        if not project_root.exists():
+            raise FileNotFoundError(f"Project root not found: {project_root}")
+        project_config = ProjectConfig.load(project_root)
+        return cls(project_root=str(project_root), project_config=project_config)
+
+    def path_to_project_yml(self) -> str:
+        return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
 
 @dataclass
@@ -213,17 +192,20 @@ class SerenaConfig:
     Handles user-defined Serena configuration based on the configuration file
     """
 
-    projects: dict[str, ProjectConfig] = field(default_factory=dict)
-    project_names: list[str] = field(default_factory=list)
+    projects: list[Project] = field(default_factory=list)
     gui_log_window_enabled: bool = False
     gui_log_window_level: int = logging.INFO
-    enable_project_activation: bool = True
     loaded_original_yaml: dict | CommentedMap = field(default_factory=dict)
 
     CONFIG_FILE = "serena_config.yml"
 
-    def get_project_paths(self) -> list[str]:
-        return [project_config.project_root for project_config in self.projects.values()]
+    @cached_property
+    def project_paths(self) -> list[str]:
+        return sorted(project.project_root for project in self.projects)
+
+    @cached_property
+    def project_names(self) -> list[str]:
+        return sorted(project.project_config.project_name for project in self.projects)
 
     @classmethod
     def get_config_file_path(cls) -> str:
@@ -250,117 +232,94 @@ class SerenaConfig:
         # read projects
         if "projects" not in loaded_original_yaml:
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
-        projects = {}
-        for project_entry in loaded_original_yaml["projects"]:
-            if isinstance(project_entry, str):
-                project_path = Path(project_entry).resolve()
-                project_name = project_path.name
-            elif isinstance(project_entry, dict):
-                # should be a dict with a single entry mapping project name to project config path
-                if len(project_entry) != 1:
-                    raise SerenaConfigError(
-                        f"Invalid project configuration: expected a single entry mapping project name to project config path but got: {project_entry}."
-                    )
-                project_name, project_path = next(iter(project_entry.items()))
-            else:
-                raise SerenaConfigError(f"Invalid project configuration: expected a string or a dict, got {project_entry}.")
-            project_path = Path(project_path).resolve()
-            log.info(f"Loading project configuration from {project_path}")
-            project_config = ProjectConfig.load(project_path)
-            projects[project_name] = project_config
 
-        instance.projects = projects
-        instance.project_names = list(projects.keys())
+        # projects entries are paths to the project root
+        instance.projects = [Project.load(project_root) for project_root in loaded_original_yaml["projects"]]
+
         instance.gui_log_window_enabled = loaded_original_yaml.get("gui_log_window", False)
         instance.gui_log_window_level = loaded_original_yaml.get("gui_log_level", logging.INFO)
-        instance.enable_project_activation = loaded_original_yaml.get("enable_project_activation", True)
         instance.loaded_original_yaml = loaded_original_yaml
 
         return instance
 
-    def get_project_configuration(self, project_name: str) -> "ProjectConfig":
-        if project_name not in self.projects:
-            raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-        return self.projects[project_name]
+    def get_project(self, project_name: str) -> Project:
+        # currently, expects no duplicate project names
+        for project in self.projects:
+            if project.project_config.project_name == project_name:
+                return project
+        raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
 
     def save(self, preserve_comments: bool = True) -> None:
         loaded_original_yaml = deepcopy(self.loaded_original_yaml)
-        loaded_original_yaml["projects"] = [
-            {project_name: str(project_config.project_root)} for project_name, project_config in self.projects.items()
-        ]
+        loaded_original_yaml["projects"] = [project.project_root for project in self.projects]
         save_yaml(self.get_config_file_path(), loaded_original_yaml, preserve_comments)
 
     def add_project_from_path(
-        self, path: Path | str, project_name: str | None = None, update_config_file: bool = True
-    ) -> tuple[str, ProjectConfig, bool]:
+        self, project_root: Path | str, project_name: str | None = None, update_config_file: bool = True
+    ) -> tuple[Project, bool]:
         """
-        Add a project to the Serena configuration from a given path.
+        Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
+        name or path is already registered.
+
         :param path: the path to the project to add
         :param project_name: the name of the project to add; if None, the name of the project will be the name of the directory
             containing the project
         :param update_config_file: whether to update the Serena configuration file on disk
-        :return: the name of the project that was added, the project configuration, and a boolean indicating whether a new
-            configuration was generated (True) or the existing one was used (False)
+        :return: the project that was added and a boolean indicating whether a new project configuration was generated and
+            saved to disk. It may be that no new project configuration was generated if the project configuration already
+            exists on disk but the project itself was not added yet to the Serena configuration.
         """
-        path = Path(path).resolve()
-        if not path.exists():
-            raise FileNotFoundError(f"Error: Path does not exist: {path}")
-        if not path.is_dir():
-            raise FileNotFoundError(f"Error: Path is not a directory: {path}")
+        project_root = Path(project_root).resolve()
+        if not project_root.exists():
+            raise FileNotFoundError(f"Error: Path does not exist: {project_root}")
+        if not project_root.is_dir():
+            raise FileNotFoundError(f"Error: Path is not a directory: {project_root}")
 
         if project_name is None:
-            project_name = path.name
-        if project_name in self.projects.keys():
-            project_config = self.projects[project_name]
-            if os.path.abspath(project_config.project_root) == os.path.abspath(path):
-                raise FileExistsError(f"Project '{project_name}' was already added and points to the correct path, you can activate it.")
-            raise FileExistsError(
-                f"Name collision: '{project_name=}' was already added, but points to a different path: {project_config.project_root}."
-                + "You can either use a different name or remove the existing project first before adding this one again."
-                + "If you are an LLM assistant, ask the user explicitly how they want to proceed before executing any further actions!"
-            )
+            project_name = project_root.name
+        for already_registered_project in self.projects:
+            if already_registered_project.project_name == project_name:
+                raise FileExistsError(
+                    f"Project name '{project_name}' already exists and points to {already_registered_project.project_root}."
+                )
+            if str(already_registered_project.project_root) == str(project_root):
+                raise FileExistsError(
+                    f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
+                )
 
         try:
-            project_config = ProjectConfig.load(path)
-            new_config_was_generated = False
+            project_config = ProjectConfig.load(project_root)
+            new_project_config_generated = False
         except FileNotFoundError:
-            project_config = ProjectConfig.autogenerate(path)
-            project_config.save()
-            new_config_was_generated = True
+            project_config = ProjectConfig.autogenerate(project_root, save_to_disk=True)
+            new_project_config_generated = True
 
-        self.add_project(project_config, project_name, update_config_file)
-        return project_name, project_config, new_config_was_generated
-
-    def add_project(self, project_config: ProjectConfig, project_name: str | None = None, update_config_file: bool = True) -> None:
-        if project_name is None:
-            project_name = project_config.project_name
-        existing_project_config = self.projects.get(project_name)
-        if existing_project_config is not None:
-            if existing_project_config.project_root == project_config.project_root:
-                raise FileExistsError(f"Project '{project_name}' was already added and points to the correct path, you can activate it.")
-            raise FileExistsError(
-                f"Name collision: '{project_name=}' was already added, but points to a different path: {existing_project_config.project_root}."
-                + "You can either use a different name or remove the existing project first before adding this one again."
-            )
-        self.projects[project_name] = project_config
-        self.project_names.append(project_name)
+        new_project = Project(project_root=str(project_root), project_config=project_config)
+        self.projects.append(new_project)
 
         # Update the config file on disk and preserve comments
         if update_config_file:
             config_with_comments = SerenaConfig.from_config_file(preserve_comments=True)
-            config_with_comments.projects[project_name] = project_config
+            config_with_comments.projects.append(new_project)
             config_with_comments.save(preserve_comments=True)
+        return new_project, new_project_config_generated
 
     def remove_project(self, project_name: str, update_config_file: bool = True) -> None:
-        if project_name not in self.projects:
+        # find the index of the project with the desired name and remove it
+        for i, project in enumerate(self.projects):
+            if project.project_name == project_name:
+                del self.projects[i]
+                break
+        else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-        del self.projects[project_name]
-        self.project_names.remove(project_name)
 
         # Update the config file on disk and preserve comments
         if update_config_file:
             config_with_comments = SerenaConfig.from_config_file(preserve_comments=True)
-            config_with_comments.projects.pop(project_name, None)
+            for i, project in enumerate(config_with_comments.projects):
+                if project.project_name == project_name:
+                    del config_with_comments.projects[i]
+                    break
             config_with_comments.save(preserve_comments=True)
 
 
@@ -380,20 +339,67 @@ class LinesRead:
             del self.files[relative_path]
 
 
+class MemoriesManager(ABC):
+    @abstractmethod
+    def load_memory(self, name: str) -> str:
+        pass
+
+    @abstractmethod
+    def save_memory(self, name: str, content: str) -> str:
+        pass
+
+    @abstractmethod
+    def list_memories(self) -> list[str]:
+        pass
+
+    @abstractmethod
+    def delete_memory(self, name: str) -> str:
+        pass
+
+
+class MemoriesManagerMDFilesInProject(MemoriesManager):
+    def __init__(self, project_root: str):
+        self._memory_dir = Path(get_serena_managed_dir(project_root)) / "memories"
+        self._memory_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_memory_file_path(self, name: str) -> Path:
+        filename = f"{name}.md"
+        return self._memory_dir / filename
+
+    def load_memory(self, name: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        if not memory_file_path.exists():
+            return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
+        with open(memory_file_path, encoding="utf-8") as f:
+            return f.read()
+
+    def save_memory(self, name: str, content: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        with open(memory_file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Memory {name} written."
+
+    def list_memories(self) -> list[str]:
+        return [f.name for f in self._memory_dir.iterdir() if f.is_file()]
+
+    def delete_memory(self, name: str) -> str:
+        memory_file_path = self._get_memory_file_path(name)
+        memory_file_path.unlink()
+        return f"Memory {name} deleted."
+
+
 class SerenaAgent:
     def __init__(
         self,
-        project_config: ProjectConfig | str | Path | None = None,
+        project: str | None = None,
         project_activation_callback: Callable[[], None] | None = None,
         serena_config: SerenaConfig | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
     ):
         """
-        :param project_config: the project to load immediately; may be a path to the project configuration file
-            or a configuration instance;
-            if None, do not load any project (must use project selection tool to activate a project).
-            If a project is provided, the corresponding language server will be started.
+        :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
+            an already registered project;
         :param project_activation_callback: a callback function to be called when a project is activated.
         :param context: the context in which the agent is operating, None for default context.
             The context may adjust prompts, tool availability, and tool descriptions.
@@ -429,23 +435,15 @@ class SerenaAgent:
         self._project_activation_callback = project_activation_callback
 
         # project-specific instances, which will be initialized upon project activation
-        self._active_project_config: ProjectConfig | None = None
+        self._active_project: Project | None = None
+        self._active_project_root: str | None = None
         self.language_server: SyncLanguageServer | None = None
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
 
-        # find all tool classes and instantiate them
-        self._all_tools: dict[type[Tool], Tool] = {}
-        """maps tool classes to their instances (which are linked to the agent instance)"""
-
-        for tool_class in ToolRegistry.get_all_tool_classes():
-            tool_instance = tool_class(self)
-            if not self.serena_config.enable_project_activation:
-                if tool_class == ActivateProjectTool:
-                    log.info(f"Excluding tool '{tool_instance.get_name()}' because project activation is disabled in configuration")
-                    continue
-            self._all_tools[tool_class] = tool_instance
+        # instantiate all tool classes
+        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
 
         # Apply context and mode tool configurations
         if context is None:
@@ -465,41 +463,22 @@ class SerenaAgent:
             self._gui_log_handler.log_viewer.set_tool_names(tool_names)
 
         # activate a project configuration (if provided or if there is only a single project available)
-        project_config_to_load: ProjectConfig | None = None
-        if project_config is not None:
-            if isinstance(project_config, (str, Path)):
-                project_config_to_load = ProjectConfig.load(project_config)
-            else:
-                project_config_to_load = project_config
-        else:
-            match len(self.serena_config.projects):
-                case 0:
-                    raise RuntimeError(f"No projects found in {SerenaConfig.CONFIG_FILE} and no project file specified.")
-                case 1:
-                    project_config_to_load = self.serena_config.get_project_configuration(self.serena_config.project_names[0])
-        if project_config_to_load is not None:
-            self.activate_project(project_config_to_load)
-        else:
-            if not self.serena_config.enable_project_activation:
-                raise ValueError("Tool-based project activation is disabled in the configuration but no project file was provided.")
+        if project is not None:
+            self.activate_project_from_path_or_name(project)
 
-    def get_active_project_config(self) -> ProjectConfig | None:
+    def get_exposed_tool_instances(self) -> list["Tool"]:
         """
-        :return: the active project configuration or None if no project is active
+        :return: all tool instances, including the non-active ones. For MCP clients, we need to expose them all since typical
+            clients don't react to changes in the set of tools.
+            An attempt to use a non-active tool will result in an error.
         """
-        return self._active_project_config
+        return list(self._all_tools.values())
 
-    def get_exposed_tools(self) -> list["Tool"]:
+    def get_active_project(self) -> Project | None:
         """
-        :return: the list of tools that are to be exposed/registered in the client
+        :return: the active project or None if no project is active
         """
-        if self.serena_config.enable_project_activation:
-            # With project activation, we must expose all tools and handle tool activation within Serena
-            # (because clients do not react to changed tools)
-            return list(self._all_tools.values())
-        else:
-            # When project activation is not enabled, we only expose the active tools
-            return list(self._active_tools.values())
+        return self._active_project
 
     def set_modes(self, modes: list[SerenaAgentMode]) -> None:
         """
@@ -536,9 +515,9 @@ class SerenaAgent:
         # context
         excluded_tool_classes.update(self._context.get_excluded_tool_classes())
         # project config
-        if self._active_project_config is not None:
-            excluded_tool_classes.update(self._active_project_config.get_excluded_tool_classes())
-            if self._active_project_config.read_only:
+        if self._active_project is not None:
+            excluded_tool_classes.update(self._active_project.project_config.get_excluded_tool_classes())
+            if self._active_project.project_config.read_only:
                 for tool_class in self._all_tools:
                     if tool_class.can_edit():
                         excluded_tool_classes.add(tool_class)
@@ -549,9 +528,9 @@ class SerenaAgent:
 
         log.info(f"Active tools after all exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
-    def activate_project(self, project_config: ProjectConfig) -> None:
-        log.info(f"Activating {project_config}")
-        self._active_project_config = project_config
+    def _activate_project(self, project: Project) -> None:
+        log.info(f"Activating {project.project_name} at {project.project_root}")
+        self._active_project = project
         self._update_active_tools()
 
         # start the language server
@@ -560,53 +539,43 @@ class SerenaAgent:
 
         # initialize project-specific instances
         self.symbol_manager = SymbolManager(self.language_server, self)
-        self.memories_manager = MemoriesManager(os.path.join(self._active_project_config.get_serena_managed_dir(), "memories"))
+        self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
         self.lines_read = LinesRead()
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
-    def activate_project_from_path_or_name(self, project: str, register_project: bool = False) -> None:
+    def activate_project_from_path_or_name(self, project_root_or_name: str) -> tuple[Project, bool, bool]:
         """
         Activate a project from a path or a name.
-        If the project was already registered, it will just be activated. If it was not registered and register_project is True,
-        the project will be registered and activated.
-        Finally, if it was not registered and register_project is False, the project will be
-        activated without being registered. In this case, either an existing `ProjectConfig` will be loaded, or a new one
-        will be autogenerated if the project directory exists but no `project.yml` was found.
+        If the project was already registered, it will just be activated. If it was not registered,
+        the project will be registered and activated. After that, the project can be activated again
+        by name (not just by path).
+        :return: a tuple of the project instance and two booleans indicating if a new project was added and if a new project configuration for the
+            added project was generated.
         """
-        # Find or create the project config
-        # Either retrieve it from the registered projects, load it from an existing yaml in the .serena directory within the project,
-        # or autogenerate a new one if the project directory exists but no yaml is present.
-        project_config = None
-        if project in self.serena_config.project_names:
-            project_config = self.serena_config.get_project_configuration(project)
-        elif os.path.exists(project):
-            # maybe user passed a path instead of a name of a registered project
-            project_path = os.path.abspath(project)
-            for registered_project_config in self.serena_config.projects.values():
-                if registered_project_config.project_root == project_path:
-                    project_config = registered_project_config
-                    break
-        if project_config is not None:
-            log.info(f"Activating registered project {project}")
+        new_project_generated = False
+        new_project_config_generated = False
+        project_instance: Project | None = None
+        for registered_project in self.serena_config.projects:
+            if project_root_or_name in (registered_project.project_name, registered_project.project_root):
+                project_instance = registered_project
+                break
+        if project_instance is not None:
+            log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
         else:
-            if register_project:
-                project_name, project_config, was_autogenerated = self.serena_config.add_project_from_path(project, update_config_file=True)
-                log.info(f"Registered project {project_name} at path {project_config.project_root}.")
-                if was_autogenerated:
-                    log.info(
-                        f"Note: A new project configuration with language {project_config.language.value} was autogenerated since no project configuration was found."
-                    )
-            else:
-                log.info(f"Activating a non-registered project at path {project}")
-                try:
-                    project_config = ProjectConfig.load(project)
-                except FileNotFoundError:
-                    log.info(f"No project configuration found at path {project}, autogenerating one.")
-                    project_config = ProjectConfig.autogenerate(project)
-                    log.info(f"Autogenerated project configuration with language {project_config.language.value}.")
-        self.activate_project(project_config)
+            project_instance, new_project_config_generated = self.serena_config.add_project_from_path(
+                project_root_or_name, update_config_file=True
+            )
+            new_project_generated = True
+            log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}.")
+            if new_project_config_generated:
+                log.info(
+                    f"Note: A new project configuration with language {project_instance.project_config.language.value} "
+                    f"was autogenerated since no project configuration was found in {project_root_or_name}."
+                )
+        self._activate_project(project_instance)
+        return project_instance, new_project_generated, new_project_config_generated
 
     def get_active_tool_classes(self) -> list[type["Tool"]]:
         """
@@ -635,8 +604,8 @@ class SerenaAgent:
         :return: a string overview of the current configuration, including the active and available configuration options
         """
         result_str = "Current configuration:\n"
-        if self._active_project_config is not None:
-            result_str += f"Active project: {self._active_project_config.project_name}\n"
+        if self._active_project is not None:
+            result_str += f"Active project: {self._active_project.project_name}\n"
         else:
             result_str += "No active project\n"
         result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names))
@@ -687,20 +656,22 @@ class SerenaAgent:
             self.language_server = None
 
         # instantiate and start the language server
-        assert self._active_project_config is not None
+        assert self._active_project is not None
         multilspy_config = MultilspyConfig(
-            code_language=self._active_project_config.language, ignored_paths=self._active_project_config.ignored_paths
+            code_language=self._active_project.project_config.language, ignored_paths=self._active_project.project_config.ignored_paths
         )
         ls_logger = MultilspyLogger()
         self.language_server = SyncLanguageServer.create(
             multilspy_config,
             ls_logger,
-            self._active_project_config.project_root,
-            add_gitignore_content_to_config=self._active_project_config.ignore_all_files_in_gitignore,
+            self._active_project.project_root,
+            add_gitignore_content_to_config=self._active_project.project_config.ignore_all_files_in_gitignore,
         )
         self.language_server.start()
         if not self.language_server.is_running():
-            raise RuntimeError(f"Failed to start the language server for {self._active_project_config}")
+            raise RuntimeError(
+                f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
+            )
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -729,36 +700,6 @@ class SerenaAgent:
             Logger.root.removeHandler(self._gui_log_handler)
 
 
-class MemoriesManager:
-    def __init__(self, memory_dir: str):
-        self._memory_dir = Path(memory_dir)
-        self._memory_dir.mkdir(parents=True, exist_ok=True)
-
-    def _get_memory_file_path(self, memory_file_name: str) -> Path:
-        return self._memory_dir / memory_file_name
-
-    def load_memory(self, memory_file_name: str) -> str:
-        memory_file_path = self._get_memory_file_path(memory_file_name)
-        if not memory_file_path.exists():
-            return f"Memory file {memory_file_name} not found, consider creating it with the `write_memory` tool if you need it."
-        with open(memory_file_path, encoding="utf-8") as f:
-            return f.read()
-
-    def save_memory(self, memory_file_name: str, content: str) -> str:
-        memory_file_path = self._get_memory_file_path(memory_file_name)
-        with open(memory_file_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return f"Memory file {memory_file_name} written."
-
-    def list_memories(self) -> list[str]:
-        return [f.name for f in self._memory_dir.iterdir() if f.is_file()]
-
-    def delete_memory(self, memory_file_name: str) -> str:
-        memory_file_path = self._get_memory_file_path(memory_file_name)
-        memory_file_path.unlink()
-        return f"Memory file {memory_file_name} deleted."
-
-
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
@@ -772,7 +713,7 @@ class Component(ABC):
         """
         :return: the root directory of the active project, raises a ValueError if no active project configuration is set
         """
-        project_config = self.agent.get_active_project_config()
+        project_config = self.agent.get_active_project()
         if project_config is None:
             raise ValueError("Cannot get project root if no active project configuration is set.")
         return project_config.project_root
@@ -900,7 +841,7 @@ class Tool(Component):
         try:
             # check whether the tool requires an active project and language server
             if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
-                if self.agent._active_project_config is None:
+                if self.agent._active_project is None:
                     return (
                         "Error: No active project. Ask to user to select a project from this list: "
                         + f"{self.agent.serena_config.project_names}"
@@ -1696,54 +1637,34 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     Activates a project by name.
     """
 
-    def apply(self, project: str, register_project: bool = False) -> str:
+    def apply(self, project: str) -> str:
         """
-        Activates the project with the given name, registering it if requested by the user.
-        Already registered projects will not be registered again.
+        Activates the project with the given name.
 
         :param project: the name of a registered project to activate or a path to a project directory
-        :param register_project: whether to register the project in the Serena configuration (if not already done before).
-            Registered projects will be saved in the `serena_config.yml` file and can be activated later by name.
-            Only use this option if explicitly requested by the user.
         """
-        self.agent.activate_project_from_path_or_name(project, register_project)
-        project_config = self.agent._active_project_config
-        if project_config is None:
-            raise RuntimeError(f"Failed to activate project {project} without raising an error before, this should not happen.")
-        result_str = f"Activated project {project}, language: {project_config.language.value}"
-        result_str += f"\nAdditional project information:\n {project_config.project_info_prompt}"
+        active_project, new_project_generated, new_project_config_generated = self.agent.activate_project_from_path_or_name(project)
+        if new_project_generated:
+            result_str = (
+                f"Created and activated a new project with name {active_project.project_name} at {active_project.project_root}, language: {active_project.project_config.language.value}. "
+                + "You can activate this project later by name."
+            )
+        else:
+            result_str = f"Activated existing project with name {active_project.project_name} at {active_project.project_root}, language: {active_project.project_config.language.value}"
+        if new_project_config_generated:
+            result_str += (
+                f"\nNote: A new project configuration was autogenerated because the given path did not contain a {ProjectConfig.SERENA_DEFAULT_PROJECT_FILE} file."
+                + f"You can now edit the project configuration in the file {active_project.path_to_project_yml()}. In particular, you may want to edit the project name and the initial prompt."
+            )
+
+        if active_project.project_config.initial_prompt:
+            result_str += f"\nAdditional project information:\n {active_project.project_config.initial_prompt}"
         result_str += (
             f"\nAvailable memories:\n {json.dumps(list(self.memories_manager.list_memories()))}"
             + "You should not read these memories directly, but rather use the `read_memory` tool to read them later if needed for the task."
         )
         result_str += f"\nAvailable tools:\n {json.dumps(self.agent.get_active_tool_names())}"
         return result_str
-
-
-class AddProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
-    """
-    Adds a new project to the Serena configuration.
-    If the project is not already configured, this tool will autogenerate a project configuration.
-    """
-
-    def apply(self, project_path: str, project_name: str | None = None) -> str:
-        """
-        Adds a new project to the Serena configuration.
-
-        :param project_path: Path to the project directory
-        :param project_name: Name of the project to add. If not provided, the directory name will be used.
-        """
-        project_name, project_config, was_autogenerated = self.agent.serena_config.add_project_from_path(
-            project_path, project_name, update_config_file=True
-        )
-        result_msg = f"Successfully added project '{project_name}' to configuration."
-        if was_autogenerated:
-            result_msg += (
-                f"\nNote: A new project configuration was autogenerated because the given path did not contain a {ProjectConfig.SERENA_DEFAULT_PROJECT_FILE} file."
-                + f"You can now edit the project configuration in the file {project_config.rel_path_to_project_yml()}."
-                + f"Identified project programming language: {project_config.language.value}"
-            )
-        return result_msg
 
 
 class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):

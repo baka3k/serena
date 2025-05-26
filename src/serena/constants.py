@@ -7,5 +7,7 @@ PROMPT_TEMPLATES_DIR = str(_repo_root_path / "config" / "prompt_templates")
 CONTEXT_YAMLS_DIR = str(_repo_root_path / "config" / "contexts")
 MODE_YAMLS_DIR = str(_repo_root_path / "config" / "modes")
 
+SERENA_MANAGED_DIR_NAME = ".serena"
+
 DEFAULT_CONTEXT = "desktop-app"
 DEFAULT_MODES = ("interactive", "editing")

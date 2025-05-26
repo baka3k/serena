@@ -117,7 +117,7 @@ def create_mcp_server_and_agent(
 
     try:
         agent = SerenaAgent(
-            project_config=project,
+            project=project,
             # Callback disabled for the time being (see above)
             # project_activation_callback=update_tools
             context=context_instance,
@@ -134,7 +134,7 @@ def create_mcp_server_and_agent(
         # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
         # so we need to register all tools at startup, unfortunately.
         nonlocal mcp, agent
-        tools = agent.get_exposed_tools()
+        tools = agent.get_exposed_tool_instances()
         if mcp is not None:
             mcp._tool_manager._tools = {}
             for tool in tools:

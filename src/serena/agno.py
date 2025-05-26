@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 class SerenaAgnoToolkit(Toolkit):
     def __init__(self, serena_agent: SerenaAgent):
         super().__init__("Serena")
-        for tool in serena_agent.get_exposed_tools():
+        for tool in serena_agent.get_exposed_tool_instances():
             self.functions[tool.get_name()] = self._create_agno_function(tool)
         log.info("Agno agent functions: %s", list(self.functions.keys()))
 
