@@ -964,6 +964,7 @@ dependencies = [
     { name = "agno" },
     { name = "docstring-parser" },
     { name = "dotenv" },
+    { name = "fastapi" },
     { name = "fastmcp" },
     { name = "jinja2" },
     { name = "mcp" },
@@ -983,7 +984,6 @@ dependencies = [
 [package.optional-dependencies]
 agno = [
     { name = "agno" },
-    { name = "fastapi" },
     { name = "sqlalchemy" },
 ]
 anthropic = [
@@ -1011,7 +1011,7 @@ requires-dist = [
     { name = "black", extras = ["jupyter"], marker = "extra == 'dev'", specifier = ">=23.7.0" },
     { name = "docstring-parser", specifier = ">=0.16" },
     { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "fastapi", marker = "extra == 'agno'", specifier = ">=0.115.12" },
+    { name = "fastapi", specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=0.4.1" },
     { name = "google-genai", marker = "extra == 'google'", specifier = ">=1.8.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
