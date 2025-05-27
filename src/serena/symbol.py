@@ -20,7 +20,8 @@ log = logging.getLogger(__name__)
 @dataclass
 class SymbolLocation:
     """
-    Represents the (start) location of a symbol identifier
+    Represents the location of a symbol, including the line where the identifier
+    is defined and the end line of the symbol's body
     """
 
     relative_path: str | None
@@ -36,6 +37,10 @@ class SymbolLocation:
     """
     the column number in which the symbol identifier is defined (if the symbol is a function, class, etc.);
     may be None for some types of symbols (e.g. SymbolKind.File)
+    """
+    end_line: int | None
+    """
+    the line in which the symbol's body ends, may be None (e.g., if line is None)
     """
 
     def __post_init__(self) -> None:
@@ -121,7 +126,7 @@ class Symbol(ToStringMixin):
         """
         :return: the start location of the actual symbol identifier
         """
-        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
+        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column, end_line=self.end_line)
 
     @property
     def body_start_position(self) -> Position | None:
@@ -147,11 +152,20 @@ class Symbol(ToStringMixin):
 
     @property
     def line(self) -> int | None:
+        """The line in which the symbol identifier is defined (start line)."""
         if "selectionRange" in self.symbol_root:
             return self.symbol_root["selectionRange"]["start"]["line"]
         else:
             # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
             return None
+        
+    @property
+    def end_line(self) -> int | None:
+        """The end line of the symbol body, also contained in the `body_end_position`."""
+        body_end_position = self.body_end_position
+        if body_end_position is not None:
+            return body_end_position["line"]
+        return None
 
     @property
     def column(self) -> int | None:
