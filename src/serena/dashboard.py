@@ -1,6 +1,7 @@
 import os
 import queue
 import socket
+import sys
 import threading
 
 import uvicorn
@@ -79,6 +80,7 @@ class SerenaDashboardAPI:
 
         self._app.add_api_route("/get_log_messages", self._get_log_messages, methods=["POST"], response_model=ResponseLog)
         self._app.add_api_route("/get_tool_names", self._get_tool_names, methods=["GET"], response_model=ResponseToolNames)
+        self._app.add_api_route("/shutdown", self._shutdown, methods=["PUT"])
 
     async def _get_log_messages(self, request: RequestLog) -> ResponseLog:
         all_messages = self._memory_log_handler.get_log_messages()
@@ -87,6 +89,13 @@ class SerenaDashboardAPI:
 
     async def _get_tool_names(self) -> ResponseToolNames:
         return ResponseToolNames(tool_names=self._tool_names)
+
+    async def _shutdown(self) -> None:
+        print("Shutdown initiated by dashbaord ...", file=sys.stderr)
+        log.info("Shutting down Serena")
+        # noinspection PyUnresolvedReferences
+        # noinspection PyProtectedMember
+        os._exit(0)
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:

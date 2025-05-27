@@ -39,11 +39,11 @@ class Dashboard {
         this.$logContainer = $('#log-container');
         this.$errorContainer = $('#error-container');
         this.$loadButton = $('#load-logs');
-        this.$clearButton = $('#clear-logs');
+        this.$shutdownButton = $('#shutdown');
 
         // register event handlers
         this.$loadButton.click(this.loadLogs.bind(this));
-        this.$clearButton.click(this.clearLogs.bind(this));
+        this.$shutdownButton.click(this.shutdown.bind(this));
 
         // initialize the application
         this.loadToolNames().then(function() {
@@ -63,7 +63,7 @@ class Dashboard {
             type: 'GET',
             success: function(response) {
                 self.toolNames = response.tool_names || [];
-                console.log('Loaded tool names:', toolNames);
+                console.log('Loaded tool names:', self.toolNames);
             },
             error: function(xhr, status, error) {
                 console.error('Error loading tool names:', error);
@@ -72,7 +72,7 @@ class Dashboard {
     }
 
     loadLogs() {
-        console.log("load", this);
+        console.log("Loading logs");
         let self = this;
 
         // Disable button and show loading state
@@ -117,14 +117,14 @@ class Dashboard {
             },
             complete: function() {
                 // Re-enable button
-                self.$loadButton.prop('disabled', false).text('Load Logs');
+                self.$loadButton.prop('disabled', false).text('Reload Log');
             }
         });
     }
 
     pollForNewLogs() {
         let self = this;
-        console.log("poll", this);
+        console.log("Polling logs", this.currentMaxIdx);
         $.ajax({
             url: '/get_log_messages',
             type: 'POST',
@@ -176,17 +176,26 @@ class Dashboard {
         this.pollInterval = setInterval(this.pollForNewLogs.bind(this), 1000);
     }
 
-    stopPeriodicPolling() {
-        if (this.pollInterval) {
-            clearInterval(this.pollInterval);
-            this.pollInterval = null;
+    shutdown() {
+        const self = this;
+        const _shutdown = function () {
+            console.log("Triggering shutdown");
+            $.ajax({
+                url: '/shutdown',
+                type: "PUT",
+                contentType: 'application/json',
+            });
+            self.$errorContainer.html('<div class="error-message">Shutting down ...</div>')
+            setTimeout(function() {
+                window.close();
+            }, 2000);
         }
-    }
 
-    clearLogs() {
-        this.stopPeriodicPolling();
-        this.$logContainer.empty();
-        this.$errorContainer.empty();
-        this.currentMaxIdx = -1;
+        // ask for confirmation using a dialog
+        if (confirm("This will fully terminate the Serena server.")) {
+            _shutdown();
+        } else {
+            console.log("Shutdown cancelled");
+        }
     }
 }
