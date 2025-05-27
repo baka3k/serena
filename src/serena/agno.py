@@ -70,20 +70,32 @@ class SerenaAgnoAgentProvider:
             load_dotenv()
 
             parser = argparse.ArgumentParser(description="Serena coding assistant")
-            parser.add_argument(
+
+            # Create a mutually exclusive group
+            group = parser.add_mutually_exclusive_group()
+
+            # Add arguments to the group, both pointing to the same destination
+            group.add_argument(
+                 "--project-file",
+                required=False,
+                help="Path to the project (or project.yml file).",
+            )
+            group.add_argument(
                 "--project",
                 required=False,
                 help="Path to the project (or project.yml file).",
             )
             args = parser.parse_args()
 
-            if args.project_file:
-                project_file = Path(args.project_file).resolve()
+            args_project_file = args.project or args.project_file 
+
+            if args_project_file:
+                project_file = Path(args_project_file).resolve()
                 # If project file path is relative, make it absolute by joining with project root
                 if not project_file.is_absolute():
                     # Get the project root directory (parent of scripts directory)
                     project_root = Path(serena_root_path())
-                    project_file = project_root / args.project_file
+                    project_file = project_root / args_project_file
 
                 # Ensure the path is normalized and absolute
                 project_file = str(project_file.resolve())
