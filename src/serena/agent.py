@@ -481,7 +481,9 @@ class SerenaAgent:
                 if Logger.root.level > log_level:
                     log.info(f"Root logger level is higher than GUI log level; changing the root logger level to {log_level}")
                     Logger.root.setLevel(log_level)
-                self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer("dashboard", title="Serena Logs"), level=log_level, format_string=LOG_FORMAT)
+                self._gui_log_handler = GuiLogViewerHandler(
+                    GuiLogViewer("dashboard", title="Serena Logs"), level=log_level, format_string=LOG_FORMAT
+                )
                 Logger.root.addHandler(self._gui_log_handler)
 
         # instantiate all tool classes

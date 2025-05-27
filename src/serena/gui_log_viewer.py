@@ -1,5 +1,6 @@
 # mypy: ignore-errors
 import logging
+import os
 import queue
 import sys
 import threading
@@ -8,6 +9,7 @@ import tkinter as tk
 import traceback
 from enum import Enum, auto
 from pathlib import Path
+from typing import Literal
 
 log = logging.getLogger(__name__)
 
@@ -27,16 +29,15 @@ class GuiLogViewer:
     It can also highlight tool names in boldface when they appear in log messages.
     """
 
-    def __init__(self, title="Log Viewer", width=800, height=600):
+    def __init__(self, mode: Literal["dashboard", "error"], title="Log Viewer", width=800, height=600):
         """
-        Initialize the ThreadedLogViewer.
-
-        Args:
-            title (str): The title of the window
-            width (int): Initial window width
-            height (int): Initial window height
-
+        :param mode: the mode; if "dashboard", run a dashboard with logs and some control options; if "error", run
+            a simple error log viewer (for fatal exceptions)
+        :param title: the window title
+        :param width: the initial window width
+        :param height: the initial window height
         """
+        self.mode = mode
         self.title = title
         self.width = width
         self.height = height
@@ -258,8 +259,19 @@ class GuiLogViewer:
             # Set up the queue processing
             self.root.after(100, self._process_queue)
 
-            # Handle window close
-            self.root.protocol("WM_DELETE_WINDOW", self.stop)
+            # Handle window close event depending on mode
+            if self.mode == "dashboard":
+                self.root.protocol("WM_DELETE_WINDOW", lambda: self.root.iconify())
+            else:
+                self.root.protocol("WM_DELETE_WINDOW", self.stop)
+
+            # Create menu bar
+            if self.mode == "dashboard":
+                menubar = tk.Menu(self.root)
+                server_menu = tk.Menu(menubar, tearoff=0)
+                server_menu.add_command(label="Shutdown", command=self._shutdown_server)  # type: ignore
+                menubar.add_cascade(label="Server", menu=server_menu)
+                self.root.config(menu=menubar)
 
             # Start the Tkinter event loop
             self.root.mainloop()
@@ -268,6 +280,12 @@ class GuiLogViewer:
             print(f"Error in GUI thread: {e}", file=sys.stderr)
         finally:
             self.running = False
+
+    def _shutdown_server(self) -> None:
+        log.info("Shutting down Serena")
+        # noinspection PyUnresolvedReferences
+        # noinspection PyProtectedMember
+        os._exit(0)
 
 
 class GuiLogViewerHandler(logging.Handler):
@@ -363,7 +381,7 @@ def show_fatal_exception(e: Exception, duration_secs: int = 60):
         time.sleep(duration_secs)
     else:
         # show in new window in main thread (user must close it)
-        log_viewer = GuiLogViewer()
+        log_viewer = GuiLogViewer("error")
         exc_info = "".join(traceback.format_exception(type(e), e, e.__traceback__))
         log_viewer.add_log(f"ERROR Fatal exception: {e}\n{exc_info}")
         log_viewer.run_gui()
