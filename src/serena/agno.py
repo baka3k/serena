@@ -76,7 +76,7 @@ class SerenaAgnoAgentProvider:
 
             # Add arguments to the group, both pointing to the same destination
             group.add_argument(
-                 "--project-file",
+                "--project-file",
                 required=False,
                 help="Path to the project (or project.yml file).",
             )
@@ -87,7 +87,7 @@ class SerenaAgnoAgentProvider:
             )
             args = parser.parse_args()
 
-            args_project_file = args.project or args.project_file 
+            args_project_file = args.project or args.project_file
 
             if args_project_file:
                 project_file = Path(args_project_file).resolve()

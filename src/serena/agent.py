@@ -324,7 +324,7 @@ class SerenaAgent:
         self._context = context
         self._modes = modes
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name() for tool in self._all_tools.values()])}")
-        
+
         self._active_tools: dict[type[Tool], Tool] = {}
         self._update_active_tools()
 
@@ -416,7 +416,7 @@ class SerenaAgent:
         log.info(f"Activating {project_config}")
         self.project_config = project_config
         self._update_active_tools()
-        
+
         # start the language server
         self.reset_language_server()
         assert self.language_server is not None
