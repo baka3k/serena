@@ -206,6 +206,7 @@ class SerenaConfig:
     projects: list[Project] = field(default_factory=list)
     gui_log_window_enabled: bool = False
     gui_log_window_level: int = logging.INFO
+    web_dashboard: bool = True
     loaded_original_yaml: dict | CommentedMap = field(default_factory=dict)
 
     CONFIG_FILE = "serena_config.yml"
@@ -262,6 +263,7 @@ class SerenaConfig:
 
         instance.gui_log_window_enabled = loaded_original_yaml.get("gui_log_window", False)
         instance.gui_log_window_level = loaded_original_yaml.get("gui_log_level", logging.INFO)
+        instance.web_dashboard = loaded_original_yaml.get("web_dashboard", True)
         instance.loaded_original_yaml = loaded_original_yaml
 
         # re-save the configuration file if any migrations were performed
@@ -479,18 +481,23 @@ class SerenaAgent:
                 if Logger.root.level > log_level:
                     log.info(f"Root logger level is higher than GUI log level; changing the root logger level to {log_level}")
                     Logger.root.setLevel(log_level)
-                self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer(title="Serena Logs"), level=log_level, format_string=LOG_FORMAT)
+                self._gui_log_handler = GuiLogViewerHandler(GuiLogViewer("dashboard", title="Serena Logs"), level=log_level, format_string=LOG_FORMAT)
                 Logger.root.addHandler(self._gui_log_handler)
 
         # instantiate all tool classes
         self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
-
-        # start the dashboard (web frontend) and register its log handler
-        memory_log_handler = MemoryLogHandler()
-        Logger.root.addHandler(memory_log_handler)
         tool_names = [tool.get_name() for tool in self._all_tools.values()]
-        self._dashboard_thread, port = SerenaDashboardAPI(memory_log_handler, tool_names).run_in_thread()
-        webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
+
+        # If GUI log window is enabled, set the tool names for highlighting
+        if self._gui_log_handler is not None:
+            self._gui_log_handler.log_viewer.set_tool_names(tool_names)
+
+        # start the dashboard (web frontend), registering its log handler
+        if self.serena_config.web_dashboard:
+            dashboard_log_handler = MemoryLogHandler()
+            Logger.root.addHandler(dashboard_log_handler)
+            self._dashboard_thread, port = SerenaDashboardAPI(dashboard_log_handler, tool_names).run_in_thread()
+            webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
 
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
@@ -518,11 +525,6 @@ class SerenaAgent:
 
         self._active_tools: dict[type[Tool], Tool] = {}
         self._update_active_tools()
-
-        # If GUI log window is enabled, set the tool names for highlighting
-        if self._gui_log_handler is not None:
-            tool_names = [tool.get_name() for tool in self._active_tools.values()]
-            self._gui_log_handler.log_viewer.set_tool_names(tool_names)
 
         # activate a project configuration (if provided or if there is only a single project available)
         if project is not None:
