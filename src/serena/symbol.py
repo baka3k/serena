@@ -123,9 +123,6 @@ class Symbol(ToStringMixin):
 
     @property
     def location(self) -> SymbolLocation:
-        """
-        :return: the start location of the actual symbol identifier
-        """
         return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column, end_line=self.end_line)
 
     @property
