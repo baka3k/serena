@@ -4,8 +4,9 @@ import os
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
-from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any, Self
+from dataclasses import asdict, dataclass, field
+from difflib import SequenceMatcher
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, overload
 
 from sensai.util.string import ToStringMixin
 
@@ -16,6 +17,151 @@ if TYPE_CHECKING:
     from .agent import SerenaAgent
 
 log = logging.getLogger(__name__)
+
+
+class LineChange(NamedTuple):
+    """Represents a change to a specific line or range of lines."""
+
+    operation: Literal["insert", "delete", "replace"]
+    original_start: int
+    original_end: int
+    modified_start: int
+    modified_end: int
+    original_lines: list[str]
+    modified_lines: list[str]
+
+
+@dataclass
+class CodeDiff:
+    """
+    Represents the difference between original and modified code.
+    Provides object-oriented access to diff information including line numbers.
+    """
+
+    relative_path: str
+    original_content: str
+    modified_content: str
+    _line_changes: list[LineChange] = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Compute the diff using difflib's SequenceMatcher."""
+        original_lines = self.original_content.splitlines(keepends=True)
+        modified_lines = self.modified_content.splitlines(keepends=True)
+
+        matcher = SequenceMatcher(None, original_lines, modified_lines)
+        self._line_changes = []
+
+        for tag, orig_start, orig_end, mod_start, mod_end in matcher.get_opcodes():
+            if tag == "equal":
+                continue
+            if tag == "insert":
+                self._line_changes.append(
+                    LineChange(
+                        operation="insert",
+                        original_start=orig_start,
+                        original_end=orig_start,
+                        modified_start=mod_start,
+                        modified_end=mod_end,
+                        original_lines=[],
+                        modified_lines=modified_lines[mod_start:mod_end],
+                    )
+                )
+            elif tag == "delete":
+                self._line_changes.append(
+                    LineChange(
+                        operation="delete",
+                        original_start=orig_start,
+                        original_end=orig_end,
+                        modified_start=mod_start,
+                        modified_end=mod_start,
+                        original_lines=original_lines[orig_start:orig_end],
+                        modified_lines=[],
+                    )
+                )
+            elif tag == "replace":
+                self._line_changes.append(
+                    LineChange(
+                        operation="replace",
+                        original_start=orig_start,
+                        original_end=orig_end,
+                        modified_start=mod_start,
+                        modified_end=mod_end,
+                        original_lines=original_lines[orig_start:orig_end],
+                        modified_lines=modified_lines[mod_start:mod_end],
+                    )
+                )
+
+    @property
+    def line_changes(self) -> list[LineChange]:
+        """Get all line changes in the diff."""
+        return self._line_changes
+
+    @property
+    def has_changes(self) -> bool:
+        """Check if there are any changes."""
+        return len(self._line_changes) > 0
+
+    @property
+    def added_lines(self) -> list[tuple[int, str]]:
+        """Get all added lines with their line numbers (0-based) in the modified file."""
+        result = []
+        for change in self._line_changes:
+            if change.operation in ("insert", "replace"):
+                for i, line in enumerate(change.modified_lines):
+                    result.append((change.modified_start + i, line))
+        return result
+
+    @property
+    def deleted_lines(self) -> list[tuple[int, str]]:
+        """Get all deleted lines with their line numbers (0-based) in the original file."""
+        result = []
+        for change in self._line_changes:
+            if change.operation in ("delete", "replace"):
+                for i, line in enumerate(change.original_lines):
+                    result.append((change.original_start + i, line))
+        return result
+
+    @property
+    def modified_line_numbers(self) -> list[int]:
+        """Get all line numbers (0-based) that were modified in the modified file."""
+        line_nums: set[int] = set()
+        for change in self._line_changes:
+            if change.operation in ("insert", "replace"):
+                line_nums.update(range(change.modified_start, change.modified_end))
+        return sorted(line_nums)
+
+    @property
+    def affected_original_line_numbers(self) -> list[int]:
+        """Get all line numbers (0-based) that were affected in the original file."""
+        line_nums: set[int] = set()
+        for change in self._line_changes:
+            if change.operation in ("delete", "replace"):
+                line_nums.update(range(change.original_start, change.original_end))
+        return sorted(line_nums)
+
+    def get_unified_diff(self, context_lines: int = 3) -> str:
+        """Get the unified diff as a string."""
+        import difflib
+
+        original_lines = self.original_content.splitlines(keepends=True)
+        modified_lines = self.modified_content.splitlines(keepends=True)
+
+        diff = difflib.unified_diff(
+            original_lines, modified_lines, fromfile=f"a/{self.relative_path}", tofile=f"b/{self.relative_path}", n=context_lines
+        )
+        return "".join(diff)
+
+    def get_context_diff(self, context_lines: int = 3) -> str:
+        """Get the context diff as a string."""
+        import difflib
+
+        original_lines = self.original_content.splitlines(keepends=True)
+        modified_lines = self.modified_content.splitlines(keepends=True)
+
+        diff = difflib.context_diff(
+            original_lines, modified_lines, fromfile=f"a/{self.relative_path}", tofile=f"b/{self.relative_path}", n=context_lines
+        )
+        return "".join(diff)
 
 
 @dataclass
@@ -466,7 +612,41 @@ class SymbolManager:
         with self._edited_file(location.relative_path):
             yield symbol
 
-    def replace_body(self, name_path: str, relative_file_path: str, body: str) -> None:
+    def _get_code_file_content(self, relative_path: str) -> str:
+        """Get the content of a file using the language server."""
+        return self.lang_server.language_server.retrieve_full_file_content(relative_path)
+
+    @staticmethod
+    def _apply_text_edit(content: str, start_line: int, start_char: int, end_line: int, end_char: int, replacement: str) -> str:
+        """Apply a text edit to content and return the modified content."""
+        lines = content.splitlines(keepends=True)
+
+        # Handle edge cases
+        if not lines:
+            return replacement
+
+        # Ensure we have enough lines
+        while len(lines) <= max(start_line, end_line):
+            lines.append("")
+
+        # Extract the portion to keep before the edit
+        before_lines = lines[:start_line]
+        before_on_line = lines[start_line][:start_char] if start_line < len(lines) else ""
+
+        # Extract the portion to keep after the edit
+        after_on_line = lines[end_line][end_char:] if end_line < len(lines) else ""
+        after_lines = lines[end_line + 1 :] if end_line + 1 < len(lines) else []
+
+        # Combine everything
+        result = before_lines + [before_on_line + replacement + after_on_line] + after_lines
+
+        return "".join(result)
+
+    @overload
+    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Replace the body of the symbol with the given name in the given file.
         """
@@ -481,29 +661,60 @@ class SymbolManager:
                 + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        self.replace_body_at_location(symbol.location, body)
+        return self.replace_body_at_location(symbol.location, body, dry_run=dry_run)  # type: ignore[call-overload]
 
-    def replace_body_at_location(self, location: SymbolLocation, body: str) -> None:
+    @overload
+    def replace_body_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def replace_body_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def replace_body_at_location(self, location: SymbolLocation, body: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Replace the body of the symbol at the given location with the given body
 
         :param location: the location of the symbol to replace.
         :param body: the new body
+        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
             body += "\n"
-        with self._edited_symbol_location(location) as symbol:
+
+        if dry_run:
             assert location.relative_path is not None
+            original_content = self._get_code_file_content(location.relative_path)
+
+            # Find the symbol to get its body positions
+            symbol = self.find_by_location(location)
+            if symbol is None:
+                raise ValueError("Symbol not found/has no defined location within a file")
+
             start_pos = symbol.body_start_position
             end_pos = symbol.body_end_position
             if start_pos is None or end_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined body range.")
-            # At this point, start_pos and end_pos are guaranteed to be Position objects
-            self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
-            self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
 
-    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str) -> None:
+            # Apply the edit
+            modified_content = self._apply_text_edit(
+                original_content, start_pos["line"], start_pos["character"], end_pos["line"], end_pos["character"], body
+            )
+
+            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
+        else:
+            with self._edited_symbol_location(location) as symbol:
+                assert location.relative_path is not None
+                start_pos = symbol.body_start_position
+                end_pos = symbol.body_end_position
+                if start_pos is None or end_pos is None:
+                    raise ValueError(f"Symbol at {location} does not have a defined body range.")
+                self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
+                self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
+            return None
+
+    @overload
+    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Inserts content after the symbol with the given name in the given file.
         """
@@ -517,27 +728,55 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[-1]
-        self.insert_after_symbol_at_location(symbol.location, body)
+        return self.insert_after_symbol_at_location(symbol.location, body, dry_run=dry_run)  # type: ignore[call-overload]
 
-    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str) -> None:
+    @overload
+    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Appends content after the given symbol
 
         :param location: the location of the symbol after which to add new lines
         :param body: the body of the entity to append
+        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
             body += "\n"
-        with self._edited_symbol_location(location) as symbol:
+
+        if dry_run:
+            assert location.relative_path is not None
+            original_content = self._get_code_file_content(location.relative_path)
+
+            # Find the symbol to get its end position
+            symbol = self.find_by_location(location)
+            if symbol is None:
+                raise ValueError("Symbol not found/has no defined location within a file")
+
             pos = symbol.body_end_position
             if pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined end position.")
-            # At this point, pos is guaranteed to be a Position object
-            assert location.relative_path is not None
-            self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
-    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str) -> None:
+            # Apply the edit - insert at end position
+            modified_content = self._apply_text_edit(original_content, pos["line"], pos["character"], pos["line"], pos["character"], body)
+
+            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
+        else:
+            with self._edited_symbol_location(location) as symbol:
+                pos = symbol.body_end_position
+                if pos is None:
+                    raise ValueError(f"Symbol at {location} does not have a defined end position.")
+                assert location.relative_path is not None
+                self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
+            return None
+
+    @overload
+    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Inserts content before the symbol with the given name in the given file.
         """
@@ -551,62 +790,155 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        self.insert_before_symbol_at_location(symbol.location, body)
+        return self.insert_before_symbol_at_location(symbol.location, body, dry_run=dry_run)  # type: ignore[call-overload]
 
-    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str) -> None:
+    @overload
+    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Inserts content before the given symbol
 
         :param location: the location of the symbol before which to add new lines
         :param body: the body of the entity to insert
+        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
             body += "\n"
-        with self._edited_symbol_location(location) as symbol:
+
+        if dry_run:
+            assert location.relative_path is not None
+            original_content = self._get_code_file_content(location.relative_path)
+
+            # Find the symbol to get its start position
+            symbol = self.find_by_location(location)
+            if symbol is None:
+                raise ValueError("Symbol not found/has no defined location within a file")
+
             original_start_pos = symbol.body_start_position
             if original_start_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined start position.")
-            # At this point, original_start_pos is guaranteed to be a Position object, so copying is safe.
-            pos = copy(original_start_pos)
-            assert location.relative_path is not None
-            self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
-    def insert_at_line(self, relative_path: str, line: int, content: str) -> None:
+            # Apply the edit - insert at start position
+            modified_content = self._apply_text_edit(
+                original_content,
+                original_start_pos["line"],
+                original_start_pos["character"],
+                original_start_pos["line"],
+                original_start_pos["character"],
+                body,
+            )
+
+            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
+        else:
+            with self._edited_symbol_location(location) as symbol:
+                original_start_pos = symbol.body_start_position
+                if original_start_pos is None:
+                    raise ValueError(f"Symbol at {location} does not have a defined start position.")
+                pos = copy(original_start_pos)
+                assert location.relative_path is not None
+                self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
+            return None
+
+    @overload
+    def insert_at_line(self, relative_path: str, line: int, content: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def insert_at_line(self, relative_path: str, line: int, content: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def insert_at_line(self, relative_path: str, line: int, content: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Inserts content at the given line in the given file.
 
         :param line: the 0-based index of the line to insert content at
         :param content: the content to insert
+        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
-        with self._edited_file(relative_path):
-            self.lang_server.insert_text_at_position(relative_path, line, 0, content)
+        if dry_run:
+            original_content = self._get_code_file_content(relative_path)
 
-    def delete_lines(self, relative_path: str, start_line: int, end_line: int) -> None:
+            # Apply the edit - insert at beginning of line
+            modified_content = self._apply_text_edit(original_content, line, 0, line, 0, content)
+
+            return CodeDiff(relative_path=relative_path, original_content=original_content, modified_content=modified_content)
+        else:
+            with self._edited_file(relative_path):
+                self.lang_server.insert_text_at_position(relative_path, line, 0, content)
+            return None
+
+    @overload
+    def delete_lines(self, relative_path: str, start_line: int, end_line: int, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def delete_lines(self, relative_path: str, start_line: int, end_line: int, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def delete_lines(self, relative_path: str, start_line: int, end_line: int, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Deletes lines in the given file.
 
         :param start_line: the 0-based index of the first line to delete (inclusive)
         :param end_line: the 0-based index of the last line to delete (inclusive)
+        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
-        with self._edited_file(relative_path):
-            start_pos = Position(line=start_line, character=0)
-            end_pos = Position(line=end_line + 1, character=0)
-            self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
+        if dry_run:
+            original_content = self._get_code_file_content(relative_path)
 
-    def delete_symbol_at_location(self, location: SymbolLocation) -> None:
+            # Apply the edit - delete from start of start_line to start of end_line+1
+            modified_content = self._apply_text_edit(original_content, start_line, 0, end_line + 1, 0, "")
+
+            return CodeDiff(relative_path=relative_path, original_content=original_content, modified_content=modified_content)
+        else:
+            with self._edited_file(relative_path):
+                start_pos = Position(line=start_line, character=0)
+                end_pos = Position(line=end_line + 1, character=0)
+                self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
+            return None
+
+    @overload
+    def delete_symbol_at_location(self, location: SymbolLocation, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def delete_symbol_at_location(self, location: SymbolLocation, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def delete_symbol_at_location(self, location: SymbolLocation, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Deletes the symbol at the given location.
-        """
-        with self._edited_symbol_location(location) as symbol:
-            assert location.relative_path is not None
-            assert symbol.body_start_position is not None
-            assert symbol.body_end_position is not None
-            self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
 
-    def delete_symbol(self, name_path: str, relative_file_path: str) -> None:
+        :param dry_run: if True, return a CodeDiff instead of modifying the file
+        """
+        if dry_run:
+            assert location.relative_path is not None
+            original_content = self._get_code_file_content(location.relative_path)
+
+            # Find the symbol to get its body positions
+            symbol = self.find_by_location(location)
+            if symbol is None:
+                raise ValueError("Symbol not found/has no defined location within a file")
+
+            start_pos = symbol.body_start_position
+            end_pos = symbol.body_end_position
+            if start_pos is None or end_pos is None:
+                raise ValueError(f"Symbol at {location} does not have a defined body range.")
+
+            # Apply the edit - delete the entire symbol
+            modified_content = self._apply_text_edit(
+                original_content, start_pos["line"], start_pos["character"], end_pos["line"], end_pos["character"], ""
+            )
+
+            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
+        else:
+            with self._edited_symbol_location(location) as symbol:
+                assert location.relative_path is not None
+                assert symbol.body_start_position is not None
+                assert symbol.body_end_position is not None
+                self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
+            return None
+
+    @overload
+    def delete_symbol(self, name_path: str, relative_file_path: str, *, dry_run: Literal[False] = False) -> None: ...
+    @overload
+    def delete_symbol(self, name_path: str, relative_file_path: str, *, dry_run: Literal[True]) -> CodeDiff: ...
+    def delete_symbol(self, name_path: str, relative_file_path: str, *, dry_run: bool = False) -> CodeDiff | None:
         """
         Deletes the symbol with the given name in the given file.
+
+        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
@@ -618,4 +950,4 @@ class SymbolManager:
                 "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        self.delete_symbol_at_location(symbol.location)
+        return self.delete_symbol_at_location(symbol.location, dry_run=dry_run)  # type: ignore[call-overload]
