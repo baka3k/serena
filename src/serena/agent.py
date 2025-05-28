@@ -1202,7 +1202,7 @@ class FindReferencingSymbolsTool(Tool):
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbols = self.symbol_manager.find_referencing_symbols(
+        symbols = self.symbol_manager.find_referencing_symbols_by_location(
             SymbolLocation(relative_path, line, column),
             include_body=include_body,
             include_kinds=parsed_include_kinds,
@@ -1279,7 +1279,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         :param body: the new symbol body. Important: Provide the correct level of indentation
             (as the original body). Note that the first line must not be indented (i.e. no leading spaces).
         """
-        self.symbol_manager.replace_body(
+        self.symbol_manager.replace_body_at_location(
             SymbolLocation(relative_path, line, column),
             body=body,
         )
@@ -1308,7 +1308,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         :param body: the body/content to be inserted
         """
         location = SymbolLocation(relative_path, line, column)
-        self.symbol_manager.insert_after(
+        self.symbol_manager.insert_after_symbol_at_location(
             location,
             body=body,
         )
@@ -1337,7 +1337,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         :param column: the column
         :param body: the body/content to be inserted
         """
-        self.symbol_manager.insert_before(
+        self.symbol_manager.insert_before_symbol_at_location(
             SymbolLocation(relative_path, line, column),
             body=body,
         )

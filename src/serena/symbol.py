@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from collections.abc import Iterator, Sequence
@@ -337,7 +338,7 @@ class SymbolManager:
 
     def find_by_name(
         self,
-        name: str,
+        name_path: str,
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
@@ -353,7 +354,9 @@ class SymbolManager:
         symbol_roots = self.lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
         for root in symbol_roots:
             symbols.extend(
-                Symbol(root).find(name, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching)
+                Symbol(root).find(
+                    name_path, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
+                )
             )
         return symbols
 
@@ -373,6 +376,35 @@ class SymbolManager:
         return None
 
     def find_referencing_symbols(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        include_body: bool = False,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+    ) -> tuple[Symbol, list[Symbol]] | None:
+        """
+        Find all symbols that reference the symbol with the given name.
+        If multiple symbols fit the name (e.g. for variables that are overwritten), will use the first one.
+        """
+        symbol_candidates = self.find_by_name(name_path, substring_matching=False, within_relative_path=relative_file_path)
+        if len(symbol_candidates) == 0:
+            log.warning(f"No symbol with name {name_path} found in file {relative_file_path}")
+            return None
+        if len(symbol_candidates) > 1:
+            log.error(
+                f"Found {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}."
+                f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the first one. "
+                f"Found symbols for {name_path=} in {relative_file_path=}: \n"
+                f""
+            )
+        symbol = symbol_candidates[0]
+        referencing_symbols = self.find_referencing_symbols_by_location(
+            symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+        )
+        return symbol, referencing_symbols
+
+    def find_referencing_symbols_by_location(
         self,
         symbol_location: SymbolLocation,
         include_body: bool = False,
@@ -434,7 +466,24 @@ class SymbolManager:
         with self._edited_file(location.relative_path):
             yield symbol
 
-    def replace_body(self, location: SymbolLocation, body: str) -> None:
+    def replace_body(self, name_path: str, relative_file_path: str, body: str) -> None:
+        """
+        Replace the body of the symbol with the given name in the given file.
+        """
+        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
+        if len(symbol_candidates) == 0:
+            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
+        if len(symbol_candidates) > 1:
+            raise ValueError(
+                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
+                "Will not replace the body of any of them, but you can use `replace_body_at_location`, the replace lines tool or other editing "
+                "tools to perform your edits. Their locations are: \n "
+                + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
+            )
+        symbol = symbol_candidates[0]
+        self.replace_body_at_location(symbol.location, body)
+
+    def replace_body_at_location(self, location: SymbolLocation, body: str) -> None:
         """
         Replace the body of the symbol at the given location with the given body
 
@@ -454,7 +503,23 @@ class SymbolManager:
             self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
             self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
 
-    def insert_after(self, location: SymbolLocation, body: str) -> None:
+    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str) -> None:
+        """
+        Inserts content after the symbol with the given name in the given file.
+        """
+        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
+        if len(symbol_candidates) == 0:
+            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
+        if len(symbol_candidates) > 1:
+            raise ValueError(
+                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
+                f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the last one. "
+                f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
+            )
+        symbol = symbol_candidates[-1]
+        self.insert_after_symbol_at_location(symbol.location, body)
+
+    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str) -> None:
         """
         Appends content after the given symbol
 
@@ -472,7 +537,23 @@ class SymbolManager:
             assert location.relative_path is not None
             self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
 
-    def insert_before(self, location: SymbolLocation, body: str) -> None:
+    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str) -> None:
+        """
+        Inserts content before the symbol with the given name in the given file.
+        """
+        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
+        if len(symbol_candidates) == 0:
+            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
+        if len(symbol_candidates) > 1:
+            raise ValueError(
+                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
+                f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the first one. "
+                f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
+            )
+        symbol = symbol_candidates[0]
+        self.insert_before_symbol_at_location(symbol.location, body)
+
+    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str) -> None:
         """
         Inserts content before the given symbol
 
@@ -512,3 +593,29 @@ class SymbolManager:
             start_pos = Position(line=start_line, character=0)
             end_pos = Position(line=end_line + 1, character=0)
             self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
+
+    def delete_symbol_at_location(self, location: SymbolLocation) -> None:
+        """
+        Deletes the symbol at the given location.
+        """
+        with self._edited_symbol_location(location) as symbol:
+            assert location.relative_path is not None
+            assert symbol.body_start_position is not None
+            assert symbol.body_end_position is not None
+            self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
+
+    def delete_symbol(self, name_path: str, relative_file_path: str) -> None:
+        """
+        Deletes the symbol with the given name in the given file.
+        """
+        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
+        if len(symbol_candidates) == 0:
+            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
+        if len(symbol_candidates) > 1:
+            raise ValueError(
+                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
+                "Will not delete any of them, but you can use `delete_symbol_at_location` or a corresponding tool to perform your edits. "
+                "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
+            )
+        symbol = symbol_candidates[0]
+        self.delete_symbol_at_location(symbol.location)
