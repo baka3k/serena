@@ -1,17 +1,28 @@
 import json
 import os
 import time
+from dataclasses import dataclass
 
 import pytest
 
 from multilspy.multilspy_config import Language
-from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, SerenaAgent, SerenaConfig
+from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, SerenaAgent, SerenaConfigBase
 from test.conftest import LanguageParamRequest, get_repo_path
+
+
+@dataclass
+class SerenaConfigForTests(SerenaConfigBase):
+    """
+    In-memory implementation of Serena configuration with the GUI disabled.
+    """
+
+    gui_log_window_enabled: bool = False
+    web_dashboard: bool = False
 
 
 @pytest.fixture
 def serena_config():
-    return SerenaConfig()
+    return SerenaConfigForTests()
 
 
 @pytest.fixture

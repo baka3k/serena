@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
 
 import yaml
+from overrides import override
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
 from sensai.util.logging import FallbackHandler
@@ -108,6 +109,12 @@ class ProjectConfig(ToStringMixin):
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_name = project_name or project_root.name
         language_composition = determine_programming_language_composition(str(project_root))
+        if len(language_composition) == 0:
+            raise ValueError(
+                f"Failed to autogenerate project.yaml: no programming language detected in project {project_root}. "
+                f"You can either add some files that correspond to one of the supported programming languages, "
+                f"or create the file {os.path.join(project_root, cls.rel_path_to_project_yml())} manually and specify the language there."
+            )
         # find the language with the highest percentage
         dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
         result = cls(
@@ -197,19 +204,16 @@ class Project:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
 
-@dataclass
-class SerenaConfig:
+@dataclass(kw_only=True)
+class SerenaConfigBase(ABC):
     """
-    Handles user-defined Serena configuration based on the configuration file
+    Abstract base class for Serena configuration handling
     """
 
     projects: list[Project] = field(default_factory=list)
     gui_log_window_enabled: bool = False
     gui_log_window_level: int = logging.INFO
     web_dashboard: bool = True
-    loaded_original_yaml: dict | CommentedMap = field(default_factory=dict)
-
-    CONFIG_FILE = "serena_config.yml"
 
     @cached_property
     def project_paths(self) -> list[str]:
@@ -219,87 +223,7 @@ class SerenaConfig:
     def project_names(self) -> list[str]:
         return sorted(project.project_config.project_name for project in self.projects)
 
-    @classmethod
-    def get_config_file_path(cls) -> str:
-        return os.path.join(serena_root_path(), cls.CONFIG_FILE)
-
-    @classmethod
-    def from_config_file(cls, preserve_comments: bool = False) -> "SerenaConfig":
-        """
-        Static constructor to create SerenaConfig from the configuration file
-        """
-        config_file = cls.get_config_file_path()
-        if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
-
-        log.info(f"Loading Serena configuration from {config_file}")
-        try:
-            loaded_original_yaml = load_yaml(config_file, preserve_comments)
-        except Exception as e:
-            raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
-
-        # Create instance
-        instance = cls()
-
-        # read projects
-        if "projects" not in loaded_original_yaml:
-            raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
-
-        # load list of known projects
-        instance.projects = []
-        num_project_migrations = 0
-        for path in loaded_original_yaml["projects"]:
-            path = Path(path).resolve()
-            if not path.exists():
-                log.warning(f"Project path {path} does not exist, skipping.")
-                continue
-            if path.is_file():
-                path = cls._migrate_out_of_project_config_file(path)
-                if path is None:
-                    continue
-                num_project_migrations += 1
-            project = Project.load(path)
-            instance.projects.append(project)
-
-        instance.gui_log_window_enabled = loaded_original_yaml.get("gui_log_window", False)
-        instance.gui_log_window_level = loaded_original_yaml.get("gui_log_level", logging.INFO)
-        instance.web_dashboard = loaded_original_yaml.get("web_dashboard", True)
-        instance.loaded_original_yaml = loaded_original_yaml
-
-        # re-save the configuration file if any migrations were performed
-        if num_project_migrations > 0:
-            log.info(
-                f"Migrated {num_project_migrations} project configurations from legacy format to in-project configuration; re-saving configuration"
-            )
-            instance.save()
-
-        return instance
-
-    @classmethod
-    def _migrate_out_of_project_config_file(self, path: Path) -> Path | None:
-        """
-        Migrates a legacy project configuration file (which is a YAML file containing the project root) to the
-        in-project configuration file (project.yml) inside the project root directory.
-
-        :param path: the path to the legacy project configuration file
-        :return: the project root path if the migration was successful, None otherwise.
-        """
-        log.info(f"Found legacy project configuration file {path}, migrating to in-project configuration.")
-        try:
-            with open(path, encoding="utf-8") as f:
-                project_config_data = yaml.safe_load(f)
-            if "project_name" not in project_config_data:
-                project_name = path.stem
-                with open(path, "a", encoding="utf-8") as f:
-                    f.write(f"\nproject_name: {project_name}")
-            project_root = project_config_data["project_root"]
-            shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))
-            return Path(project_root).resolve()
-        except Exception as e:
-            log.error(f"Error migrating configuration file: {e}")
-            return None
-
-    def find_project(self, project_root_or_name: str) -> Project | None:
+    def get_project(self, project_root_or_name: str) -> Project | None:
         for project in self.projects:
             if project.project_config.project_name == project_root_or_name:
                 return project
@@ -310,22 +234,14 @@ class SerenaConfig:
                     return project
         return None
 
-    def save(self, preserve_comments: bool = True) -> None:
-        loaded_original_yaml = deepcopy(self.loaded_original_yaml)
-        loaded_original_yaml["projects"] = [project.project_root for project in self.projects]
-        save_yaml(self.get_config_file_path(), loaded_original_yaml, preserve_comments)
-
-    def add_project_from_path(
-        self, project_root: Path | str, project_name: str | None = None, update_config_file: bool = True
-    ) -> tuple[Project, bool]:
+    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple[Project, bool]:
         """
         Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
         name or path is already registered.
 
-        :param path: the path to the project to add
+        :param project_root: the path to the project to add
         :param project_name: the name of the project to add; if None, the name of the project will be the name of the directory
             containing the project
-        :param update_config_file: whether to update the Serena configuration file on disk
         :return: the project that was added and a boolean indicating whether a new project configuration was generated and
             saved to disk. It may be that no new project configuration was generated if the project configuration already
             exists on disk but the project itself was not added yet to the Serena configuration.
@@ -356,16 +272,18 @@ class SerenaConfig:
             new_project_config_generated = True
 
         new_project = Project(project_root=str(project_root), project_config=project_config)
-        self.projects.append(new_project)
+        self._add_new_project(new_project)
 
-        # Update the config file on disk and preserve comments
-        if update_config_file:
-            config_with_comments = SerenaConfig.from_config_file(preserve_comments=True)
-            config_with_comments.projects.append(new_project)
-            config_with_comments.save(preserve_comments=True)
         return new_project, new_project_config_generated
 
-    def remove_project(self, project_name: str, update_config_file: bool = True) -> None:
+    def _add_new_project(self, project: Project) -> None:
+        """
+        Adds a new project to the Serena configuration. No checks are performed here,
+        this method is intended to be overridden by subclasses.
+        """
+        self.projects.append(project)
+
+    def remove_project(self, project_name: str) -> None:
         # find the index of the project with the desired name and remove it
         for i, project in enumerate(self.projects):
             if project.project_name == project_name:
@@ -374,14 +292,114 @@ class SerenaConfig:
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
 
-        # Update the config file on disk and preserve comments
-        if update_config_file:
-            config_with_comments = SerenaConfig.from_config_file(preserve_comments=True)
-            for i, project in enumerate(config_with_comments.projects):
-                if project.project_name == project_name:
-                    del config_with_comments.projects[i]
-                    break
-            config_with_comments.save(preserve_comments=True)
+
+@dataclass(kw_only=True)
+class SerenaConfig(SerenaConfigBase):
+    """
+    Handles user-defined Serena configuration based on the (fixed) Serena configuration file.
+    Updates to the instance will be automatically saved to the configuration file.
+    Usually, there should be only one instance of this class in the application.
+    """
+
+    loaded_commented_yaml: CommentedMap
+
+    CONFIG_FILE = "serena_config.yml"
+
+    @classmethod
+    def get_config_file_path(cls) -> str:
+        return os.path.join(serena_root_path(), cls.CONFIG_FILE)
+
+    @classmethod
+    def from_config_file(cls) -> "SerenaConfig":
+        """
+        Static constructor to create SerenaConfig from the configuration file
+        """
+        config_file = cls.get_config_file_path()
+        if not os.path.exists(config_file):
+            raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
+
+        log.info(f"Loading Serena configuration from {config_file}")
+        try:
+            loaded_commented_yaml = load_yaml(config_file, preserve_comments=True)
+        except Exception as e:
+            raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
+
+        # Create instance
+        instance = cls(loaded_commented_yaml=loaded_commented_yaml)
+
+        # read projects
+        if "projects" not in loaded_commented_yaml:
+            raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
+
+        # load list of known projects
+        instance.projects = []
+        num_project_migrations = 0
+        for path in loaded_commented_yaml["projects"]:
+            path = Path(path).resolve()
+            if not path.exists():
+                log.warning(f"Project path {path} does not exist, skipping.")
+                continue
+            if path.is_file():
+                path = cls._migrate_out_of_project_config_file(path)
+                if path is None:
+                    continue
+                num_project_migrations += 1
+            project = Project.load(path)
+            instance.projects.append(project)
+
+        instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
+        instance.gui_log_window_level = loaded_commented_yaml.get("gui_log_level", logging.INFO)
+        instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
+
+        # re-save the configuration file if any migrations were performed
+        if num_project_migrations > 0:
+            log.info(
+                f"Migrated {num_project_migrations} project configurations from legacy format to in-project configuration; re-saving configuration"
+            )
+            instance.save()
+
+        return instance
+
+    @classmethod
+    def _migrate_out_of_project_config_file(cls, path: Path) -> Path | None:
+        """
+        Migrates a legacy project configuration file (which is a YAML file containing the project root) to the
+        in-project configuration file (project.yml) inside the project root directory.
+
+        :param path: the path to the legacy project configuration file
+        :return: the project root path if the migration was successful, None otherwise.
+        """
+        log.info(f"Found legacy project configuration file {path}, migrating to in-project configuration.")
+        try:
+            with open(path, encoding="utf-8") as f:
+                project_config_data = yaml.safe_load(f)
+            if "project_name" not in project_config_data:
+                project_name = path.stem
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(f"\nproject_name: {project_name}")
+            project_root = project_config_data["project_root"]
+            shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))
+            return Path(project_root).resolve()
+        except Exception as e:
+            log.error(f"Error migrating configuration file: {e}")
+            return None
+
+    def save(self) -> None:
+        loaded_original_yaml = deepcopy(self.loaded_commented_yaml)
+        # projects are unique absolute paths
+        # we also canonicalize them before saving
+        loaded_original_yaml["projects"] = sorted({str(Path(project.project_root).resolve()) for project in self.projects})
+        save_yaml(self.get_config_file_path(), loaded_original_yaml, preserve_comments=True)
+
+    @override
+    def _add_new_project(self, project: Project) -> None:
+        super()._add_new_project(project)
+        self.save()
+
+    @override
+    def remove_project(self, project_name: str) -> None:
+        super().remove_project(project_name)
+        self.save()
 
 
 class LinesRead:
@@ -454,7 +472,7 @@ class SerenaAgent:
         self,
         project: str | None = None,
         project_activation_callback: Callable[[], None] | None = None,
-        serena_config: SerenaConfig | None = None,
+        serena_config: SerenaConfigBase | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
     ):
@@ -626,7 +644,7 @@ class SerenaAgent:
         """
         new_project_generated = False
         new_project_config_generated = False
-        project_instance: Project | None = self.serena_config.find_project(project_root_or_name)
+        project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
         if project_instance is not None:
             log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
         else:
@@ -635,9 +653,7 @@ class SerenaAgent:
                     f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
                     f"Existing project names: {self.serena_config.project_names}"
                 )
-            project_instance, new_project_config_generated = self.serena_config.add_project_from_path(
-                project_root_or_name, update_config_file=True
-            )
+            project_instance, new_project_config_generated = self.serena_config.add_project_from_path(project_root_or_name)
             new_project_generated = True
             log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}.")
             if new_project_config_generated:
@@ -1749,7 +1765,7 @@ class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
 
         :param project_name: Name of the project to remove
         """
-        self.agent.serena_config.remove_project(project_name, update_config_file=True)
+        self.agent.serena_config.remove_project(project_name)
         return f"Successfully removed project '{project_name}' from configuration."
 
 

@@ -3,7 +3,9 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
+from joblib import Parallel, delayed
 from pathspec import PathSpec
 from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
@@ -103,7 +105,8 @@ def search_text(
         content: The text content to search. May be None if source_file_path is provided.
         source_file_path: Optional path to the source file. If content is None,
             this has to be passed and the file will be read.
-        allow_multiline_match: Whether to search across multiple lines
+        allow_multiline_match: Whether to search across multiple lines. Currently, the default
+            option (False) is very inefficient, so it is recommended to set this to True.
         context_lines_before: Number of context lines to include before matches
         context_lines_after: Number of context lines to include after matches
         is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
@@ -188,6 +191,8 @@ def search_text(
 
             matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
     else:
+        # TODO: extremely inefficient! Since we currently don't use this option in SerenaAgent or LanguageServer,
+        #   it is not urgent to fix, but should be either improved or the option should be removed.
         # Search line by line
         for i, line in enumerate(lines):
             line_num = i + 1
@@ -242,10 +247,11 @@ def search_files(
     :param paths_exclude_glob: Optional glob pattern to exclude files from the list
     :return: List of MatchedConsecutiveLines objects
     """
-    matches = []
+    # Pre-filter paths (done sequentially to avoid overhead)
     include_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_include_glob]) if paths_include_glob else None
     exclude_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_exclude_glob]) if paths_exclude_glob else None
-    skipped_file_error_tuples: list[tuple[str, str]] = []
+
+    filtered_paths = []
     for path in file_paths:
         if include_spec and not include_spec.match_file(path):
             log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
@@ -253,26 +259,47 @@ def search_files(
         if exclude_spec and exclude_spec.match_file(path):
             log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
             continue
+        filtered_paths.append(path)
+
+    log.info(f"Processing {len(filtered_paths)} files.")
+
+    def process_single_file(path: str) -> dict[str, Any]:
+        """Process a single file - this function will be parallelized."""
         try:
             file_content = file_reader(path)
+            search_results = search_text(
+                pattern,
+                content=file_content,
+                source_file_path=path,
+                allow_multiline_match=True,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
+            )
+            if len(search_results) > 0:
+                log.debug(f"Found {len(search_results)} matches in {path}")
+            return {"path": path, "results": search_results, "error": None}
         except Exception as e:
-            skipped_file_error_tuples.append((path, str(e)))
-            continue
+            log.debug(f"Error processing {path}: {e}")
+            return {"path": path, "results": [], "error": str(e)}
 
-        search_results = search_text(
-            pattern,
-            file_content,
-            source_file_path=path,
-            allow_multiline_match=True,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-        )
-        if len(search_results) > 0:
-            log.debug(f"Found {len(search_results)} matches in {path}")
-            matches.extend(search_results)
+    # Execute in parallel using joblib
+    results = Parallel(
+        n_jobs=-1,
+        backend="threading",
+    )(delayed(process_single_file)(path) for path in filtered_paths)
+
+    # Collect results and errors
+    matches = []
+    skipped_file_error_tuples = []
+
+    for result in results:
+        if result["error"]:
+            skipped_file_error_tuples.append((result["path"], result["error"]))
+        else:
+            matches.extend(result["results"])
+
     if skipped_file_error_tuples:
-        log.debug(
-            f"Failed to read {len(skipped_file_error_tuples)} files. Here the full list of files and errors:\n{skipped_file_error_tuples}"
-        )
+        log.debug(f"Failed to read {len(skipped_file_error_tuples)} files: {skipped_file_error_tuples}")
 
+    log.info(f"Found {len(matches)} total matches across {len(filtered_paths)} files")
     return matches
