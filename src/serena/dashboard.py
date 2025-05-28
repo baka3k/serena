@@ -16,22 +16,22 @@ log = logging.getLogger(__name__)
 
 
 class MemoryLogHandler(logging.Handler):
-    def __init__(self, level=logging.NOTSET):
+    def __init__(self, level: int = logging.NOTSET) -> None:
         super().__init__(level=level)
         self.setFormatter(logging.Formatter(logging.LOG_DEFAULT_FORMAT))
         self._log_buffer = LogBuffer()
-        self._log_queue = queue.Queue()
+        self._log_queue: queue.Queue[str] = queue.Queue()
         self._stop_event = threading.Event()
 
         # start background thread to process logs
         self.worker_thread = threading.Thread(target=self._process_queue, daemon=True)
         self.worker_thread.start()
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         msg = self.format(record)
         self._log_queue.put_nowait(msg)
 
-    def _process_queue(self):
+    def _process_queue(self) -> None:
         while not self._stop_event.is_set():
             try:
                 msg = self._log_queue.get(timeout=1)
@@ -45,10 +45,10 @@ class MemoryLogHandler(logging.Handler):
 
 
 class LogBuffer:
-    def __init__(self):
-        self.logs = []
+    def __init__(self) -> None:
+        self.logs: list[str] = []
 
-    def append(self, msg: str):
+    def append(self, msg: str) -> None:
         self.logs.append(msg)
 
 
@@ -68,13 +68,13 @@ class ResponseToolNames(BaseModel):
 class SerenaDashboardAPI:
     log = logging.getLogger(__qualname__)
 
-    def __init__(self, memory_log_handler: MemoryLogHandler, tool_names: list[str]):
+    def __init__(self, memory_log_handler: MemoryLogHandler, tool_names: list[str]) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._app = FastAPI(title="Serena Dashboard")
         self._setup_routes()
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         static_dir = os.path.join(serena_root_path(), "dashboard")
         self._app.mount("/dashboard", StaticFiles(directory=static_dir), name="dashboard")
 
@@ -110,7 +110,10 @@ class SerenaDashboardAPI:
 
         raise RuntimeError(f"No free ports found starting from {start_port}")
 
-    def run(self, host="127.0.0.1", port=0x5EDA):
+    def run(self, host: str = "127.0.0.1", port: int = 0x5EDA) -> int:
+        """
+        Runs the dashboard on the given host and port and returns the port number.
+        """
         uvicorn.run(self._app, host=host, port=port, workers=1, log_config=None, log_level="critical")
         return port
 
