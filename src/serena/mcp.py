@@ -163,7 +163,7 @@ def create_mcp_server_and_agent(
 class ProjectType(click.ParamType):
     name = "[PROJECT_NAME|PROJECT_PATH]"
 
-    def convert(self, value, param, ctx):
+    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str:
         path = Path(value).resolve()
         if path.exists() and path.is_dir():
             return str(path)  # Valid path
