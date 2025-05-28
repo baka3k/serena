@@ -155,7 +155,7 @@ class Symbol(ToStringMixin):
         else:
             # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
             return None
-        
+
     @property
     def end_line(self) -> int | None:
         """The end line of the symbol body, also contained in the `body_end_position`."""
