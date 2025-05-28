@@ -136,11 +136,11 @@ class LanguageServer:
             return PyrightServer(config, logger, repository_root_path)
             # It used to be jedi, but pyright is a bit faster, and also more actively maintained
             # Keeping the previous code for reference
-            from multilspy.language_servers.jedi_language_server.jedi_server import (
-                JediServer,
-            )
+            # from multilspy.language_servers.jedi_language_server.jedi_server import (
+            #     JediServer,
+            # )
 
-            return JediServer(config, logger, repository_root_path)
+            # return JediServer(config, logger, repository_root_path)
         elif config.code_language == Language.JAVA:
             from multilspy.language_servers.eclipse_jdtls.eclipse_jdtls import (
                 EclipseJDTLS,
@@ -1189,30 +1189,18 @@ class LanguageServer:
                 logging.ERROR,
             )
             raise MultilspyException("Language Server not started")
-        # TODO: this worked in jedi, but pyright and basedpyright return nothing...
-        # I don't know why
-        # params = LSPTypes.WorkspaceSymbolParams(query="")  # Empty query returns all symbols
-        # symbols = await self.server.send.workspace_symbol(params) or []
-
-        # Thus, instead of calling all symbols, we hack this and use the symbol tree instead, which
-        # seems to work in all these language servers
-        # walk through all children recursively, find all symbols of type Module and collect their relative paths
-        roots = await self.request_full_symbol_tree()
-        paths = []
-        def collect_module_files(symbol):
-            if symbol["kind"] == multilspy_types.SymbolKind.File:
-                assert "location" in symbol
-                paths.append(symbol["location"]["relativePath"])
-
-            elif symbol["kind"] == multilspy_types.SymbolKind.Package:
-                for child in symbol["children"]:
-                    collect_module_files(child)
-
-        for root in roots:
-            collect_module_files(root)
-
-        return paths
-
+        rel_file_paths = []
+        for root, dirs, files in os.walk(self.repository_root_path):
+            # Don't go into directories that are ignored by modifying dirs inplace
+            # Explanation for the  + "/" part:
+            # pathspec can't handle the matching of directories if they don't end with a slash!
+            # see https://github.com/cpburnz/python-pathspec/issues/89
+            dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+            for file in files:
+                rel_file_path = os.path.join(root, file)
+                if not self.is_ignored_path(rel_file_path):
+                    rel_file_paths.append(rel_file_path)
+        return rel_file_paths
 
     async def search_files_for_pattern(
         self,
