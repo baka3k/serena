@@ -3,6 +3,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from joblib import Parallel, delayed
 
 from pathspec import PathSpec
 from pathspec.patterns.gitwildmatch import GitWildMatchPattern
@@ -242,10 +243,11 @@ def search_files(
     :param paths_exclude_glob: Optional glob pattern to exclude files from the list
     :return: List of MatchedConsecutiveLines objects
     """
-    matches = []
+    # Pre-filter paths (done sequentially to avoid overhead)
     include_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_include_glob]) if paths_include_glob else None
     exclude_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_exclude_glob]) if paths_exclude_glob else None
-    skipped_file_error_tuples: list[tuple[str, str]] = []
+    
+    filtered_paths = []
     for path in file_paths:
         if include_spec and not include_spec.match_file(path):
             log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
@@ -253,26 +255,47 @@ def search_files(
         if exclude_spec and exclude_spec.match_file(path):
             log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
             continue
+        filtered_paths.append(path)
+    
+    log.info(f"Processing {len(filtered_paths)} files.")
+    
+    def process_single_file(path: str):
+        """Process a single file - this function will be parallelized."""
         try:
             file_content = file_reader(path)
+            search_results = search_text(
+                pattern,
+                content=file_content,
+                source_file_path=path,
+                allow_multiline_match=True,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
+            )
+            if len(search_results) > 0:
+                log.debug(f"Found {len(search_results)} matches in {path}")
+            return {'path': path, 'results': search_results, 'error': None}
         except Exception as e:
-            skipped_file_error_tuples.append((path, str(e)))
-            continue
-
-        search_results = search_text(
-            pattern,
-            file_content,
-            source_file_path=path,
-            allow_multiline_match=True,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-        )
-        if len(search_results) > 0:
-            log.debug(f"Found {len(search_results)} matches in {path}")
-            matches.extend(search_results)
+            log.debug(f"Error processing {path}: {e}")
+            return {'path': path, 'results': [], 'error': str(e)}
+    
+    # Execute in parallel using joblib
+    results = Parallel(
+        n_jobs=-1,
+        backend="threading",
+    )(delayed(process_single_file)(path) for path in filtered_paths)
+    
+    # Collect results and errors
+    matches = []
+    skipped_file_error_tuples = []
+    
+    for result in results:
+        if result['error']:
+            skipped_file_error_tuples.append((result['path'], result['error']))
+        else:
+            matches.extend(result['results'])
+    
     if skipped_file_error_tuples:
-        log.debug(
-            f"Failed to read {len(skipped_file_error_tuples)} files. Here the full list of files and errors:\n{skipped_file_error_tuples}"
-        )
-
+        log.debug(f"Failed to read {len(skipped_file_error_tuples)} files: {skipped_file_error_tuples}")
+    
+    log.info(f"Found {len(matches)} total matches across {len(filtered_paths)} files")
     return matches
