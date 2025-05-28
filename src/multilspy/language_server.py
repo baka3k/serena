@@ -1177,12 +1177,7 @@ class LanguageServer:
 
 
     async def request_parsed_files(self) -> list[str]:
-        """
-        Retrieves relative paths of all files analyzed by the Language Server.
-
-        This is slow, as it finds all files by finding all symbols.
-
-        This seems to be the only way, the LSP does not provide any endpoints for listing project files."""
+        """Retrieves relative paths of all files analyzed by the Language Server."""
         if not self.server_started:
             self.logger.log(
                 "request_parsed_files called before Language Server started",
@@ -1914,9 +1909,7 @@ class SyncLanguageServer:
         return self.language_server.retrieve_symbol_body(symbol)
 
     def request_parsed_files(self) -> list[str]:
-        """This is slow, as it finds all files by finding all symbols.
-
-        This seems to be the only way, the LSP does not provide any endpoints for listing project files."""
+        """Retrieves relative paths of all files analyzed by the Language Server."""
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_parsed_files(), self.loop
