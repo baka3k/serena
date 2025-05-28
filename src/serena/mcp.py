@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
+from pathlib import Path
 from typing import Any, Literal
 
 import click  # Add click import
@@ -105,7 +106,9 @@ def create_mcp_server_and_agent(
     """
     Create an MCP server.
 
-    :param project: The path to the project directory or the `project.yml` file therein, or None.
+    :param project: "Either an absolute path to the project directory or a name of an already registered project. "
+        "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name "
+        "afterwards.
     :param host: The host to bind to
     :param port: The port to bind to
     :param context: The context name or path to context file
@@ -157,33 +160,43 @@ def create_mcp_server_and_agent(
     return mcp, agent
 
 
+class ProjectType(click.ParamType):
+    name = "[PROJECT_NAME|PROJECT_PATH]"
+
+    def convert(self, value, param, ctx):
+        path = Path(value).resolve()
+        if path.exists() and path.is_dir():
+            return str(path)  # Valid path
+        return value  # Assume it's a project name
+
+
+PROJECT_TYPE = ProjectType()
+
+
 @click.command()
-# Add --project option as the primary, more intuitive interface
 @click.option(
     "--project",
-    "project_file_opt",  # Use same destination variable to avoid conflicts
-    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+    "project_file_opt",
+    type=PROJECT_TYPE,
     default=None,
-    help="Path to the .yml project file. "
-    "Does not need to be provided at startup since you can activate a project later by simply asking the agent to do so "
-    "(there is a dedicated tool for this purpose).",
+    help="Either an absolute path to the project directory or a name of an already registered project. "
+    "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name afterwards.",
 )
 # Keep --project-file for backwards compatibility
 @click.option(
     "--project-file",
     "project_file_opt",  # Use same destination variable to avoid conflicts
-    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+    type=PROJECT_TYPE,
     default=None,
-    help="[DEPRECATED] Use --project instead. Optional path to the .yml project file via option."
-    "Does not need to be provided at startup since you can activate a project later by simply asking the agent to do so "
-    "(there is a dedicated tool for this purpose).",
+    help="[DEPRECATED] Use --project instead.",
 )
 # Positional argument for backwards compatibility
 @click.argument(
     "project_file_arg",
-    type=click.Path(exists=True, dir_okay=True, resolve_path=True),
+    type=PROJECT_TYPE,
     required=False,
     default=None,
+    metavar="",  # don't display anything since it's deprecated
 )
 @click.option(
     "--context",
@@ -208,7 +221,7 @@ def create_mcp_server_and_agent(
     type=click.Choice(["stdio", "sse"]),
     default="stdio",
     show_default=True,
-    help="Transport protocol.",
+    help="Transport protocol. If you start the server yourself (as opposed to an MCP Client starting the server), sse is recommended.",
 )
 @click.option(
     "--host",
@@ -233,11 +246,11 @@ def start_mcp_server(
     host: str = "0.0.0.0",
     port: int = 8000,
 ) -> None:
-    """Starts the Serena MCP server.
-
-    Accepts a path to the project directory or the `project.yml` file therein via the --project option.
+    """Starts the Serena MCP server. By default, will not activate any project at startup.
+    If you want to start with an already active project, use --project to pass the project name or path.
 
     Use --context to specify the execution environment and --mode to specify behavior mode(s).
+    The modes may be adjusted after startup (via the corresponding tool), but the context cannot be changed.
     """
     # Prioritize the positional argument if provided
     # This is for backward compatibility with the old CLI, should be removed in the future!
