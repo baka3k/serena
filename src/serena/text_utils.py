@@ -3,6 +3,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 from joblib import Parallel, delayed
 from pathspec import PathSpec
@@ -262,7 +263,7 @@ def search_files(
 
     log.info(f"Processing {len(filtered_paths)} files.")
 
-    def process_single_file(path: str):
+    def process_single_file(path: str) -> dict[str, Any]:
         """Process a single file - this function will be parallelized."""
         try:
             file_content = file_reader(path)
