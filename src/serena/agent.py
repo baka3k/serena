@@ -284,6 +284,10 @@ class SerenaConfig:
         try:
             with open(path, encoding="utf-8") as f:
                 project_config_data = yaml.safe_load(f)
+            if "project_name" not in project_config_data:
+                project_name = path.stem
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(f"\nproject_name: {project_name}")
             project_root = project_config_data["project_root"]
             shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))
             return Path(project_root).resolve()
