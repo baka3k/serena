@@ -109,6 +109,12 @@ class ProjectConfig(ToStringMixin):
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_name = project_name or project_root.name
         language_composition = determine_programming_language_composition(str(project_root))
+        if len(language_composition) == 0:
+            raise ValueError(
+                f"Failed to autogenerate project.yaml: no programming language detected in project {project_root}. "
+                f"You can either add some files that correspond to one of the supported programming languages, "
+                f"or create the file {os.path.join(project_root, cls.rel_path_to_project_yml())} manually and specify the language there."
+            )
         # find the language with the highest percentage
         dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
         result = cls(
