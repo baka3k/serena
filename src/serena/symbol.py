@@ -38,9 +38,15 @@ class SymbolLocation:
     the column number in which the symbol identifier is defined (if the symbol is a function, class, etc.);
     may be None for some types of symbols (e.g. SymbolKind.File)
     """
-    end_line: int | None
+    end_line: int | None = None
     """
-    the line in which the symbol's body ends, may be None (e.g., if line is None)
+    the line in which the symbol's body ends. For methods that search based on SymbolLocation,
+    the end line is not needed, as it is unused by the language server in the search.
+    However, the end_line will typically be included in the results of search methods,
+    and thus be provided to the user in the response to such requests.
+    This is useful for the LLMs, especially the less intelligent ones, as they often fail
+    to perform symbolic operations and when falling back to line-editing tools, will just make up
+    an end line.
     """
 
     def __post_init__(self) -> None:
@@ -376,7 +382,8 @@ class SymbolManager:
         """
         Find all symbols that reference the symbol at the given location.
 
-        :param symbol_location: the location of the symbol for which to find references
+        :param symbol_location: the location of the symbol for which to find references.
+            Does not need to include an end_line, as it is unused in the search.
         :param include_body: whether to include the body of all symbols in the result.
             Note: you can filter out the bodies of the children if you set include_children_body=False
             in the to_dict method.
@@ -431,7 +438,7 @@ class SymbolManager:
         """
         Replace the body of the symbol at the given location with the given body
 
-        :param location: the location of the symbol to replace
+        :param location: the location of the symbol to replace.
         :param body: the new body
         """
         # make sure body always ends with at least one newline
