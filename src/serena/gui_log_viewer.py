@@ -202,6 +202,12 @@ class GuiLogViewer:
         """Run the GUI"""
         self.running = True
         try:
+            # Set app id (avoid app being lumped together with other Python-based apps in Windows taskbar)
+            if sys.platform == "win32":
+                import ctypes
+
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("oraios.serena")
+
             self.root = tk.Tk()
             self.root.title(self.title)
             self.root.geometry(f"{self.width}x{self.height}")
@@ -212,10 +218,12 @@ class GuiLogViewer:
             self.root.rowconfigure(0, weight=0)  # Logo row
             self.root.rowconfigure(1, weight=1)  # Text content row
 
+            dashboard_path = Path(__file__).parent.parent.parent / "dashboard"
+
             # Load and display the logo image
             try:
                 # construct path relative to path of this file
-                image_path = Path(__file__).parent.parent.parent / "resources" / "serena-logs.png"
+                image_path = dashboard_path / "serena-logs.png"
                 self.logo_image = tk.PhotoImage(file=image_path)
 
                 # Create a label to display the logo
@@ -272,6 +280,12 @@ class GuiLogViewer:
                 server_menu.add_command(label="Shutdown", command=self._shutdown_server)  # type: ignore
                 menubar.add_cascade(label="Server", menu=server_menu)
                 self.root.config(menu=menubar)
+
+            # Configure icons
+            icon_16 = tk.PhotoImage(file=dashboard_path / "serena-icon-16.png")
+            icon_32 = tk.PhotoImage(file=dashboard_path / "serena-icon-32.png")
+            icon_48 = tk.PhotoImage(file=dashboard_path / "serena-icon-48.png")
+            self.root.iconphoto(False, icon_48, icon_32, icon_16)
 
             # Start the Tkinter event loop
             self.root.mainloop()
