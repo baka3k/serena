@@ -1,19 +1,16 @@
 """
 This script demonstrates how to use Serena's tools locally, useful
-for testing or development. Here the config is pointing to the serena repo itself,
-it assumes that you already have a serena_config.yml file setup.
+for testing or development. Here the tools will be operation the serena repo itself.
 """
 
 import json
-from pathlib import Path
 from pprint import pprint
 
 from serena.agent import *
-
-project_root = Path(__file__).parent.parent
+from serena.constants import REPO_ROOT
 
 if __name__ == "__main__":
-    agent = SerenaAgent(project_config=str(project_root / ".serena" / "project.yml"))
+    agent = SerenaAgent(project=REPO_ROOT)
     overview_tool = agent.get_tool(GetSymbolsOverviewTool)
     find_symbol_tool = agent.get_tool(FindSymbolTool)
 

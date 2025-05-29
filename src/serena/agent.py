@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from copy import copy, deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from functools import cached_property
 from logging import Logger
 from pathlib import Path
@@ -33,7 +33,7 @@ from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import SERENA_MANAGED_DIR_NAME
+from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolLocation, SymbolManager
@@ -117,25 +117,12 @@ class ProjectConfig(ToStringMixin):
             )
         # find the language with the highest percentage
         dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
-        result = cls(
-            project_name=project_name,
-            language=Language(dominant_language),
-        )
+        config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
+        config_with_comments["project_name"] = project_name
+        config_with_comments["language"] = dominant_language
         if save_to_disk:
-            result.save(project_root)
-        return result
-
-    def save(self, project_root: str | Path) -> None:
-        """
-        Save the project configuration to the project root.
-        """
-        project_root = Path(project_root).resolve()
-        config_path = project_root / self.rel_path_to_project_yml()
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        serializable_self = asdict(self)
-        serializable_self["language"] = self.language.value
-        serializable_self["excluded_tools"] = list(self.excluded_tools)
-        save_yaml(str(config_path), serializable_self)
+            save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
+        return cls._from_yml_data(config_with_comments)
 
     @classmethod
     def rel_path_to_project_yml(cls) -> str:
