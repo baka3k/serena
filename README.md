@@ -151,23 +151,31 @@ Serena can be used in various ways, below you will find instructions for selecte
 - If you prefer using Serena through a CLI, you can use [goose](#goose). There again almost any model is possible.
 - If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
 
-### Setup and Configuration
+### Setup
 
 1. Install `uv` (instructions [here](https://docs.astral.sh/uv/getting-started/installation/))
-2. Clone the repository to `/path/to/serena`.
-3. Copy `serena_config.template.yml` to `serena_config.yml` and adjust settings.
+2. Clone the repository.
+3. Copy `serena_config.template.yml` to `serena_config.yml`
    ```shell
    cp serena_config.template.yml serena_config.yml
    ```
-4. Copy `project.template.yml` to `project.yml` and adjust the settings specific to your project
-   (add one such file for each project you want Serena to work on). We recommend that you copy
-   it to the `.serena` directory of your project, e.g.,
-   ```shell
-   mkdir -p /myproject/.serena
-   cp project.template.yml /myproject/.serena/project.yml
-   ```
-6. If you want Serena to dynamically switch between projects, add the list of all project files
-   created in the previous step to the `projects` list in `serena_config.yml`.
+  
+You can now add Serena to your MCP client as described below for various clients and
+[activate your first project]()
+
+### Configuration
+
+Serena's behavior (like available projects, active tools and prompts) is configured in four places:
+
+1. The `serena_config.yml` for general settings that apply to all clients and projects
+2. In the arguments passed to the `serena-mcp-server` in your client's config (see below), 
+   which will apply to all sessions started by the respective client. In particular, the [context](#contexts) parameter
+   should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
+   See for a detailed explanation. 
+3. In the `.serena/project.yml` file within your project. This will hold project-level configuration that is used whenever
+   that project is activated.
+4. Through the currently active set of [modes](#modes).
+
 
 > ⚠️ **Note:** Serena is under active development. We are continuously adding features, improving stability and the UX.
 > As a result, configuration may change in a breaking manner. If you have an invalid configuration,
@@ -178,32 +186,49 @@ Serena can be used in various ways, below you will find instructions for selecte
 After the initial setup, continue with one of the sections below, depending on how you
 want to use Serena.
 
+You can just ask the LLM to show you the config of your session, Serena has a tool for it.
+
+### Project Activation
+
+The recommended way is to just ask the LLM to activate a project by providing it an absolute path to, or,
+in case the project was activated in the past, by it's name. The default project name is the directory name.
+
+All projects that have been activated will be automatically added to your `serena_config.yml`, and for each 
+project, the file `.serena/project.yml` will be generated. You can adjust the latter, e.g., by changing the name
+(which you refer to during the activation) or other options. Make sure to not have two different projects with the
+same name.
+
+If you are mostly working with the same project, you can also configure to always activate a project at startup
+by passing `--project <path_or_name>` to the `serena-mcp-server` command in your client's MCP config.
+
 ### MCP Server (Claude Desktop)
 
-1. Create a configuration file for your project, say `myproject.yml` based on the template in [myproject.template.yml](myproject.template.yml).
-2. Configure the MCP server in your client.  
-   For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
-   which will let you open the JSON file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
+Configure the MCP server in your client.  
+For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
+which will let you open the JSON file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
 
-   ```json
-   {
-       "mcpServers": {
-           "serena": {
-               "command": "/abs/path/to/uv",
-               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server", "--project", "/abs/path/to/project"]
-           }
-       }
-   }
-   ```
-   
-   If you are using paths containing backslashes for paths on Windows
-   (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
+```json
+{
+    "mcpServers": {
+        "serena": {
+            "command": "/abs/path/to/uv",
+            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server"]
+        }
+    }
+}
+```
 
-   ℹ️ Passing the project path is optional if you have set `enable_project_activation` in your configuration, as this setting will allow you to simply instruct Claude to activate the project you want to work on.
+If you are using paths containing backslashes for paths on Windows
+(note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
-   ℹ️ If you want to configure Serena to operate in a particular way, specializing it for particular types of tasks, you can make use of [modes and contexts](#modes-and-contexts) and specify additional parameters accordingly.
+That's it! Save the config and then restart Claude Desktop. You are ready for activating your first project
 
-That's it! Save the config and then restart Claude Desktop.
+ℹ️ You can further customize the run command, see
+
+```shell
+uv run serena-mcp-server --help
+```
+
 
 #### Troubleshooting
 
@@ -211,28 +236,31 @@ Some client/OS/setup configurations were reported to cause issues when using Ser
 If you experience such problems, you can start Serena in `sse` mode by running, e.g.,
 
 ```shell
-uv run --directory /path/to/serena serena-mcp-server --transport sse --port 9121 --project /path/to/project
+uv run serena-mcp-server --transport sse --port 9121
 ```
-(the `--project` option is optional). Then configure your client to connect to `http://localhost:9121`.
+
+Then configure your client to connect to `http://localhost:9121`.
 
 Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
 
 ⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.  
 
+⚠️ Some clients, currently including Claude Desktop, may leave behind zombie processes. You will have to find and terminate them manually then.
+    With Serena, you can activate the [dashboard](#serenas-logs-the-dashboard-and-gui-tool) to prevent unnoted processes and also use the dashboard
+    for shutting down Serena.
+
 After restarting, you should see Serena's tools in your chat interface (notice the small hammer icon).
 
 ⚠️ Tool Names: Claude Desktop (and most MCP Clients) don't resolve the name of the server. So you shouldn't
 say something like "use Serena's tools". Instead, you can instruct the LLM to use symbolic tools or to
-use a particular tool by referring to its name. Moreover, if you use multiple MCP Servers, you might get
-**tool name collisions** which lead to undefined behavior. For example, Serena is currently incompatible with the
-[Filesystem MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) due to tool name
-collisions.
+use a particular tool by referring to its name. Moreover, in some clients, if you use multiple MCP Servers, you might get
+**tool name collisions** which lead to undefined behavior.
 
-ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
+ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as in the the server
 necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
 In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and 
-therefore needs to be configured with a launch command.
+therefore needs to be configured with a launch command. In SSE transport you control the lifetime of the server yourself.
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
@@ -243,7 +271,7 @@ several examples for that and have heard very positive feedback so far. Claude C
 add serena with
 
 ```shell
-claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --project-file /path/to/project
+claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --context ide-assistant
 ```
 
 
@@ -262,14 +290,6 @@ e.g., for one of the following reasons:
 1. You are already using a coding assistant (say Cline or Cursor) and just want to make it more powerful.
 2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian)
 3. You want tighter integration of Serena into your IDE and don't mind paying for that
-
-The same considerations as in using Serena for Claude Desktop (in particular, tool name collisions) 
-also apply here.
-
-When used in an IDE or extension that has inbuilt AI interactions for coding 
-(which is, really, all of them), Serena's full set of tools may lead to unwanted interactions with
-the clients internal tools that you as the user may have no control over. This holds especially for the editing tools, which you may want to disable for this purpose.
-As we are gaining more experience with Serena used within the various popular clients, we will collect and enhance best practices that enable a smooth experience.
 
 ### Goose
 
