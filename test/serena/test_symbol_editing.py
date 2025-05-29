@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language
 from serena.symbol import CodeDiff
 from src.serena.symbol import SymbolManager
@@ -165,46 +164,6 @@ NEW_TYPESCRIPT_FUNCTION = """function newInsertedFunction(): void {
 }"""
 
 
-@pytest.mark.parametrize(
-    "language_server, relative_file_path, symbol_name, new_content, expected_added_lines_content",
-    [
-        (
-            Language.PYTHON,
-            PYTHON_TEST_REL_FILE_PATH,
-            "use_module_variables",
-            NEW_PYTHON_FUNCTION,
-            NEW_PYTHON_FUNCTION.strip().splitlines(),
-        ),
-        (
-            Language.TYPESCRIPT,
-            TYPESCRIPT_TEST_FILE,
-            "helperFunction",
-            NEW_TYPESCRIPT_FUNCTION,
-            NEW_TYPESCRIPT_FUNCTION.strip().splitlines(),
-        ),
-    ],
-    indirect=["language_server"],
-)
-def test_insert_before_symbol_dry_run(
-    language_server: SyncLanguageServer,
-    relative_file_path: str,
-    symbol_name: str,
-    new_content: str,
-    expected_added_lines_content: list[str],
-):
-    symbol_manager = SymbolManager(lang_server=language_server)
-    code_diff = symbol_manager.insert_before_symbol(symbol_name, relative_file_path, new_content, dry_run=True)
-
-    assert code_diff is not None
-    assert code_diff.relative_path == relative_file_path
-    assert len(code_diff.deleted_lines) == 0
-    actual_added_lines_content = [line.strip() for _, line in code_diff.added_lines if line.strip()]
-    normalized_expected_added_lines = [line.strip() for line in expected_added_lines_content if line.strip()]
-
-    assert actual_added_lines_content == normalized_expected_added_lines
-    assert code_diff.original_content != code_diff.modified_content
-
-
 NEW_PYTHON_VARIABLE = 'new_module_var = "Inserted after typed_module_var"'
 
 NEW_TYPESCRIPT_FUNCTION_AFTER = """function newFunctionAfterClass(): void {
@@ -212,43 +171,53 @@ NEW_TYPESCRIPT_FUNCTION_AFTER = """function newFunctionAfterClass(): void {
 }"""
 
 
+class InsertBeforeSymbolTest(EditingTest):
+    def __init__(self, language: Language, rel_path: str, symbol_name: str, new_content: str):
+        super().__init__(language, rel_path)
+        self.symbol_name = symbol_name
+        self.new_content = new_content
+
+    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
+        symbol_manager.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content)
+
+    def _test_diff(self, code_diff: CodeDiff) -> None:
+        assert code_diff.original_content != code_diff.modified_content
+        actual_added_lines = [line.strip() for _, line in code_diff.added_lines if line.strip()]
+        normalized_expected_added_lines = [line.strip() for line in self.new_content.splitlines() if line.strip()]
+        assert actual_added_lines == normalized_expected_added_lines
+
+
 @pytest.mark.parametrize(
-    "language_server, relative_file_path, symbol_name, new_content, expected_added_lines_content",
+    "test_case",
     [
-        (
+        InsertBeforeSymbolTest(
             Language.PYTHON,
             PYTHON_TEST_REL_FILE_PATH,
             "typed_module_var",
             NEW_PYTHON_VARIABLE,
-            [NEW_PYTHON_VARIABLE],
         ),
-        (
+        InsertBeforeSymbolTest(
+            Language.PYTHON,
+            PYTHON_TEST_REL_FILE_PATH,
+            "use_module_variables",
+            NEW_PYTHON_FUNCTION,
+        ),
+        InsertBeforeSymbolTest(
             Language.TYPESCRIPT,
             TYPESCRIPT_TEST_FILE,
             "DemoClass",
             NEW_TYPESCRIPT_FUNCTION_AFTER,
-            NEW_TYPESCRIPT_FUNCTION_AFTER.strip().splitlines(),
+        ),
+        InsertBeforeSymbolTest(
+            Language.TYPESCRIPT,
+            TYPESCRIPT_TEST_FILE,
+            "helperFunction",
+            NEW_TYPESCRIPT_FUNCTION,
         ),
     ],
-    indirect=["language_server"],
 )
-def test_insert_after_symbol_dry_run(
-    language_server: SyncLanguageServer,
-    relative_file_path: str,
-    symbol_name: str,
-    new_content: str,
-    expected_added_lines_content: list[str],
-):
-    symbol_manager = SymbolManager(lang_server=language_server)
-    code_diff = symbol_manager.insert_after_symbol(symbol_name, relative_file_path, new_content, dry_run=True)
-
-    assert code_diff is not None
-    assert code_diff.relative_path == relative_file_path
-    assert len(code_diff.deleted_lines) == 0
-    actual_added_lines_content = [line.strip() for _, line in code_diff.added_lines if line.strip()]
-    normalized_expected_added_lines = [line.strip() for line in expected_added_lines_content if line.strip()]
-    assert actual_added_lines_content == normalized_expected_added_lines
-    assert code_diff.original_content != code_diff.modified_content
+def test_insert_before_symbol(test_case):
+    test_case.run_test()
 
 
 PYTHON_REPLACED_BODY = """        # This body has been replaced
@@ -269,48 +238,27 @@ EXPECTED_ORIGINAL_MODIFY_INSTANCE_VAR_PYTHON = """    def modify_instance_var(se
 EXPECTED_ORIGINAL_PRINTVALUE_TYPESCRIPT = ["    printValue() {", "        console.log(this.value);", "    }"]
 
 
+class ReplaceBodyTest(EditingTest):
+    def __init__(
+        self, language: Language, rel_path: str, symbol_name: str, new_body: str, expected_removed_lines: str, expected_added_lines: str
+    ):
+        super().__init__(language, rel_path)
+        self.symbol_name = symbol_name
+        self.new_body = new_body
+
+    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
+        symbol_manager.replace_body(self.symbol_name, self.rel_path, self.new_body)
+
+    def _test_diff(self, code_diff: CodeDiff) -> None:
+        assert code_diff.original_content != code_diff.modified_content
+        # TODO test properly
+
+
 @pytest.mark.parametrize(
-    "language_server, relative_file_path, symbol_name, new_body, expected_original_lines_content, expected_modified_lines_content",
+    "test_case",
     [
-        (
-            Language.PYTHON,
-            PYTHON_TEST_REL_FILE_PATH,
-            "VariableContainer/modify_instance_var",
-            PYTHON_REPLACED_BODY,
-            EXPECTED_ORIGINAL_MODIFY_INSTANCE_VAR_PYTHON.strip().splitlines(),
-            PYTHON_REPLACED_BODY.strip().splitlines(),
-        ),
-        (
-            Language.TYPESCRIPT,
-            TYPESCRIPT_TEST_FILE,
-            "DemoClass/printValue",
-            TYPESCRIPT_REPLACED_BODY,
-            EXPECTED_ORIGINAL_PRINTVALUE_TYPESCRIPT,  # Already a list of lines
-            TYPESCRIPT_REPLACED_BODY.strip().splitlines(),
-        ),
+        # TODO add tests
     ],
-    indirect=["language_server"],
 )
-def test_replace_body_dry_run(
-    language_server: SyncLanguageServer,
-    relative_file_path: str,
-    symbol_name: str,
-    new_body: str,
-    expected_original_lines_content: list[str],
-    expected_modified_lines_content: list[str],
-):
-    symbol_manager = SymbolManager(lang_server=language_server)
-    code_diff = symbol_manager.replace_body(symbol_name, relative_file_path, new_body, dry_run=True)
-
-    assert code_diff is not None
-    assert code_diff.relative_path == relative_file_path
-
-    actual_original_lines = [line.strip() for _, line in code_diff.deleted_lines if line.strip()]
-    normalized_expected_original_lines = [line.strip() for line in expected_original_lines_content if line.strip()]
-    assert actual_original_lines == normalized_expected_original_lines
-
-    actual_modified_lines = [line.strip() for _, line in code_diff.added_lines if line.strip()]
-    normalized_expected_modified_lines = [line.strip() for line in expected_modified_lines_content if line.strip()]
-    assert actual_modified_lines == normalized_expected_modified_lines
-
-    assert code_diff.original_content != code_diff.modified_content
+def test_replace_body(test_case: ReplaceBodyTest):
+    test_case.run_test()

@@ -2,16 +2,15 @@ import json
 import logging
 import os
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union, overload
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
 from sensai.util.string import ToStringMixin
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
-from multilspy.multilspy_utils import TextUtils
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
@@ -605,30 +604,22 @@ class SymbolManager:
                 self.agent.mark_file_modified(relative_path)
 
     @contextmanager
-    def _edited_symbol_location(self, location: SymbolLocation, dry_run: bool = False) -> Iterator[Symbol]:
+    def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
         """
         Context manager for locating and editing a symbol in a file.
-        If dry_run is True, the file is not actually modified, but the symbol is still located.
-        The dry_run flag is primarily implemented to allow the same code to be used for both editing and diffing
-        (the latter mostly for tests).
         """
         symbol = self.find_by_location(location)
         if symbol is None:
             raise ValueError("Symbol not found/has no defined location within a file")
         assert location.relative_path is not None
-        edit_context = self._edited_file(location.relative_path) if not dry_run else nullcontext()
-        with edit_context:
+        with self._edited_file(location.relative_path):
             yield symbol
 
     def _get_code_file_content(self, relative_path: str) -> str:
         """Get the content of a file using the language server."""
         return self.lang_server.language_server.retrieve_full_file_content(relative_path)
 
-    @overload
-    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
-    @overload
-    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def replace_body(self, name_path: str, relative_file_path: str, body: str) -> None:
         """
         Replace the body of the symbol with the given name in the given file.
         """
@@ -643,47 +634,28 @@ class SymbolManager:
                 + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        return self.replace_body_at_location(symbol.location, body, dry_run=dry_run)  # type: ignore[call-overload]
+        return self.replace_body_at_location(symbol.location, body)
 
-    @overload
-    def replace_body_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[False] = False) -> None: ...
-    @overload
-    def replace_body_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def replace_body_at_location(self, location: SymbolLocation, body: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def replace_body_at_location(self, location: SymbolLocation, body: str) -> None:
         """
         Replace the body of the symbol at the given location with the given body
 
         :param location: the location of the symbol to replace.
         :param body: the new body
-        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
             body += "\n"
 
-        with self._edited_symbol_location(location, dry_run=dry_run) as symbol:
+        with self._edited_symbol_location(location) as symbol:
             assert location.relative_path is not None
             start_pos = symbol.body_start_position
             end_pos = symbol.body_end_position
             if start_pos is None or end_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined body range.")
-            if dry_run:
-                original_content = self._get_code_file_content(location.relative_path)
-                modified_content, _ = TextUtils.delete_text_between_positions(
-                    original_content, start_pos["line"], start_pos["character"], end_pos["line"], end_pos["character"]
-                )
-                modified_content, _, _ = TextUtils.insert_text_at_position(
-                    modified_content, start_pos["line"], start_pos["character"], body
-                )
-                return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
-            else:
-                # TODO: add method (in LS and TextUtils) replace_text_between_positions, calling two methods in LS adds extra overhead
-                #   Use it here and above
-                self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
-                self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
-                return None
+            self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
+            self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
 
-    @overload
     def insert_after_symbol(
         self,
         name_path: str,
@@ -692,29 +664,7 @@ class SymbolManager:
         *,
         use_same_indentation: bool = True,
         at_new_line: bool = True,
-        dry_run: Literal[False] = False,
-    ) -> None: ...
-    @overload
-    def insert_after_symbol(
-        self,
-        name_path: str,
-        relative_file_path: str,
-        body: str,
-        *,
-        use_same_indentation: bool = True,
-        at_new_line: bool = True,
-        dry_run: Literal[True],
-    ) -> CodeDiff: ...
-    def insert_after_symbol(
-        self,
-        name_path: str,
-        relative_file_path: str,
-        body: str,
-        *,
-        use_same_indentation: bool = True,
-        at_new_line: bool = True,
-        dry_run: bool = False,
-    ) -> CodeDiff | None:
+    ) -> None:
         """
         Inserts content after the symbol with the given name in the given file.
         """
@@ -728,31 +678,18 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[-1]
-        return self.insert_after_symbol_at_location(symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation, dry_run=dry_run)  # type: ignore[call-overload]
+        return self.insert_after_symbol_at_location(
+            symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation
+        )
 
-    @overload
     def insert_after_symbol_at_location(
-        self,
-        location: SymbolLocation,
-        body: str,
-        *,
-        at_new_line: bool = True,
-        use_same_indentation: bool = True,
-        dry_run: Literal[False] = False,
-    ) -> None: ...
-    @overload
-    def insert_after_symbol_at_location(
-        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: Literal[True]
-    ) -> CodeDiff: ...
-    def insert_after_symbol_at_location(
-        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: bool = False
-    ) -> CodeDiff | None:
+        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True
+    ) -> None:
         """
         Appends content after the given symbol
 
         :param location: the location of the symbol after which to add new lines
         :param body: the body of the entity to append
-        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
@@ -796,16 +733,9 @@ class SymbolManager:
             # > dataclass_instance.status = "active"  # Reassign dataclass field
             col = 0
 
-        if dry_run:
-            original_content = self._get_code_file_content(location.relative_path)
-            modified_content, _, _ = TextUtils.insert_text_at_position(original_content, line=line, col=col, text_to_be_inserted=body)
-            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
-        else:
-            with self._edited_symbol_location(location):
-                self.lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
-            return None
+        with self._edited_symbol_location(location):
+            self.lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
 
-    @overload
     def insert_before_symbol(
         self,
         name_path: str,
@@ -814,29 +744,7 @@ class SymbolManager:
         *,
         at_new_line: bool = True,
         use_same_indentation: bool = True,
-        dry_run: Literal[False] = False,
-    ) -> None: ...
-    @overload
-    def insert_before_symbol(
-        self,
-        name_path: str,
-        relative_file_path: str,
-        body: str,
-        *,
-        at_new_line: bool = True,
-        use_same_indentation: bool = True,
-        dry_run: Literal[True],
-    ) -> CodeDiff: ...
-    def insert_before_symbol(
-        self,
-        name_path: str,
-        relative_file_path: str,
-        body: str,
-        *,
-        at_new_line: bool = True,
-        use_same_indentation: bool = True,
-        dry_run: bool = False,
-    ) -> CodeDiff | None:
+    ) -> None:
         """
         Inserts content before the symbol with the given name in the given file.
         """
@@ -850,31 +758,16 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        return self.insert_before_symbol_at_location(symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation, dry_run=dry_run)  # type: ignore[call-overload]
+        self.insert_before_symbol_at_location(symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation)
 
-    @overload
     def insert_before_symbol_at_location(
-        self,
-        location: SymbolLocation,
-        body: str,
-        *,
-        at_new_line: bool = True,
-        use_same_indentation: bool = True,
-        dry_run: Literal[False] = False,
-    ) -> None: ...
-    @overload
-    def insert_before_symbol_at_location(
-        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: Literal[True]
-    ) -> CodeDiff: ...
-    def insert_before_symbol_at_location(
-        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: bool = False
-    ) -> CodeDiff | None:
+        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True
+    ) -> None:
         """
         Inserts content before the given symbol
 
         :param location: the location of the symbol before which to add new lines
         :param body: the body of the entity to insert
-        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         with self._edited_symbol_location(location) as symbol:
             symbol_start_pos = symbol.body_start_position
@@ -892,62 +785,32 @@ class SymbolManager:
                 line -= 1
             assert location.relative_path is not None
 
-            if dry_run:
-                original_content = self._get_code_file_content(location.relative_path)
-                modified_content, _, _ = TextUtils.insert_text_at_position(original_content, line=line, col=col, text_to_be_inserted=body)
-                return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
-            else:
-                self.lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
-                return None
+            self.lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
 
-    @overload
-    def insert_at_line(self, relative_path: str, line: int, content: str, *, dry_run: Literal[False] = False) -> None: ...
-    @overload
-    def insert_at_line(self, relative_path: str, line: int, content: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def insert_at_line(self, relative_path: str, line: int, content: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def insert_at_line(self, relative_path: str, line: int, content: str) -> None:
         """
         Inserts content at the given line in the given file.
 
         :param line: the 0-based index of the line to insert content at
         :param content: the content to insert
-        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
-        if dry_run:
-            original_content = self._get_code_file_content(relative_path)
-            modified_content, _, _ = TextUtils.insert_text_at_position(original_content, line, 0, content)
-            return CodeDiff(relative_path=relative_path, original_content=original_content, modified_content=modified_content)
-        else:
-            with self._edited_file(relative_path):
-                self.lang_server.insert_text_at_position(relative_path, line, 0, content)
-            return None
+        with self._edited_file(relative_path):
+            self.lang_server.insert_text_at_position(relative_path, line, 0, content)
 
-    @overload
-    def delete_lines(self, relative_path: str, start_line: int, end_line: int, *, dry_run: Literal[False] = False) -> None: ...
-    @overload
-    def delete_lines(self, relative_path: str, start_line: int, end_line: int, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def delete_lines(self, relative_path: str, start_line: int, end_line: int, *, dry_run: bool = False) -> CodeDiff | None:
+    def delete_lines(self, relative_path: str, start_line: int, end_line: int) -> None:
         """
         Deletes lines in the given file.
 
         :param start_line: the 0-based index of the first line to delete (inclusive)
         :param end_line: the 0-based index of the last line to delete (inclusive)
-        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         start_col = 0
         end_line_for_delete = end_line + 1
         end_col = 0
-        if dry_run:
-            original_content = self._get_code_file_content(relative_path)
-            modified_content, _ = TextUtils.delete_text_between_positions(
-                original_content, start_line, start_col, end_line_for_delete, end_col
-            )
-            return CodeDiff(relative_path=relative_path, original_content=original_content, modified_content=modified_content)
-        else:
-            with self._edited_file(relative_path):
-                start_pos = Position(line=start_line, character=start_col)
-                end_pos = Position(line=end_line_for_delete, character=end_col)
-                self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
-            return None
+        with self._edited_file(relative_path):
+            start_pos = Position(line=start_line, character=start_col)
+            end_pos = Position(line=end_line_for_delete, character=end_col)
+            self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
 
     def delete_symbol_at_location(self, location: SymbolLocation) -> None:
         """
