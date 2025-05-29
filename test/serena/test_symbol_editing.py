@@ -164,7 +164,7 @@ class InsertInRelToSymbolTest(EditingTest):
         ),
     ],
 )
-def test_insert_in_rel_to_symbol(test_case, mode, snapshot):
+def test_insert_in_rel_to_symbol(test_case: InsertInRelToSymbolTest, mode: Literal["before", "after"], snapshot):
     test_case.set_mode(mode)
     test_case.run_test(content_after_ground_truth=snapshot)
 
