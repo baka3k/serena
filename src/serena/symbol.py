@@ -167,8 +167,7 @@ class CodeDiff:
 @dataclass
 class SymbolLocation:
     """
-    Represents the location of a symbol, including the line where the identifier
-    is defined and the end line of the symbol's body
+    Represents the (start) location of a symbol identifier, which, within Serena, uniquely identifies the symbol.
     """
 
     relative_path: str | None
@@ -184,16 +183,6 @@ class SymbolLocation:
     """
     the column number in which the symbol identifier is defined (if the symbol is a function, class, etc.);
     may be None for some types of symbols (e.g. SymbolKind.File)
-    """
-    end_line: int | None = None
-    """
-    the line in which the symbol's body ends. For methods that search based on SymbolLocation,
-    the end line is not needed, as it is unused by the language server in the search.
-    However, the end_line will typically be included in the results of search methods,
-    and thus be provided to the user in the response to such requests.
-    This is useful for the LLMs, especially the less intelligent ones, as they often fail
-    to perform symbolic operations and when falling back to line-editing tools, will just make up
-    an end line.
     """
 
     def __post_init__(self) -> None:
@@ -276,7 +265,10 @@ class Symbol(ToStringMixin):
 
     @property
     def location(self) -> SymbolLocation:
-        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column, end_line=self.end_line)
+        """
+        :return: the start location of the actual symbol identifier
+        """
+        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
 
     @property
     def body_start_position(self) -> Position | None:
@@ -300,22 +292,23 @@ class Symbol(ToStringMixin):
                     return end_pos
         return None
 
+    def get_body_line_numbers(self) -> tuple[int | None, int | None]:
+        start_pos = self.body_start_position
+        end_pos = self.body_end_position
+        start_line = start_pos["line"] if start_pos else None
+        end_line = end_pos["line"] if end_pos else None
+        return start_line, end_line
+
     @property
     def line(self) -> int | None:
-        """The line in which the symbol identifier is defined (start line)."""
+        """
+        :return: the line in which the symbol identifier is defined.
+        """
         if "selectionRange" in self.symbol_root:
             return self.symbol_root["selectionRange"]["start"]["line"]
         else:
             # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
             return None
-
-    @property
-    def end_line(self) -> int | None:
-        """The end line of the symbol body, also contained in the `body_end_position`."""
-        body_end_position = self.body_end_position
-        if body_end_position is not None:
-            return body_end_position["line"]
-        return None
 
     @property
     def column(self) -> int | None:
@@ -429,7 +422,7 @@ class Symbol(ToStringMixin):
         self, kind: bool = False, location: bool = False, depth: int = 0, include_body: bool = False, include_children_body: bool = False
     ) -> dict[str, Any]:
         """
-        Convert the symbol to a dictionary.
+        Converts the symbol to a dictionary.
 
         :param kind: whether to include the kind of the symbol
         :param location: whether to include the location of the symbol
@@ -448,6 +441,8 @@ class Symbol(ToStringMixin):
 
         if location:
             result["location"] = self.location.to_dict()
+            body_start_line, body_end_line = self.get_body_line_numbers()
+            result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
         if include_body:
             if self.body is None:
