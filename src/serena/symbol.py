@@ -2,16 +2,17 @@ import json
 import logging
 import os
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from copy import copy
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, overload
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union, overload
 
 from sensai.util.string import ToStringMixin
 
 from multilspy import SyncLanguageServer
 from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
+from multilspy.multilspy_utils import TextUtils
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
@@ -475,7 +476,12 @@ class Symbol(ToStringMixin):
 
 
 class SymbolManager:
-    def __init__(self, lang_server: SyncLanguageServer, agent: "SerenaAgent") -> None:
+    def __init__(self, lang_server: SyncLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
+        """
+        :param lang_server: the language server to use for symbol retrieval as well as editing operations.
+        :param agent: the agent to use (only needed for marking files as modified). You can pass None if you don't
+            need an agent to be avare of file modifications performed by the symbol manager.
+        """
         self.lang_server = lang_server
         self.agent = agent
 
@@ -601,46 +607,28 @@ class SymbolManager:
             abs_path = os.path.join(root_path, relative_path)
             with open(abs_path, "w", encoding="utf-8") as f:
                 f.write(file_buffer.contents)
-            self.agent.mark_file_modified(relative_path)
+            if self.agent is not None:
+                self.agent.mark_file_modified(relative_path)
 
     @contextmanager
-    def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
+    def _edited_symbol_location(self, location: SymbolLocation, dry_run: bool = False) -> Iterator[Symbol]:
+        """
+        Context manager for locating and editing a symbol in a file.
+        If dry_run is True, the file is not actually modified, but the symbol is still located.
+        The dry_run flag is primarily implemented to allow the same code to be used for both editing and diffing
+        (the latter mostly for tests).
+        """
         symbol = self.find_by_location(location)
         if symbol is None:
             raise ValueError("Symbol not found/has no defined location within a file")
         assert location.relative_path is not None
-        with self._edited_file(location.relative_path):
+        edit_context = self._edited_file(location.relative_path) if not dry_run else nullcontext()
+        with edit_context:
             yield symbol
 
     def _get_code_file_content(self, relative_path: str) -> str:
         """Get the content of a file using the language server."""
         return self.lang_server.language_server.retrieve_full_file_content(relative_path)
-
-    @staticmethod
-    def _apply_text_edit(content: str, start_line: int, start_char: int, end_line: int, end_char: int, replacement: str) -> str:
-        """Apply a text edit to content and return the modified content."""
-        lines = content.splitlines(keepends=True)
-
-        # Handle edge cases
-        if not lines:
-            return replacement
-
-        # Ensure we have enough lines
-        while len(lines) <= max(start_line, end_line):
-            lines.append("")
-
-        # Extract the portion to keep before the edit
-        before_lines = lines[:start_line]
-        before_on_line = lines[start_line][:start_char] if start_line < len(lines) else ""
-
-        # Extract the portion to keep after the edit
-        after_on_line = lines[end_line][end_char:] if end_line < len(lines) else ""
-        after_lines = lines[end_line + 1 :] if end_line + 1 < len(lines) else []
-
-        # Combine everything
-        result = before_lines + [before_on_line + replacement + after_on_line] + after_lines
-
-        return "".join(result)
 
     @overload
     def replace_body(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
@@ -679,36 +667,27 @@ class SymbolManager:
         if not body.endswith("\n"):
             body += "\n"
 
-        if dry_run:
+        with self._edited_symbol_location(location, dry_run=dry_run) as symbol:
             assert location.relative_path is not None
-            original_content = self._get_code_file_content(location.relative_path)
-
-            # Find the symbol to get its body positions
-            symbol = self.find_by_location(location)
-            if symbol is None:
-                raise ValueError("Symbol not found/has no defined location within a file")
-
             start_pos = symbol.body_start_position
             end_pos = symbol.body_end_position
             if start_pos is None or end_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined body range.")
-
-            # Apply the edit
-            modified_content = self._apply_text_edit(
-                original_content, start_pos["line"], start_pos["character"], end_pos["line"], end_pos["character"], body
-            )
-
-            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
-        else:
-            with self._edited_symbol_location(location) as symbol:
-                assert location.relative_path is not None
-                start_pos = symbol.body_start_position
-                end_pos = symbol.body_end_position
-                if start_pos is None or end_pos is None:
-                    raise ValueError(f"Symbol at {location} does not have a defined body range.")
+            if dry_run:
+                original_content = self._get_code_file_content(location.relative_path)
+                modified_content, _ = TextUtils.delete_text_between_positions(
+                    original_content, start_pos["line"], start_pos["character"], end_pos["line"], end_pos["character"]
+                )
+                modified_content, _, _ = TextUtils.insert_text_at_position(
+                    modified_content, start_pos["line"], start_pos["character"], body
+                )
+                return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
+            else:
+                # TODO: add method (in LS and TextUtils) replace_text_between_positions, calling two methods in LS adds extra overhead
+                #   Use it here and above
                 self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
                 self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
-            return None
+                return None
 
     @overload
     def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
@@ -745,30 +724,28 @@ class SymbolManager:
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
             body += "\n"
+        if not body.startswith("\n"):
+            body = "\n" + body
+
+        assert location.relative_path is not None
+
+        # Find the symbol to get its end position
+        symbol = self.find_by_location(location)
+        if symbol is None:
+            raise ValueError("Symbol not found/has no defined location within a file")
+
+        pos = symbol.body_end_position
+        if pos is None:
+            raise ValueError(f"Symbol at {location} does not have a defined end position.")
 
         if dry_run:
-            assert location.relative_path is not None
             original_content = self._get_code_file_content(location.relative_path)
-
-            # Find the symbol to get its end position
-            symbol = self.find_by_location(location)
-            if symbol is None:
-                raise ValueError("Symbol not found/has no defined location within a file")
-
-            pos = symbol.body_end_position
-            if pos is None:
-                raise ValueError(f"Symbol at {location} does not have a defined end position.")
-
-            # Apply the edit - insert at end position
-            modified_content = self._apply_text_edit(original_content, pos["line"], pos["character"], pos["line"], pos["character"], body)
-
+            modified_content, _, _ = TextUtils.insert_text_at_position(original_content, pos["line"], pos["character"], body)
             return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
         else:
-            with self._edited_symbol_location(location) as symbol:
-                pos = symbol.body_end_position
-                if pos is None:
-                    raise ValueError(f"Symbol at {location} does not have a defined end position.")
-                assert location.relative_path is not None
+            # The _edited_symbol_location context manager handles LSP notifications like didOpen.
+            # We use the pre-calculated 'pos' for the insertion.
+            with self._edited_symbol_location(location):
                 self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
             return None
 
@@ -807,40 +784,23 @@ class SymbolManager:
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
             body += "\n"
+        if not body.startswith("\n"):
+            body = "\n" + body
 
-        if dry_run:
-            assert location.relative_path is not None
-            original_content = self._get_code_file_content(location.relative_path)
-
-            # Find the symbol to get its start position
-            symbol = self.find_by_location(location)
-            if symbol is None:
-                raise ValueError("Symbol not found/has no defined location within a file")
-
+        with self._edited_symbol_location(location) as symbol:
             original_start_pos = symbol.body_start_position
             if original_start_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined start position.")
+            pos = copy(original_start_pos)
+            assert location.relative_path is not None
 
-            # Apply the edit - insert at start position
-            modified_content = self._apply_text_edit(
-                original_content,
-                original_start_pos["line"],
-                original_start_pos["character"],
-                original_start_pos["line"],
-                original_start_pos["character"],
-                body,
-            )
-
-            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
-        else:
-            with self._edited_symbol_location(location) as symbol:
-                original_start_pos = symbol.body_start_position
-                if original_start_pos is None:
-                    raise ValueError(f"Symbol at {location} does not have a defined start position.")
-                pos = copy(original_start_pos)
-                assert location.relative_path is not None
+            if dry_run:
+                original_content = self._get_code_file_content(location.relative_path)
+                modified_content, _, _ = TextUtils.insert_text_at_position(original_content, pos["line"], pos["character"], body)
+                return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
+            else:
                 self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
-            return None
+                return None
 
     @overload
     def insert_at_line(self, relative_path: str, line: int, content: str, *, dry_run: Literal[False] = False) -> None: ...
@@ -856,10 +816,7 @@ class SymbolManager:
         """
         if dry_run:
             original_content = self._get_code_file_content(relative_path)
-
-            # Apply the edit - insert at beginning of line
-            modified_content = self._apply_text_edit(original_content, line, 0, line, 0, content)
-
+            modified_content, _, _ = TextUtils.insert_text_at_position(original_content, line, 0, content)
             return CodeDiff(relative_path=relative_path, original_content=original_content, modified_content=modified_content)
         else:
             with self._edited_file(relative_path):
@@ -878,17 +835,19 @@ class SymbolManager:
         :param end_line: the 0-based index of the last line to delete (inclusive)
         :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
+        start_col = 0
+        end_line_for_delete = end_line + 1
+        end_col = 0
         if dry_run:
             original_content = self._get_code_file_content(relative_path)
-
-            # Apply the edit - delete from start of start_line to start of end_line+1
-            modified_content = self._apply_text_edit(original_content, start_line, 0, end_line + 1, 0, "")
-
+            modified_content, _ = TextUtils.delete_text_between_positions(
+                original_content, start_line, start_col, end_line_for_delete, end_col
+            )
             return CodeDiff(relative_path=relative_path, original_content=original_content, modified_content=modified_content)
         else:
             with self._edited_file(relative_path):
-                start_pos = Position(line=start_line, character=0)
-                end_pos = Position(line=end_line + 1, character=0)
+                start_pos = Position(line=start_line, character=start_col)
+                end_pos = Position(line=end_line_for_delete, character=end_col)
                 self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
             return None
 
@@ -902,33 +861,23 @@ class SymbolManager:
 
         :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
-        if dry_run:
+        with self._edited_symbol_location(location) as symbol:
             assert location.relative_path is not None
-            original_content = self._get_code_file_content(location.relative_path)
-
-            # Find the symbol to get its body positions
-            symbol = self.find_by_location(location)
-            if symbol is None:
-                raise ValueError("Symbol not found/has no defined location within a file")
-
-            start_pos = symbol.body_start_position
-            end_pos = symbol.body_end_position
-            if start_pos is None or end_pos is None:
-                raise ValueError(f"Symbol at {location} does not have a defined body range.")
-
-            # Apply the edit - delete the entire symbol
-            modified_content = self._apply_text_edit(
-                original_content, start_pos["line"], start_pos["character"], end_pos["line"], end_pos["character"], ""
-            )
-
-            return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
-        else:
-            with self._edited_symbol_location(location) as symbol:
-                assert location.relative_path is not None
-                assert symbol.body_start_position is not None
-                assert symbol.body_end_position is not None
+            assert symbol.body_start_position is not None
+            assert symbol.body_end_position is not None
+            if dry_run:
+                original_content = self._get_code_file_content(location.relative_path)
+                modified_content, _ = TextUtils.delete_text_between_positions(
+                    original_content,
+                    symbol.body_start_position["line"],
+                    symbol.body_start_position["character"],
+                    symbol.body_end_position["line"],
+                    symbol.body_end_position["character"],
+                )
+                return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
+            else:
                 self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
-            return None
+                return None
 
     @overload
     def delete_symbol(self, name_path: str, relative_file_path: str, *, dry_run: Literal[False] = False) -> None: ...

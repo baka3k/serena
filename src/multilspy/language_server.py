@@ -433,10 +433,9 @@ class LanguageServer:
 
         file_buffer = self.open_file_buffers[uri]
         file_buffer.version += 1
-        change_index = TextUtils.get_index_from_line_col(file_buffer.contents, line, column)
-        file_buffer.contents = (
-            file_buffer.contents[:change_index] + text_to_be_inserted + file_buffer.contents[change_index:]
-        )
+
+        new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
+        file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
             {
                 LSPConstants.TEXT_DOCUMENT: {
@@ -454,7 +453,6 @@ class LanguageServer:
                 ],
             }
         )
-        new_l, new_c = TextUtils.get_updated_position_from_line_and_column_and_edit(line, column, text_to_be_inserted)
         return multilspy_types.Position(line=new_l, character=new_c)
 
     def delete_text_between_positions(
@@ -481,10 +479,8 @@ class LanguageServer:
 
         file_buffer = self.open_file_buffers[uri]
         file_buffer.version += 1
-        del_start_idx = TextUtils.get_index_from_line_col(file_buffer.contents, start["line"], start["character"])
-        del_end_idx = TextUtils.get_index_from_line_col(file_buffer.contents, end["line"], end["character"])
-        deleted_text = file_buffer.contents[del_start_idx:del_end_idx]
-        file_buffer.contents = file_buffer.contents[:del_start_idx] + file_buffer.contents[del_end_idx:]
+        new_contents, deleted_text = TextUtils.delete_text_between_positions(file_buffer.contents, start_line=start["line"], start_col=start["character"], end_line=end["line"], end_col=end["character"])
+        file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
             {
                 LSPConstants.TEXT_DOCUMENT: {

@@ -57,7 +57,7 @@ class TextUtils:
         return idx
     
     @staticmethod
-    def get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> Tuple[int, int]:
+    def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> Tuple[int, int]:
         """
         Utility function to get the position of the cursor after inserting text at a given line and column.
         """
@@ -68,6 +68,30 @@ class TextUtils:
         else:
             c += len(text_to_be_inserted)
         return (l, c)
+    
+    @staticmethod
+    def delete_text_between_positions(text: str, start_line: int, start_col: int, end_line: int, end_col: int) -> Tuple[str, str]:
+        """
+        Deletes the text between the given start and end positions.
+        Returns the modified text and the deleted text.
+        """
+        del_start_idx = TextUtils.get_index_from_line_col(text, start_line, start_col)
+        del_end_idx = TextUtils.get_index_from_line_col(text, end_line, end_col)
+        
+        deleted_text = text[del_start_idx:del_end_idx]
+        new_text = text[:del_start_idx] + text[del_end_idx:]
+        return new_text, deleted_text
+    
+    @staticmethod
+    def insert_text_at_position(text: str, line: int, col: int, text_to_be_inserted: str) -> Tuple[str, int, int]:
+        """
+        Inserts the given text at the given line and column.
+        Returns the modified text and the new line and column.
+        """
+        change_index = TextUtils.get_index_from_line_col(text, line, col)
+        new_text = text[:change_index] + text_to_be_inserted + text[change_index:]
+        new_l, new_c = TextUtils._get_updated_position_from_line_and_column_and_edit(line, col, text_to_be_inserted)
+        return new_text, new_l, new_c
 
 
 class PathUtils:
