@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(eq=False)
 class SymbolLocation:
     """
     Represents the location of a symbol, including the line where the identifier
@@ -58,6 +58,17 @@ class SymbolLocation:
 
     def has_position_in_file(self) -> bool:
         return self.relative_path is not None and self.line is not None and self.column is not None
+
+    def matches_identifier_location(self, other: Self) -> bool:
+        """
+        Checks if this instance matches a symbol identifier location.
+        Since symbol identifiers are only concerned with the start position,
+        the end_line is not taken into account.
+        """
+        if self.relative_path is None:
+            # not defined locations don't match anything
+            return False
+        return self.relative_path == other.relative_path and self.line == other.line and self.column == other.column
 
 
 class Symbol(ToStringMixin):
@@ -368,7 +379,7 @@ class SymbolManager:
         symbol_dicts, roots = self.lang_server.request_document_symbols(location.relative_path, include_body=False)
         for symbol_dict in symbol_dicts:
             symbol = Symbol(symbol_dict)
-            if symbol.location == location:
+            if symbol.location.matches_identifier_location(location):
                 return symbol
         return None
 
