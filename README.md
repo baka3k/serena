@@ -259,7 +259,7 @@ say something like "use Serena's tools". Instead, you can instruct the LLM to us
 use a particular tool by referring to its name. Moreover, in some clients, if you use multiple MCP Servers, you might get
 **tool name collisions** which lead to undefined behavior.
 
-ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as in the the server
+ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
 necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
 In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and 
 therefore needs to be configured with a launch command. In SSE transport you control the lifetime of the server yourself.
