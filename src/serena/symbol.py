@@ -20,8 +20,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class SymbolLocation:
     """
-    Represents the location of a symbol, including the line where the identifier
-    is defined and the end line of the symbol's body
+    Represents the (start) location of a symbol identifier
     """
 
     relative_path: str | None
@@ -37,16 +36,6 @@ class SymbolLocation:
     """
     the column number in which the symbol identifier is defined (if the symbol is a function, class, etc.);
     may be None for some types of symbols (e.g. SymbolKind.File)
-    """
-    end_line: int | None = None
-    """
-    the line in which the symbol's body ends. For methods that search based on SymbolLocation,
-    the end line is not needed, as it is unused by the language server in the search.
-    However, the end_line will typically be included in the results of search methods,
-    and thus be provided to the user in the response to such requests.
-    This is useful for the LLMs, especially the less intelligent ones, as they often fail
-    to perform symbolic operations and when falling back to line-editing tools, will just make up
-    an end line.
     """
 
     def __post_init__(self) -> None:
@@ -129,7 +118,10 @@ class Symbol(ToStringMixin):
 
     @property
     def location(self) -> SymbolLocation:
-        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column, end_line=self.end_line)
+        """
+        :return: the start location of the actual symbol identifier
+        """
+        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
 
     @property
     def body_start_position(self) -> Position | None:
@@ -155,20 +147,11 @@ class Symbol(ToStringMixin):
 
     @property
     def line(self) -> int | None:
-        """The line in which the symbol identifier is defined (start line)."""
         if "selectionRange" in self.symbol_root:
             return self.symbol_root["selectionRange"]["start"]["line"]
         else:
             # line is expected to be undefined for some types of symbols (e.g. SymbolKind.File)
             return None
-
-    @property
-    def end_line(self) -> int | None:
-        """The end line of the symbol body, also contained in the `body_end_position`."""
-        body_end_position = self.body_end_position
-        if body_end_position is not None:
-            return body_end_position["line"]
-        return None
 
     @property
     def column(self) -> int | None:
