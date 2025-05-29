@@ -10,17 +10,34 @@ from pprint import pprint
 
 from serena.agent import *
 
-project_root = Path(__file__).parent.parent
+
+@dataclass
+class InMemorySerenaConfig(SerenaConfigBase):
+    """
+    In-memory implementation of Serena configuration with the GUI disabled.
+    """
+
+    gui_log_window_enabled: bool = False
+    web_dashboard: bool = False
+
 
 if __name__ == "__main__":
-    agent = SerenaAgent(project_config=str(project_root / ".serena" / "project.yml"))
-    overview_tool = agent.get_tool(GetSymbolsOverviewTool)
+    project_path = str(Path("test") / "resources" / "repos" / "python" / "test_repo")
+    agent = SerenaAgent(project=project_path, serena_config=InMemorySerenaConfig())
     find_symbol_tool = agent.get_tool(FindSymbolTool)
 
-    print("Getting an overview of the util package\n")
-    pprint(json.loads(overview_tool.apply("src/serena/util")))
+    print("Finding the symbol 'VariableContainer'\n")
+    pprint(json.loads(find_symbol_tool.apply("VariableContainer", within_relative_path=str(Path("test_repo") / "variables.py"))))
 
-    print("\n\n")
+    # modifying with dry-run
+    symbol_manager = agent.symbol_manager
 
-    print("Finding the symbol 'SerenaAgent'\n")
-    pprint(json.loads(find_symbol_tool.apply("SerenaAgent")))
+    code_diff = symbol_manager.insert_after_symbol(
+        "VariableContainer/modify_instance_var",
+        relative_file_path=str(Path("test_repo") / "variables.py"),
+        body="test test\nsecond line",
+        dry_run=True,
+    )
+    print(f"Deleted lines: {code_diff.deleted_lines}")
+    print(f"Added lines: {code_diff.added_lines}")
+    print(f"Edited module: {code_diff.modified_content}")

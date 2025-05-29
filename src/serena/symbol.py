@@ -3,7 +3,6 @@ import logging
 import os
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager, nullcontext
-from copy import copy
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union, overload
@@ -690,10 +689,37 @@ class SymbolManager:
                 return None
 
     @overload
-    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    def insert_after_symbol(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        body: str,
+        *,
+        use_same_indentation: bool = True,
+        at_new_line: bool = True,
+        dry_run: Literal[False] = False,
+    ) -> None: ...
     @overload
-    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def insert_after_symbol(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        body: str,
+        *,
+        use_same_indentation: bool = True,
+        at_new_line: bool = True,
+        dry_run: Literal[True],
+    ) -> CodeDiff: ...
+    def insert_after_symbol(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        body: str,
+        *,
+        use_same_indentation: bool = True,
+        at_new_line: bool = True,
+        dry_run: bool = False,
+    ) -> CodeDiff | None:
         """
         Inserts content after the symbol with the given name in the given file.
         """
@@ -707,13 +733,25 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[-1]
-        return self.insert_after_symbol_at_location(symbol.location, body, dry_run=dry_run)  # type: ignore[call-overload]
+        return self.insert_after_symbol_at_location(symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation, dry_run=dry_run)  # type: ignore[call-overload]
 
     @overload
-    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    def insert_after_symbol_at_location(
+        self,
+        location: SymbolLocation,
+        body: str,
+        *,
+        at_new_line: bool = True,
+        use_same_indentation: bool = True,
+        dry_run: Literal[False] = False,
+    ) -> None: ...
     @overload
-    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def insert_after_symbol_at_location(
+        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: Literal[True]
+    ) -> CodeDiff: ...
+    def insert_after_symbol_at_location(
+        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: bool = False
+    ) -> CodeDiff | None:
         """
         Appends content after the given symbol
 
@@ -724,8 +762,6 @@ class SymbolManager:
         # make sure body always ends with at least one newline
         if not body.endswith("\n"):
             body += "\n"
-        if not body.startswith("\n"):
-            body = "\n" + body
 
         assert location.relative_path is not None
 
@@ -738,22 +774,74 @@ class SymbolManager:
         if pos is None:
             raise ValueError(f"Symbol at {location} does not have a defined end position.")
 
+        line, col = pos["line"], pos["character"]
+        if use_same_indentation:
+            symbol_start_pos = symbol.body_start_position
+            assert symbol_start_pos is not None, f"Symbol at {location=} does not have a defined start position."
+            symbol_identifier_col = symbol_start_pos["character"]
+            indent = " " * (symbol_identifier_col)
+            body = "\n".join(indent + line for line in body.splitlines())
+        if at_new_line:
+            line += 1
+            # IMPORTANT: without this, the insertion does the wrong thing. See implementation of insert_text_at_position in TextUtils,
+            # it is somewhat counterintuitive (never inserts whitespace)
+            # I am not 100% sure whether col=0 is always the best choice here.
+            #
+            # Without col=0, inserting after dataclass_instance in variables.py:
+            # > dataclass_instance = VariableDataclass(id=1, name="Test")
+            # > test test
+            # > dataclass_instancetest test
+            # > second line
+            # > .status = "active"  # Reassign dataclass field
+            #
+            # With col=0:
+            # > dataclass_instance = VariableDataclass(id=1, name="Test")
+            # > test test
+            # > second line
+            # > dataclass_instance.status = "active"  # Reassign dataclass field
+            col = 0
+
         if dry_run:
             original_content = self._get_code_file_content(location.relative_path)
-            modified_content, _, _ = TextUtils.insert_text_at_position(original_content, pos["line"], pos["character"], body)
+            modified_content, _, _ = TextUtils.insert_text_at_position(original_content, line=line, col=col, text_to_be_inserted=body)
             return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
         else:
-            # The _edited_symbol_location context manager handles LSP notifications like didOpen.
-            # We use the pre-calculated 'pos' for the insertion.
             with self._edited_symbol_location(location):
-                self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
+                self.lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
             return None
 
     @overload
-    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    def insert_before_symbol(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        body: str,
+        *,
+        at_new_line: bool = True,
+        use_same_indentation: bool = True,
+        dry_run: Literal[False] = False,
+    ) -> None: ...
     @overload
-    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def insert_before_symbol(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        body: str,
+        *,
+        at_new_line: bool = True,
+        use_same_indentation: bool = True,
+        dry_run: Literal[True],
+    ) -> CodeDiff: ...
+    def insert_before_symbol(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        body: str,
+        *,
+        at_new_line: bool = True,
+        use_same_indentation: bool = True,
+        dry_run: bool = False,
+    ) -> CodeDiff | None:
         """
         Inserts content before the symbol with the given name in the given file.
         """
@@ -767,13 +855,25 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        return self.insert_before_symbol_at_location(symbol.location, body, dry_run=dry_run)  # type: ignore[call-overload]
+        return self.insert_before_symbol_at_location(symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation, dry_run=dry_run)  # type: ignore[call-overload]
 
     @overload
-    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[False] = False) -> None: ...
+    def insert_before_symbol_at_location(
+        self,
+        location: SymbolLocation,
+        body: str,
+        *,
+        at_new_line: bool = True,
+        use_same_indentation: bool = True,
+        dry_run: Literal[False] = False,
+    ) -> None: ...
     @overload
-    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def insert_before_symbol_at_location(
+        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: Literal[True]
+    ) -> CodeDiff: ...
+    def insert_before_symbol_at_location(
+        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True, dry_run: bool = False
+    ) -> CodeDiff | None:
         """
         Inserts content before the given symbol
 
@@ -781,25 +881,28 @@ class SymbolManager:
         :param body: the body of the entity to insert
         :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
-        # make sure body always ends with at least one newline
-        if not body.endswith("\n"):
-            body += "\n"
-        if not body.startswith("\n"):
-            body = "\n" + body
-
         with self._edited_symbol_location(location) as symbol:
-            original_start_pos = symbol.body_start_position
-            if original_start_pos is None:
+            symbol_start_pos = symbol.body_start_position
+            if symbol_start_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined start position.")
-            pos = copy(original_start_pos)
+            line = symbol_start_pos["line"]
+            col = symbol_start_pos["character"]
+            if use_same_indentation:
+                indent = " " * (col)
+                body = "\n".join(indent + line for line in body.splitlines())
+
+            # similar problems as in insert_after_symbol_at_location, see comment there
+            if at_new_line:
+                col = 0
+                line -= 1
             assert location.relative_path is not None
 
             if dry_run:
                 original_content = self._get_code_file_content(location.relative_path)
-                modified_content, _, _ = TextUtils.insert_text_at_position(original_content, pos["line"], pos["character"], body)
+                modified_content, _, _ = TextUtils.insert_text_at_position(original_content, line=line, col=col, text_to_be_inserted=body)
                 return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
             else:
-                self.lang_server.insert_text_at_position(location.relative_path, pos["line"], pos["character"], body)
+                self.lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
                 return None
 
     @overload
