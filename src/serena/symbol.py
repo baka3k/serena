@@ -949,43 +949,19 @@ class SymbolManager:
                 self.lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
             return None
 
-    @overload
-    def delete_symbol_at_location(self, location: SymbolLocation, *, dry_run: Literal[False] = False) -> None: ...
-    @overload
-    def delete_symbol_at_location(self, location: SymbolLocation, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def delete_symbol_at_location(self, location: SymbolLocation, *, dry_run: bool = False) -> CodeDiff | None:
+    def delete_symbol_at_location(self, location: SymbolLocation) -> None:
         """
         Deletes the symbol at the given location.
-
-        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         with self._edited_symbol_location(location) as symbol:
             assert location.relative_path is not None
             assert symbol.body_start_position is not None
             assert symbol.body_end_position is not None
-            if dry_run:
-                original_content = self._get_code_file_content(location.relative_path)
-                modified_content, _ = TextUtils.delete_text_between_positions(
-                    original_content,
-                    symbol.body_start_position["line"],
-                    symbol.body_start_position["character"],
-                    symbol.body_end_position["line"],
-                    symbol.body_end_position["character"],
-                )
-                return CodeDiff(relative_path=location.relative_path, original_content=original_content, modified_content=modified_content)
-            else:
-                self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
-                return None
+            self.lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
 
-    @overload
-    def delete_symbol(self, name_path: str, relative_file_path: str, *, dry_run: Literal[False] = False) -> None: ...
-    @overload
-    def delete_symbol(self, name_path: str, relative_file_path: str, *, dry_run: Literal[True]) -> CodeDiff: ...
-    def delete_symbol(self, name_path: str, relative_file_path: str, *, dry_run: bool = False) -> CodeDiff | None:
+    def delete_symbol(self, name_path: str, relative_file_path: str) -> None:
         """
         Deletes the symbol with the given name in the given file.
-
-        :param dry_run: if True, return a CodeDiff instead of modifying the file
         """
         symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
@@ -997,4 +973,4 @@ class SymbolManager:
                 "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        return self.delete_symbol_at_location(symbol.location, dry_run=dry_run)  # type: ignore[call-overload]
+        self.delete_symbol_at_location(symbol.location)
