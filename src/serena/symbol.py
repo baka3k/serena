@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 @dataclass
 class SymbolLocation:
     """
-    Represents the (start) location of a symbol identifier
+    Represents the (start) location of a symbol identifier, which, within Serena, uniquely identifies the symbol.
     """
 
     relative_path: str | None
@@ -145,8 +145,18 @@ class Symbol(ToStringMixin):
                     return end_pos
         return None
 
+    def get_body_line_numbers(self) -> tuple[int | None, int | None]:
+        start_pos = self.body_start_position
+        end_pos = self.body_end_position
+        start_line = start_pos["line"] if start_pos else None
+        end_line = end_pos["line"] if end_pos else None
+        return start_line, end_line
+
     @property
     def line(self) -> int | None:
+        """
+        :return: the line in which the symbol identifier is defined.
+        """
         if "selectionRange" in self.symbol_root:
             return self.symbol_root["selectionRange"]["start"]["line"]
         else:
@@ -265,7 +275,7 @@ class Symbol(ToStringMixin):
         self, kind: bool = False, location: bool = False, depth: int = 0, include_body: bool = False, include_children_body: bool = False
     ) -> dict[str, Any]:
         """
-        Convert the symbol to a dictionary.
+        Converts the symbol to a dictionary.
 
         :param kind: whether to include the kind of the symbol
         :param location: whether to include the location of the symbol
@@ -284,6 +294,8 @@ class Symbol(ToStringMixin):
 
         if location:
             result["location"] = self.location.to_dict()
+            body_start_line, body_end_line = self.get_body_line_numbers()
+            result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
         if include_body:
             if self.body is None:
