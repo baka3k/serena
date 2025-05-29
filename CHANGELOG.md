@@ -1,9 +1,24 @@
 # Latest
-Changes prior to the next official version change will appear here.
+Status of the main branch. Changes prior to the next official version change will appear here.
+
+## Highlights
+
+* **Better multi-project support and zero-config setup**: We significantly simplified the config setup, you no longer need to manually
+  create `project.yaml` for each project. Project activation is now always available. 
+  Any project can now be activated by just asking the LLM to do so and passing the path to a repo.
+* Dashboard as web app and possibility to shut down Serena during 
+* Initial prompt for project supported (has to be added manually for the moment)
+* Massive performance improvement of pattern search tool
 
 # 2025-05-24
 
+## Highlights
+
 Important new feature: configurability of mode and context, allowing better integration in a variety of clients.
+See corresponding section in readme - Serena can now be integrated in IDE assistants in a more productive way.
+
+You can now also do things like switching to one-shot planning mode, ask to plan something (which will create a memory),
+then switch to interactive editing mode in the next conversation and work through the plan read from the memory.
 
 Also some improvements to prompts.
 

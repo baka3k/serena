@@ -1,11 +1,9 @@
 """
 This script demonstrates how to use Serena's tools locally, useful
-for testing or development. Here the config is pointing to the serena repo itself,
-it assumes that you already have a serena_config.yml file setup.
+for testing or development. Here the tools will be operation the serena repo itself.
 """
 
 import json
-from pathlib import Path
 from pprint import pprint
 
 from serena.agent import *
