@@ -40,7 +40,11 @@ def scan_directory(
                     directories.append(result_path)
                     if recursive:
                         sub_dirs, sub_files = scan_directory(
-                            entry_path, recursive=True, relative_to=relative_to, is_ignored_dir=is_ignored_dir
+                            entry_path,
+                            recursive=True,
+                            relative_to=relative_to,
+                            is_ignored_dir=is_ignored_dir,
+                            is_ignored_file=is_ignored_file,
                         )
                         files.extend(sub_files)
                         directories.extend(sub_dirs)
