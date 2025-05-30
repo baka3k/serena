@@ -1052,7 +1052,7 @@ class FindFileTool(Tool):
     Finds files in the given relative paths
     """
 
-    def apply(self, file_mask: str, relative_path: str | None = None) -> str:
+    def apply(self, file_mask: str, relative_path: str) -> str:
         """
         Finds files matching the given file mask within the given relative path
 
