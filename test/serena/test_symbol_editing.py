@@ -85,15 +85,21 @@ class DeleteSymbolTest(EditingTest):
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeleteSymbolTest(
-            Language.PYTHON,
-            PYTHON_TEST_REL_FILE_PATH,
-            "VariableContainer",
+        pytest.param(
+            DeleteSymbolTest(
+                Language.PYTHON,
+                PYTHON_TEST_REL_FILE_PATH,
+                "VariableContainer",
+            ),
+            marks=pytest.mark.python,
         ),
-        DeleteSymbolTest(
-            Language.TYPESCRIPT,
-            TYPESCRIPT_TEST_FILE,
-            "DemoClass",
+        pytest.param(
+            DeleteSymbolTest(
+                Language.TYPESCRIPT,
+                TYPESCRIPT_TEST_FILE,
+                "DemoClass",
+            ),
+            marks=pytest.mark.typescript,
         ),
     ],
 )
@@ -138,29 +144,41 @@ class InsertInRelToSymbolTest(EditingTest):
 @pytest.mark.parametrize(
     "test_case",
     [
-        InsertInRelToSymbolTest(
-            Language.PYTHON,
-            PYTHON_TEST_REL_FILE_PATH,
-            "typed_module_var",
-            NEW_PYTHON_VARIABLE,
+        pytest.param(
+            InsertInRelToSymbolTest(
+                Language.PYTHON,
+                PYTHON_TEST_REL_FILE_PATH,
+                "typed_module_var",
+                NEW_PYTHON_VARIABLE,
+            ),
+            marks=pytest.mark.python,
         ),
-        InsertInRelToSymbolTest(
-            Language.PYTHON,
-            PYTHON_TEST_REL_FILE_PATH,
-            "use_module_variables",
-            NEW_PYTHON_FUNCTION,
+        pytest.param(
+            InsertInRelToSymbolTest(
+                Language.PYTHON,
+                PYTHON_TEST_REL_FILE_PATH,
+                "use_module_variables",
+                NEW_PYTHON_FUNCTION,
+            ),
+            marks=pytest.mark.python,
         ),
-        InsertInRelToSymbolTest(
-            Language.TYPESCRIPT,
-            TYPESCRIPT_TEST_FILE,
-            "DemoClass",
-            NEW_TYPESCRIPT_FUNCTION_AFTER,
+        pytest.param(
+            InsertInRelToSymbolTest(
+                Language.TYPESCRIPT,
+                TYPESCRIPT_TEST_FILE,
+                "DemoClass",
+                NEW_TYPESCRIPT_FUNCTION_AFTER,
+            ),
+            marks=pytest.mark.typescript,
         ),
-        InsertInRelToSymbolTest(
-            Language.TYPESCRIPT,
-            TYPESCRIPT_TEST_FILE,
-            "helperFunction",
-            NEW_TYPESCRIPT_FUNCTION,
+        pytest.param(
+            InsertInRelToSymbolTest(
+                Language.TYPESCRIPT,
+                TYPESCRIPT_TEST_FILE,
+                "helperFunction",
+                NEW_TYPESCRIPT_FUNCTION,
+            ),
+            marks=pytest.mark.typescript,
         ),
     ],
 )
@@ -192,17 +210,23 @@ class ReplaceBodyTest(EditingTest):
 @pytest.mark.parametrize(
     "test_case",
     [
-        ReplaceBodyTest(
-            Language.PYTHON,
-            PYTHON_TEST_REL_FILE_PATH,
-            "VariableContainer/modify_instance_var",
-            PYTHON_REPLACED_BODY,
+        pytest.param(
+            ReplaceBodyTest(
+                Language.PYTHON,
+                PYTHON_TEST_REL_FILE_PATH,
+                "VariableContainer/modify_instance_var",
+                PYTHON_REPLACED_BODY,
+            ),
+            marks=pytest.mark.python,
         ),
-        ReplaceBodyTest(
-            Language.TYPESCRIPT,
-            TYPESCRIPT_TEST_FILE,
-            "DemoClass/printValue",
-            TYPESCRIPT_REPLACED_BODY,
+        pytest.param(
+            ReplaceBodyTest(
+                Language.TYPESCRIPT,
+                TYPESCRIPT_TEST_FILE,
+                "DemoClass/printValue",
+                TYPESCRIPT_REPLACED_BODY,
+            ),
+            marks=pytest.mark.typescript,
         ),
     ],
 )
