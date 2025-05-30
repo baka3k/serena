@@ -14,6 +14,23 @@ Note how Serena's tools enable Claude to find and edit the right symbols.
 
 https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
+<p align="center">
+  <em>Serena is under active development! See the latest updates, upcoming features, and lessons learned to stay up to date.</em>
+</p>
+<p align="center">
+  <a href="CHANGELOG.md" style="text-decoration:none; display:inline-block; margin: 0 6px;">
+    <span style="display:inline-block; padding:6px 14px; background:#1e293b; color:#fff; border-radius:5px; font-weight:bold; font-size:13px; text-decoration:none;">Changelog</span>
+  </a>
+  <a href="roadmap.md" style="text-decoration:none; display:inline-block; margin: 0 6px;">
+    <span style="display:inline-block; padding:6px 14px; background:#14532d; color:#fff; border-radius:5px; font-weight:bold; font-size:13px; text-decoration:none;">Roadmap</span>
+  </a>
+  <a href="lessons_learned.md" style="text-decoration:none; display:inline-block; margin: 0 6px;">
+    <span style="display:inline-block; padding:6px 14px; background:#7c4700; color:#fff; border-radius:5px; font-weight:bold; font-size:13px; text-decoration:none;">Lessons Learned</span>
+  </a>
+</p>
+
+
+
 ### LLM Integration
 
 Serena provides the necessary [tools](#full-list-of-tools) for coding workflows, but an LLM is required to do the actual work,
