@@ -324,8 +324,8 @@ class SerenaConfig(SerenaConfigBase):
         num_project_migrations = 0
         for path in loaded_commented_yaml["projects"]:
             path = Path(path).resolve()
-            if not path.exists():
-                log.warning(f"Project path {path} does not exist, skipping.")
+            if not path.exists() or (path.is_dir() and not (path / ProjectConfig.rel_path_to_project_yml()).exists()):
+                log.warning(f"Project path {path} does not exist or does not contain a project configuration file, skipping.")
                 continue
             if path.is_file():
                 path = cls._migrate_out_of_project_config_file(path)
