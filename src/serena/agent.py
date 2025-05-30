@@ -15,6 +15,7 @@ from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from copy import copy, deepcopy
 from dataclasses import dataclass, field
+from fnmatch import fnmatch
 from functools import cached_property
 from logging import Logger
 from pathlib import Path
@@ -1044,6 +1045,45 @@ class ListDirTool(Tool):
 
         result = json.dumps({"dirs": dirs, "files": files})
         return self._limit_length(result, max_answer_chars)
+
+
+class FindFileTool(Tool):
+    """
+    Finds files in the given relative paths
+    """
+
+    def apply(self, file_mask: str, relative_path: str | None = None) -> str:
+        """
+        Finds files matching the given file mask within the given relative path
+
+        :param file_mask: the filename or file mask (using the wildcards * or ?) to search for
+        :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
+        :return: a JSON object with the list of matching files
+        """
+
+        def is_ignored_path(abs_path: str) -> bool:
+            rel_path = os.path.relpath(abs_path, self.get_project_root())
+            return self.language_server.is_ignored_path(rel_path, ignore_unsupported_files=False)
+
+        def is_ignored_file(abs_path: str) -> bool:
+            if is_ignored_path(abs_path):
+                return True
+            filename = os.path.basename(abs_path)
+            is_ignored = not fnmatch(filename, file_mask)
+            if not is_ignored:
+                is_ignored = not fnmatch(filename, file_mask)
+            return is_ignored
+
+        dirs, files = scan_directory(
+            os.path.join(self.get_project_root(), relative_path),
+            relative_to=self.get_project_root(),
+            recursive=True,
+            is_ignored_dir=is_ignored_path,
+            is_ignored_file=is_ignored_file,
+        )
+
+        result = json.dumps({"files": files})
+        return result
 
 
 class GetSymbolsOverviewTool(Tool):
