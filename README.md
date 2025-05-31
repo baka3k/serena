@@ -180,7 +180,11 @@ Serena can be used in various ways, below you will find instructions for selecte
    ```
   
 You can now add Serena to your MCP client as described below for various clients and
-[activate your first project]()
+[activate your first project](#project-activation).
+
+> In the default configuration, Serena will start a small dashboard on localhost that will display logs and allow shutting down the 
+> MCP server (since many clients fail to cleanup processes, leaving zombies behind). If you don't want that, simply set `web_dashboard` to `False`
+> in your `serena_config.yml`. 
 
 ### Configuration
 
