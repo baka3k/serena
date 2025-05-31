@@ -22,7 +22,7 @@ You can install a virtual environment with the required as follows
 1. Create a new virtual environment: `uv venv`
 2. Activate the environment:
     * On Linux/Unix/macOS: `source .venv/bin/activate`
-    * On Windows: `.venv\Scripts\activate.bat`
+    * On Windows: `.venv\Scripts\activate.bat` (in cmd/ps) or `source .venv/Scripts/activate` (in git-bash) 
 3. Install the required packages with all extras: `uv pip install --all-extras -r pyproject.toml -e .`
 
 ### Docker setup
