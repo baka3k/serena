@@ -23,7 +23,6 @@ from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, 
 
 import pathspec
 
-from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
 from .lsp_protocol_handler.lsp_constants import LSPConstants
@@ -47,10 +46,19 @@ from .lsp_protocol_handler import lsp_types
 # since it caches (in-memory) file contents, so we can avoid reading from disk.
 # Moreover, the way we want to use the language server (for retrieving actual content),
 # it makes sense to have more content-related utils directly in it.
+from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files
+
 
 
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, multilspy_types.UnifiedSymbolInformation]
 
+@dataclasses.dataclass(kw_only=True)
+class ReferenceInSymbol:
+    """A symbol retrieved when requesting reference to a symbol, together with the location of the reference"""
+    symbol: multilspy_types.UnifiedSymbolInformation
+    line: int
+    character: int
+    
 @dataclasses.dataclass
 class LSPFileBuffer:
     """
@@ -683,22 +691,7 @@ class LanguageServer:
         """
         with self.open_file(relative_file_path) as file_data:
             file_contents = file_data.contents
-
-        line_contents = file_contents.split("\n")
-        start_lineno = max(0, line - context_lines_before)
-        end_lineno = min(len(line_contents) - 1, line + context_lines_after)
-        # instantiate TextLines with the write LineType
-        text_lines: list[TextLine] = []
-        # before the line
-        for lineno in range(start_lineno, line):
-            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.BEFORE_MATCH))
-        # the line
-        text_lines.append(TextLine(line_number=line, line_content=line_contents[line], match_type=LineType.MATCH))
-        # after the line
-        for lineno in range(line + 1, end_lineno + 1):
-            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.AFTER_MATCH))
-
-        return MatchedConsecutiveLines(lines=text_lines, source_file_path=relative_file_path)
+        return MatchedConsecutiveLines.from_file_contents(file_contents, line=line, context_lines_before=context_lines_before, context_lines_after=context_lines_after, source_file_path=relative_file_path)
 
 
     async def request_completions(
@@ -1234,7 +1227,7 @@ class LanguageServer:
         include_self: bool = False,
         include_body: bool = False,
         include_file_symbols: bool = False,
-    ) -> List[multilspy_types.UnifiedSymbolInformation]:
+    ) -> List[ReferenceInSymbol]:
         """
         Finds all symbols that reference the symbol at the given location.
         This is similar to request_references but filters to only include symbols
@@ -1251,7 +1244,7 @@ class LanguageServer:
         :param include_body: whether to include the body of the symbols in the result.
         :param include_file_symbols: whether to include references that are file symbols. This
             is often a fallback mechanism for when the reference cannot be resolved to a symbol.
-        :return: List of symbols that reference the target symbol.
+        :return: List of objects containing the symbol and the location of the reference.
         """
         if not self.server_started:
             self.logger.log(
@@ -1346,7 +1339,7 @@ class LanguageServer:
                 ):
                     incoming_symbol = containing_symbol
                     if include_self:
-                        result.append(containing_symbol)
+                        result.append(ReferenceInSymbol(symbol=containing_symbol, line=ref_line, character=ref_col))
                         continue
                     else:
                         self.logger.log(f"Found self-reference for {incoming_symbol['name']}, skipping it since {include_self=}", logging.DEBUG)
@@ -1368,7 +1361,7 @@ class LanguageServer:
                     )
                     continue
 
-                result.append(containing_symbol)
+                result.append(ReferenceInSymbol(symbol=containing_symbol, line=ref_line, character=ref_col))
 
         return result
 
@@ -1917,7 +1910,7 @@ class SyncLanguageServer:
         include_imports: bool = True, include_self: bool = False,
         include_body: bool = False,
         include_file_symbols: bool = False,
-    ) -> List[multilspy_types.UnifiedSymbolInformation]:
+    ) -> List[ReferenceInSymbol]:
         """
         Finds all symbols that reference the symbol at the given location.
         This is similar to request_references but filters to only include symbols
@@ -1934,7 +1927,7 @@ class SyncLanguageServer:
         :param include_body: whether to include the body of the symbols in the result.
         :param include_file_symbols: whether to include references that are file symbols. This
             is often a fallback mechanism for when the reference cannot be resolved to a symbol.
-        :return: List of symbols that reference the target symbol.
+        :return: List of objects containing the symbol and the location of the reference.
         """
         assert self.loop
         result = asyncio.run_coroutine_threadsafe(
