@@ -1186,7 +1186,7 @@ class LanguageServer:
             # Explanation for the  + "/" part:
             # pathspec can't handle the matching of directories if they don't end with a slash!
             # see https://github.com/cpburnz/python-pathspec/issues/89
-            dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+            dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d) + "/")]
             for file in files:
                 rel_file_path = os.path.join(root, file)
                 if not self.is_ignored_path(rel_file_path):

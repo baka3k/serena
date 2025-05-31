@@ -1,11 +1,14 @@
+import logging
 import os
 from collections.abc import Generator
 from typing import TypeVar
 
 from multilspy.multilspy_config import Language
-from serena.util.file_system import scan_directory
+from serena.util.file_system import find_all_non_ignored_files
 
 T = TypeVar("T")
+
+log = logging.getLogger(__name__)
 
 
 def iter_subclasses(cls: type[T], recursive: bool = True) -> Generator[type[T], None, None]:
@@ -16,27 +19,15 @@ def iter_subclasses(cls: type[T], recursive: bool = True) -> Generator[type[T], 
             yield from iter_subclasses(subclass, recursive)
 
 
-def determine_programming_language_composition(repo_path: str) -> dict[str, float]:
+def determine_programming_language_composition(repo_path: str, rel_path_to_gitignore: str = ".gitignore") -> dict[str, float]:
     """
     Determine the programming language composition of a repository.
 
     :param repo_path: Path to the repository to analyze
+
     :return: Dictionary mapping language names to percentages of files matching each language
     """
-    if not os.path.exists(repo_path):
-        raise FileNotFoundError(f"Repository path does not exist: {repo_path}")
-
-    if not os.path.isdir(repo_path):
-        raise ValueError(f"Repository path is not a directory: {repo_path}")
-
-    # Scan all files in the repository recursively
-    _, all_files = scan_directory(
-        path=repo_path,
-        recursive=True,
-        relative_to=repo_path,
-        is_ignored_dir=lambda dirname: os.path.basename(dirname).startswith("."),  # Ignore hidden directories
-        is_ignored_file=lambda filename: os.path.basename(filename).startswith("."),  # Ignore hidden files
-    )
+    all_files = find_all_non_ignored_files(repo_path)
 
     if not all_files:
         return {}
