@@ -3,10 +3,10 @@ This script demonstrates how to use Serena's tools locally, useful
 for testing or development. Here the tools will be operation the serena repo itself.
 """
 
-import json
 from pprint import pprint
 
 from serena.agent import *
+from serena.constants import REPO_ROOT
 
 
 @dataclass
@@ -20,10 +20,10 @@ class InMemorySerenaConfig(SerenaConfigBase):
 
 
 if __name__ == "__main__":
-    project_path = str(Path("test") / "resources" / "repos" / "python" / "test_repo")
-    agent = SerenaAgent(project=project_path, serena_config=InMemorySerenaConfig())
+    # project_path = str(Path("test") / "resources" / "repos" / "python" / "test_repo")
+    agent = SerenaAgent(project=REPO_ROOT)
 
     # apply a tool
-    find_symbol_tool = agent.get_tool(FindSymbolTool)
-    print("Finding the symbol 'VariableContainer'\n")
-    pprint(json.loads(find_symbol_tool.apply("VariableContainer", within_relative_path=str(Path("test_repo") / "variables.py"))))
+    find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
+    print("Finding the symbol 'SyncLanguageServer'\n")
+    pprint(json.loads(find_refs_tool.apply(name_path="SyncLanguageServer", relative_file_path="src/multilspy/language_server.py")))

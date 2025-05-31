@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import Any, Self
 
 from joblib import Parallel, delayed
 from pathspec import PathSpec
@@ -38,11 +38,16 @@ class TextLine:
             return "  >"
         return "..."
 
-    def format_line(self) -> str:
-        """Format the line for display with line number and content."""
+    def format_line(self, include_line_numbers: bool = True) -> str:
+        """Format the line for display (e.g.,for logging or passing to an LLM).
+
+        :param include_line_numbers: Whether to include the line number in the result.
+        """
         prefix = self.get_display_prefix()
-        line_num = str(self.line_number).rjust(4)
-        return f"{prefix}{line_num}: {self.line_content}"
+        if include_line_numbers:
+            line_num = str(self.line_number).rjust(4)
+            prefix = f"{prefix}{line_num}"
+        return f"{prefix}:{self.line_content}"
 
 
 @dataclass(kw_only=True)
@@ -52,7 +57,7 @@ class MatchedConsecutiveLines:
     """
 
     lines: list[TextLine]
-    """All lines in the context of the match. At least one of them should be of match_type MATCH."""
+    """All lines in the context of the match. At least one of them is of `match_type` `MATCH`."""
     source_file_path: str | None = None
     """Path to the file where the match was found (Metadata)."""
 
@@ -84,8 +89,27 @@ class MatchedConsecutiveLines:
     def num_matched_lines(self) -> int:
         return len(self.matched_lines)
 
-    def to_display_string(self) -> str:
-        return "\n".join([line.format_line() for line in self.lines])
+    def to_display_string(self, include_line_numbers: bool = True) -> str:
+        return "\n".join([line.format_line(include_line_numbers) for line in self.lines])
+
+    @classmethod
+    def from_file_contents(
+        cls, file_contents: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0, source_file_path: str | None = None
+    ) -> Self:
+        line_contents = file_contents.split("\n")
+        start_lineno = max(0, line - context_lines_before)
+        end_lineno = min(len(line_contents) - 1, line + context_lines_after)
+        text_lines: list[TextLine] = []
+        # before the line
+        for lineno in range(start_lineno, line):
+            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.BEFORE_MATCH))
+        # the line
+        text_lines.append(TextLine(line_number=line, line_content=line_contents[line], match_type=LineType.MATCH))
+        # after the line
+        for lineno in range(line + 1, end_lineno + 1):
+            text_lines.append(TextLine(line_number=lineno, line_content=line_contents[lineno], match_type=LineType.AFTER_MATCH))
+
+        return cls(lines=text_lines, source_file_path=source_file_path)
 
 
 def search_text(

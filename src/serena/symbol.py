@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 from sensai.util.string import ToStringMixin
 
 from multilspy import SyncLanguageServer
+from multilspy.language_server import ReferenceInSymbol as LSPReferenceInSymbol
 from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
 
 if TYPE_CHECKING:
@@ -468,6 +469,24 @@ class Symbol(ToStringMixin):
         return result
 
 
+@dataclass
+class ReferenceInSymbol(ToStringMixin):
+    """Same as the class of the same name in the language server, but using Serena's Symbol class.
+    Be careful to not confuse it with counterpart!
+    """
+
+    symbol: Symbol
+    line: int
+    character: int
+
+    def get_relative_path(self) -> str | None:
+        return self.symbol.location.relative_path
+
+    @classmethod
+    def from_lsp_reference(cls, reference: LSPReferenceInSymbol) -> Self:
+        return cls(symbol=Symbol(reference.symbol), line=reference.line, character=reference.character)
+
+
 class SymbolManager:
     def __init__(self, lang_server: SyncLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
         """
@@ -477,9 +496,6 @@ class SymbolManager:
         """
         self.lang_server = lang_server
         self.agent = agent
-
-    def _to_symbols(self, items: list[UnifiedSymbolInformation]) -> list[Symbol]:
-        return [Symbol(s) for s in items]
 
     def find_by_name(
         self,
@@ -527,27 +543,33 @@ class SymbolManager:
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
-    ) -> tuple[Symbol, list[Symbol]] | None:
+    ) -> list[ReferenceInSymbol]:
         """
         Find all symbols that reference the symbol with the given name.
         If multiple symbols fit the name (e.g. for variables that are overwritten), will use the first one.
+
+        :param name_path: the name path of the symbol to find
+        :param relative_file_path: the relative path of the file in which the referenced symbol is defined.
+        :param include_body: whether to include the body of all symbols in the result.
+            Not recommended, as the referencing symbols will often be files, and thus the bodies will be very long.
+        :param include_kinds: which kinds of symbols to include in the result.
+        :param exclude_kinds: which kinds of symbols to exclude from the result.
         """
         symbol_candidates = self.find_by_name(name_path, substring_matching=False, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
             log.warning(f"No symbol with name {name_path} found in file {relative_file_path}")
-            return None
+            return []
         if len(symbol_candidates) > 1:
             log.error(
                 f"Found {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}."
                 f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the first one. "
                 f"Found symbols for {name_path=} in {relative_file_path=}: \n"
-                f""
+                f"{json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)}"
             )
         symbol = symbol_candidates[0]
-        referencing_symbols = self.find_referencing_symbols_by_location(
+        return self.find_referencing_symbols_by_location(
             symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
         )
-        return symbol, referencing_symbols
 
     def find_referencing_symbols_by_location(
         self,
@@ -555,13 +577,14 @@ class SymbolManager:
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
-    ) -> list[Symbol]:
+    ) -> list[ReferenceInSymbol]:
         """
         Find all symbols that reference the symbol at the given location.
 
         :param symbol_location: the location of the symbol for which to find references.
             Does not need to include an end_line, as it is unused in the search.
         :param include_body: whether to include the body of all symbols in the result.
+            Not recommended, as the referencing symbols will often be files, and thus the bodies will be very long.
             Note: you can filter out the bodies of the children if you set include_children_body=False
             in the to_dict method.
         :param include_kinds: an optional sequence of ints representing the LSP symbol kind.
@@ -575,22 +598,23 @@ class SymbolManager:
         assert symbol_location.relative_path is not None
         assert symbol_location.line is not None
         assert symbol_location.column is not None
-        symbol_dicts = self.lang_server.request_referencing_symbols(
+        references = self.lang_server.request_referencing_symbols(
             relative_file_path=symbol_location.relative_path,
             line=symbol_location.line,
             column=symbol_location.column,
             include_imports=False,
             include_self=False,
             include_body=include_body,
+            include_file_symbols=True,
         )
 
         if include_kinds is not None:
-            symbol_dicts = [s for s in symbol_dicts if s["kind"] in include_kinds]
+            references = [s for s in references if s.symbol["kind"] in include_kinds]
 
         if exclude_kinds is not None:
-            symbol_dicts = [s for s in symbol_dicts if s["kind"] not in exclude_kinds]
+            references = [s for s in references if s.symbol["kind"] not in exclude_kinds]
 
-        return self._to_symbols(symbol_dicts)
+        return [ReferenceInSymbol.from_lsp_reference(r) for r in references]
 
     @contextmanager
     def _edited_file(self, relative_path: str) -> Iterator[None]:

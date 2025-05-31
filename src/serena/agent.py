@@ -37,7 +37,7 @@ from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
-from serena.symbol import SymbolLocation, SymbolManager
+from serena.symbol import SymbolManager
 from serena.text_utils import search_files
 from serena.util.file_system import scan_directory
 from serena.util.general import load_yaml, save_yaml
@@ -1196,96 +1196,48 @@ class FindReferencingSymbolsTool(Tool):
 
     def apply(
         self,
-        relative_path: str,
-        line: int,
-        column: int,
-        include_body: bool = False,
+        name_path: str,
+        relative_file_path: str,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Finds symbols that reference the symbol at the given location.
+        Finds symbols that reference the symbol at the given `name_path`. The result will contain metadata about the referencing symbols
+        as well as a short code snippet around the reference (unless `include_body` is True, then the short snippet will be omitted).
         Note that among other kinds of references, this function can be used to find (direct) subclasses of a class,
         as subclasses are referencing symbols that have the kind class.
 
-        :param relative_path: the relative path to the file containing the symbol
-        :param line: the line number
-        :param column: the column
-        :param include_body: whether to include the body of the symbols in the result.
-            Note that this might lead to a very long output, so you should only use this if you actually need the body
-            of the referencing symbols for the task at hand. Usually it is a better idea to find
-            the referencing symbols without the body and then use the find_symbol tool to get the body of
-            specific symbols if needed.
-        :param include_kinds: an optional list of integers representing the LSP symbol kinds to include.
-            If provided, only symbols of the given kinds will be included in the result.
-            Valid kinds:
-            1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
-            11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
-            20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter
-        :param exclude_kinds: If provided, symbols of the given kinds will be excluded from the result.
-            Takes precedence over include_kinds.
-        :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task. Instead, if the output is too long, you should
-            make a stricter query.
+        :param name_path: for finding the symbol to find references for, same logic as in the `find_symbol` tool.
+        :param relative_file_path: the relative path to the file containing the symbol for which to find references.
+        :param include_kinds: same as in the `find_symbol` tool.
+        :param exclude_kinds: same as in the `find_symbol` tool.
+        :param max_answer_chars: same as in the `find_symbol` tool.
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
+        include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbols = self.symbol_manager.find_referencing_symbols_by_location(
-            SymbolLocation(relative_path, line, column),
+        references_in_symbols = self.symbol_manager.find_referencing_symbols(
+            name_path,
+            relative_file_path=relative_file_path,
             include_body=include_body,
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
         )
-        symbol_dicts = [s.to_dict(kind=True, location=True, depth=0, include_body=include_body) for s in symbols]
-        result = json.dumps(symbol_dicts)
+        reference_dicts = []
+        for ref in references_in_symbols:
+            ref_dict = ref.symbol.to_dict(kind=True, location=True, depth=0, include_body=include_body)
+            if not include_body:
+                ref_relative_path = ref.symbol.location.relative_path
+                assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
+                content_around_ref = self.language_server.retrieve_content_around_line(
+                    relative_file_path=ref_relative_path, line=ref.line, context_lines_before=1, context_lines_after=1
+                )
+                ref_dict["content_around_reference"] = content_around_ref.to_display_string()
+            reference_dicts.append(ref_dict)
+        result = json.dumps(reference_dicts)
         return self._limit_length(result, max_answer_chars)
-
-
-class FindReferencingCodeSnippetsTool(Tool):
-    """
-    Finds code snippets in which the symbol at the given location is referenced.
-    """
-
-    def apply(
-        self,
-        relative_path: str,
-        line: int,
-        column: int,
-        context_lines_before: int = 0,
-        context_lines_after: int = 0,
-        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
-    ) -> str:
-        """
-        Returns short code snippets where the symbol at the given location is referenced.
-
-        Contrary to the `find_referencing_symbols` tool, this tool returns references that are not symbols but instead
-        code snippets that may or may not be contained in a symbol (for example, file-level calls).
-        It may make sense to use this tool to get a quick overview of the code that references
-        the symbol. Usually, just looking at code snippets is not enough to understand the full context,
-        unless the case you are investigating is very simple,
-        or you already have read the relevant symbols using the find_referencing_symbols tool and
-        now want to get an overview of how the referenced symbol (at the given location) is used in them.
-        The size of the snippets is controlled by the context_lines_before and context_lines_after parameters.
-
-        :param relative_path: the relative path to the file containing the symbol
-        :param line: the line number of the symbol to find references for
-        :param column: the column of the symbol to find references for
-        :param context_lines_before: the number of lines to include before the line containing the reference
-        :param context_lines_after: the number of lines to include after the line containing the reference
-        :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task. Instead, if the output is too long, you should
-            make a stricter query.
-        """
-        matches = self.language_server.request_references_with_content(
-            relative_path, line, column, context_lines_before, context_lines_after
-        )
-        result = [match.to_display_string() for match in matches]
-        result_json_str = json.dumps(result)
-        return self._limit_length(result_json_str, max_answer_chars)
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
@@ -1295,23 +1247,21 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
 
     def apply(
         self,
+        name_path: str,
         relative_path: str,
-        line: int,
-        column: int,
         body: str,
     ) -> str:
         """
-        Replaces the body of the symbol at the given location.
-        Important: Do not try to guess symbol locations but instead use the find_symbol tool to get the correct location.
+        Replaces the body of the symbol with the given `name_path`.
 
+        :param name_path: for finding the symbol to replace, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param line: the line number
-        :param column: the column
         :param body: the new symbol body. Important: Provide the correct level of indentation
             (as the original body). Note that the first line must not be indented (i.e. no leading spaces).
         """
-        self.symbol_manager.replace_body_at_location(
-            SymbolLocation(relative_path, line, column),
+        self.symbol_manager.replace_body(
+            name_path,
+            relative_file_path=relative_path,
             body=body,
         )
         return SUCCESS_RESULT
@@ -1324,23 +1274,22 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
 
     def apply(
         self,
+        name_path: str,
         relative_path: str,
-        line: int,
-        column: int,
         body: str,
     ) -> str:
         """
         Inserts the given body/content after the end of the definition of the given symbol (via the symbol's location).
         A typical use case is to insert a new class, function, method, field or variable assignment.
 
+        :param name_path: for finding the symbol to insert after, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param line: the line number
-        :param column: the column
-        :param body: the body/content to be inserted
+        :param body: the body/content to be inserted. Important: the insterted code will automatically have the
+            same indentation as the symbol's body, so you do not need to provide any indentation.
         """
-        location = SymbolLocation(relative_path, line, column)
-        self.symbol_manager.insert_after_symbol_at_location(
-            location,
+        self.symbol_manager.insert_after_symbol(
+            name_path,
+            relative_file_path=relative_path,
             body=body,
         )
         return SUCCESS_RESULT
@@ -1353,9 +1302,8 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
 
     def apply(
         self,
+        name_path: str,
         relative_path: str,
-        line: int,
-        column: int,
         body: str,
     ) -> str:
         """
@@ -1363,13 +1311,14 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         A typical use case is to insert a new class, function, method, field or variable assignment.
         It also can be used to insert a new import statement before the first symbol in the file.
 
+        :param name_path: for finding the symbol to insert before, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param line: the line number
-        :param column: the column
-        :param body: the body/content to be inserted
+        :param body: the body/content to be inserted. Important: the insterted code will automatically have the
+            same indentation as the symbol's body, so you do not need to provide any indentation.
         """
-        self.symbol_manager.insert_before_symbol_at_location(
-            SymbolLocation(relative_path, line, column),
+        self.symbol_manager.insert_before_symbol(
+            name_path,
+            relative_file_path=relative_path,
             body=body,
         )
         return SUCCESS_RESULT
