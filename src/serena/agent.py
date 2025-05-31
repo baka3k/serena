@@ -540,7 +540,13 @@ class SerenaAgent:
 
         # activate a project configuration (if provided or if there is only a single project available)
         if project is not None:
-            self.activate_project_from_path_or_name(project)
+            try:
+                self.activate_project_from_path_or_name(project)
+            except Exception as e:
+                log.error(
+                    f"Error activating project '{project}': {e}; Note that out-of-project configurations were migrated. "
+                    "You should now pass either --project <project_name> or --project <project_root>."
+                )
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
