@@ -17,15 +17,16 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 <p align="center">
   <em>Serena is under active development! See the latest updates, upcoming features, and lessons learned to stay up to date.</em>
 </p>
+
 <p align="center">
-  <a href="CHANGELOG.md" style="text-decoration:none; display:inline-block; margin: 0 6px;">
-    <span style="display:inline-block; padding:6px 14px; background:#1e293b; color:#fff; border-radius:5px; font-weight:bold; font-size:13px; text-decoration:none;">Changelog</span>
+  <a href="CHANGELOG.md">
+    <img src="https://img.shields.io/badge/Updates-1e293b?style=flat&logo=rss&logoColor=white&labelColor=1e293b" alt="Changelog" />
   </a>
-  <a href="roadmap.md" style="text-decoration:none; display:inline-block; margin: 0 6px;">
-    <span style="display:inline-block; padding:6px 14px; background:#14532d; color:#fff; border-radius:5px; font-weight:bold; font-size:13px; text-decoration:none;">Roadmap</span>
+  <a href="roadmap.md">
+    <img src="https://img.shields.io/badge/Roadmap-14532d?style=flat&logo=target&logoColor=white&labelColor=14532d" alt="Roadmap" />
   </a>
-  <a href="lessons_learned.md" style="text-decoration:none; display:inline-block; margin: 0 6px;">
-    <span style="display:inline-block; padding:6px 14px; background:#7c4700; color:#fff; border-radius:5px; font-weight:bold; font-size:13px; text-decoration:none;">Lessons Learned</span>
+  <a href="lessons_learned.md">
+    <img src="https://img.shields.io/badge/Lessons-Learned-7c4700?style=flat&logo=readthedocs&logoColor=white&labelColor=7c4700" alt="Lessons Learned" />
   </a>
 </p>
 
