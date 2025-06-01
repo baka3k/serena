@@ -1457,6 +1457,8 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
         especially if it spans several lines.
 
+        IMPORTANT: REMEMBER TO USE WILDCARDS WEHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+
         :param relative_path: the relative path to the file
         :param regex: a Python-style regular expression, matches of which will be replaced.
             Dot matches all characters, multi-line matching is enabled.
@@ -1479,40 +1481,6 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
                 )
             context.set_updated_content(updated_content)
         return SUCCESS_RESULT
-
-
-class ReplaceTextSpanTool(Tool, ToolMarkerCanEdit):
-    """
-    Replaces text in a file, with the replaced section being demarcated by text snippets.
-    """
-
-    def apply(
-        self,
-        relative_path: str,
-        start_snippet: str,
-        end_snippet: str,
-        repl: str,
-    ) -> str:
-        r"""
-        Replaces the text starting with the given start snippet and ending with the end snippet.
-        The start and end snippets should serve only to delimit the text to be replaced.
-        They must not overlap and must uniquely identify the section to be replaced.
-        They should not be longer than necessary to demarcate the section to be replaced.
-
-        For example, to transform "before start long-middle end after" into "before new after",
-        one would set start_snippet="start" and end_snippet="end", and repl="new",
-        avoiding the need to specify the entire middle section.
-
-        :param relative_path: the relative path to the file
-        :param start_snippet: the text snippet marking the beginning of the section to be replaced.
-        :param end_snippet: the text snippet marking the end of the section to be replaced.
-        """
-        return self.agent.get_tool(ReplaceRegexTool).apply(
-            relative_path,
-            re.escape(start_snippet) + r".*?" + re.escape(end_snippet),
-            repl,
-            allow_multiple_occurrences=False,
-        )
 
 
 class DeleteLinesTool(Tool, ToolMarkerCanEdit):

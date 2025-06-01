@@ -48,6 +48,19 @@ Many more well known python implementations of language servers were subpar in c
 
 We clearly notice that the better the tool gets, the easier it is to make it even better
 
+## Prompting
+
+### Shouting and Emotive Language May Be Needed
+
+When developing the `ReplaceRegexTool` we were initially not able to make Claude 4 (in Claude Desktop) use wildcards to save on output tokens. Neither
+examples nor explicit instructions helped. It was only after adding 
+
+```
+IMPORTANT: REMEMBER TO USE WILDCARDS WEHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+```
+
+to the initial instructions and to the tool description that Claude finally started following the instructions.
+
 ## What Didn't Work
 
 ### Lifespan Handling by MCP Clients
