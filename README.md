@@ -14,6 +14,24 @@ Note how Serena's tools enable Claude to find and edit the right symbols.
 
 https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 
+<p align="center">
+  <em>Serena is under active development! See the latest updates, upcoming features, and lessons learned to stay up to date.</em>
+</p>
+
+<p align="center">
+  <a href="CHANGELOG.md">
+    <img src="https://img.shields.io/badge/Updates-1e293b?style=flat&logo=rss&logoColor=white&labelColor=1e293b" alt="Changelog" />
+  </a>
+  <a href="roadmap.md">
+    <img src="https://img.shields.io/badge/Roadmap-14532d?style=flat&logo=target&logoColor=white&labelColor=14532d" alt="Roadmap" />
+  </a>
+  <a href="lessons_learned.md">
+    <img src="https://img.shields.io/badge/Lessons-Learned-7c4700?style=flat&logo=readthedocs&logoColor=white&labelColor=7c4700" alt="Lessons Learned" />
+  </a>
+</p>
+
+
+
 ### LLM Integration
 
 Serena provides the necessary [tools](#full-list-of-tools) for coding workflows, but an LLM is required to do the actual work,
@@ -163,7 +181,11 @@ Serena can be used in various ways, below you will find instructions for selecte
    ```
   
 You can now add Serena to your MCP client as described below for various clients and
-[activate your first project]()
+[activate your first project](#project-activation).
+
+> In the default configuration, Serena will start a small dashboard on localhost that will display logs and allow shutting down the 
+> MCP server (since many clients fail to cleanup processes, leaving zombies behind). If you don't want that, simply set `web_dashboard` to `False`
+> in your `serena_config.yml`. 
 
 ### Configuration
 
