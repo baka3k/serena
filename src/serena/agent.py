@@ -1429,6 +1429,7 @@ class EditedFileContext:
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
         if self._updated_content is not None and exc_type is None:
+            assert self._project is not None
             with open(self._abs_path, "w", encoding=self._project.project_config.encoding) as f:
                 f.write(self._updated_content)
             log.info(f"Updated content written to {self._abs_path}")
