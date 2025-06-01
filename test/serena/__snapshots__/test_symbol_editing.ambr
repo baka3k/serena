@@ -100,6 +100,7 @@
   
   # Module-level variable with type annotation
   typed_module_var: int = 42
+  
   new_module_var = "Inserted after typed_module_var"
   
   # Regular class with class and instance variables
@@ -199,7 +200,8 @@
   reassignable_module_var = 10
   reassignable_module_var = 20  # Reassigned
   
-  new_module_var = "Inserted after typed_module_var"# Module-level variable with type annotation
+  new_module_var = "Inserted after typed_module_var"
+  # Module-level variable with type annotation
   typed_module_var: int = 42
   
   
@@ -365,6 +367,7 @@
       result = module_var + " used in function"
       other_result = reassignable_module_var * 2
       return result, other_result
+  
   def new_inserted_function():
       print("This is a new function inserted before another.")
   
@@ -462,7 +465,8 @@
   
   
   def new_inserted_function():
-      print("This is a new function inserted before another.")# Function that uses the module variables
+      print("This is a new function inserted before another.")
+  # Function that uses the module variables
   def use_module_variables():
       """Function that uses module-level variables."""
       result = module_var + " used in function"
@@ -495,9 +499,10 @@
           console.log(this.value);
       }
   }
+  
   function newFunctionAfterClass(): void {
       console.log("This function is after DemoClass.");
-  # }
+  }
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
@@ -511,7 +516,8 @@
   '''
   function newFunctionAfterClass(): void {
       console.log("This function is after DemoClass.");
-  # }export class DemoClass {
+  }
+  export class DemoClass {
       value: number;
       constructor(value: number) {
           this.value = value;
@@ -546,6 +552,7 @@
       const demo = new DemoClass(42);
       demo.printValue();
   }
+  
   function newInsertedFunction(): void {
       console.log("This is a new function inserted before another.");
   }
@@ -567,6 +574,7 @@
   function newInsertedFunction(): void {
       console.log("This is a new function inserted before another.");
   }
+  
   export function helperFunction() {
       const demo = new DemoClass(42);
       demo.printValue();
@@ -621,7 +629,9 @@
           # Instance variable with type annotation
           self.typed_instance_var: list[str] = ["item1", "item2"]
   
-              # This body has been replaced
+                  
+      def modify_instance_var(self):
+          # This body has been replaced
           self.instance_var = "Replaced!"
           self.reassignable_instance_var = 999
     # Reassigned
@@ -684,8 +694,11 @@
       constructor(value: number) {
           this.value = value;
       }
-              // This body has been replaced
+          
+      function printValue() {
+          // This body has been replaced
           console.warn("New value: " + this.value);
+      }
   
   }
   

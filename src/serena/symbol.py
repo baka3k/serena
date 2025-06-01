@@ -643,9 +643,15 @@ class SymbolManager:
         """Get the content of a file using the language server."""
         return self.lang_server.language_server.retrieve_full_file_content(relative_path)
 
-    def replace_body(self, name_path: str, relative_file_path: str, body: str) -> None:
+    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
         """
-        Replace the body of the symbol with the given name in the given file.
+        Replace the body of the symbol with the given name_path in the given file.
+
+        :param name_path: the name path of the symbol to replace.
+        :param relative_file_path: the relative path of the file in which the symbol is defined.
+        :param body: the new body
+        :param use_same_indentation: whether to use the same indentation as the original body. This means that
+            the user doesn't have to provide the correct indentation, but can just write the body.
         """
         symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
@@ -658,27 +664,33 @@ class SymbolManager:
                 + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        return self.replace_body_at_location(symbol.location, body)
+        return self.replace_body_at_location(symbol.location, body, use_same_indentation=use_same_indentation)
 
-    def replace_body_at_location(self, location: SymbolLocation, body: str) -> None:
+    def replace_body_at_location(self, location: SymbolLocation, body: str, *, use_same_indentation: bool = True) -> None:
         """
         Replace the body of the symbol at the given location with the given body
 
         :param location: the location of the symbol to replace.
         :param body: the new body
+        :param use_same_indentation: whether to use the same indentation as the original body. This means that
+            the user doesn't have to provide the correct indentation, but can just write the body.
         """
-        # make sure body always ends with at least one newline
-        if not body.endswith("\n"):
-            body += "\n"
-
         with self._edited_symbol_location(location) as symbol:
             assert location.relative_path is not None
             start_pos = symbol.body_start_position
             end_pos = symbol.body_end_position
             if start_pos is None or end_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined body range.")
+            start_line, start_col = start_pos["line"], start_pos["character"]
+            if use_same_indentation:
+                indent = " " * start_col
+                body = "\n".join(indent + line for line in body.splitlines())
+
+            # make sure body always ends with at least one newline
+            if not body.endswith("\n"):
+                body += "\n"
             self.lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
-            self.lang_server.insert_text_at_position(location.relative_path, start_pos["line"], start_pos["character"], body)
+            self.lang_server.insert_text_at_position(location.relative_path, start_line, start_col, body)
 
     def insert_after_symbol(
         self,
@@ -731,14 +743,17 @@ class SymbolManager:
             raise ValueError(f"Symbol at {location} does not have a defined end position.")
 
         line, col = pos["line"], pos["character"]
+        if at_new_line:
+            line += 1
+            col = 0
+            if not body.startswith("\n"):
+                body = "\n" + body
         if use_same_indentation:
             symbol_start_pos = symbol.body_start_position
             assert symbol_start_pos is not None, f"Symbol at {location=} does not have a defined start position."
             symbol_identifier_col = symbol_start_pos["character"]
             indent = " " * (symbol_identifier_col)
             body = "\n".join(indent + line for line in body.splitlines())
-        if at_new_line:
-            line += 1
             # IMPORTANT: without this, the insertion does the wrong thing. See implementation of insert_text_at_position in TextUtils,
             # it is somewhat counterintuitive (never inserts whitespace)
             # I am not 100% sure whether col=0 is always the best choice here.
@@ -807,6 +822,8 @@ class SymbolManager:
             if at_new_line:
                 col = 0
                 line -= 1
+                if not body.endswith("\n"):
+                    body += "\n"
             assert location.relative_path is not None
 
             self.lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)

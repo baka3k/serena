@@ -119,7 +119,7 @@ NEW_PYTHON_VARIABLE = 'new_module_var = "Inserted after typed_module_var"'
 
 NEW_TYPESCRIPT_FUNCTION_AFTER = """function newFunctionAfterClass(): void {
     console.log("This function is after DemoClass.");
-# }"""
+}"""
 
 
 class InsertInRelToSymbolTest(EditingTest):
@@ -187,13 +187,18 @@ def test_insert_in_rel_to_symbol(test_case: InsertInRelToSymbolTest, mode: Liter
     test_case.run_test(content_after_ground_truth=snapshot)
 
 
-PYTHON_REPLACED_BODY = """        # This body has been replaced
-        self.instance_var = "Replaced!"
-        self.reassignable_instance_var = 999
+PYTHON_REPLACED_BODY = """        
+def modify_instance_var(self):
+    # This body has been replaced
+    self.instance_var = "Replaced!"
+    self.reassignable_instance_var = 999
 """
 
-TYPESCRIPT_REPLACED_BODY = """        // This body has been replaced
-        console.warn("New value: " + this.value);
+TYPESCRIPT_REPLACED_BODY = """
+function printValue() {
+    // This body has been replaced
+    console.warn("New value: " + this.value);
+}
 """
 
 
