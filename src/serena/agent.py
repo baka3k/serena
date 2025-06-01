@@ -1109,7 +1109,7 @@ class GetSymbolsOverviewTool(Tool):
     def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Gets an overview of the given file or directory.
-        For each analyzed file, we list the top-level symbols in the file (name, kind, line).
+        For each analyzed file, we list the top-level symbols in the file (name_path, kind).
         Use this tool to get a high-level understanding of the code symbols.
         Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
 
@@ -1118,12 +1118,14 @@ class GetSymbolsOverviewTool(Tool):
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. If the overview is too long, you should use a smaller directory instead,
             (e.g. a subdirectory).
-        :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name, kind, line, column).
+        :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name_path, kind).
         """
         path_to_symbol_infos = self.language_server.request_overview(relative_path)
         result = {}
         for file_path, symbols in path_to_symbol_infos.items():
-            result[file_path] = [_tuple_to_info(*symbol_info) for symbol_info in symbols]
+            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
+            #  The language server methods would need to be adjusted for this.
+            result[file_path] = [{"name_path": symbol[0], "kind": int(symbol[1])} for symbol in symbols]
 
         result_json_str = json.dumps(result)
         return self._limit_length(result_json_str, max_answer_chars)
@@ -1268,16 +1270,26 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
     ) -> str:
         """
         Replaces the body of the symbol with the given `name_path`.
+        IMPORTANT:
+        You don't need to provide an adjusted indentation,
+        as the tool will automatically add the indentation of the original symbol to each line. For example,
+        for replacing a method in python, you can just write (using the standard python indentation):
+        body="def my_method_replacement(self, ...):\n    first_line\n    second_line...". So each line after the first line only has
+        an indentation of 4 (the indentation relative to the first characted), 
+        since the additional indentation will be added by the tool. Same for more deeply nested
+        cases. You always only need to write the relative indentation to the first character of the first line, and that
+        in turn should not have any indentation.
+        ALWAYS REMEMBER TO USE THE CORRECT INDENTATION IN THE BODY!
 
         :param name_path: for finding the symbol to replace, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param body: the new symbol body. Important: Provide the correct level of indentation
-            (as the original body). Note that the first line must not be indented (i.e. no leading spaces).
+        :param body: the new symbol body. 
         """
         self.symbol_manager.replace_body(
             name_path,
             relative_file_path=relative_path,
             body=body,
+            use_same_indentation=True,
         )
         return SUCCESS_RESULT
 
@@ -1300,12 +1312,13 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         :param name_path: for finding the symbol to insert after, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted. Important: the insterted code will automatically have the
-            same indentation as the symbol's body, so you do not need to provide any indentation.
+            same indentation as the symbol's body, so you do not need to provide any additional indentation.
         """
         self.symbol_manager.insert_after_symbol(
             name_path,
             relative_file_path=relative_path,
             body=body,
+            use_same_indentation=True,
         )
         return SUCCESS_RESULT
 
@@ -1329,12 +1342,13 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         :param name_path: for finding the symbol to insert before, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted. Important: the insterted code will automatically have the
-            same indentation as the symbol's body, so you do not need to provide any indentation.
+            same indentation as the symbol's body, so you do not need to provide any additional indentation.
         """
         self.symbol_manager.insert_before_symbol(
             name_path,
             relative_file_path=relative_path,
             body=body,
+            use_same_indentation=True,
         )
         return SUCCESS_RESULT
 
@@ -1955,7 +1969,3 @@ class ToolRegistry:
         for tool_name in sorted(tool_dict.keys()):
             tool_class = tool_dict[tool_name]
             print(f" * `{tool_name}`: {tool_class.get_tool_description().strip()}")
-
-
-def _tuple_to_info(name: str, symbol_type: SymbolKind, line: int, column: int) -> dict[str, int | str]:
-    return {"name": name, "symbol_kind": symbol_type, "line": line, "column": column}
