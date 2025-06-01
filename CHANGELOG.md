@@ -3,10 +3,17 @@ Status of the main branch. Changes prior to the next official version change wil
 
 ## Highlights
 
+### This version is a major change and improvement of Serena
+
+* **Overhaul and major improvement of editing tools!**
+  This represents a very important change in Serena. Symbols can now be addressed by their name_path (including nested ones)
+  and we introduced a regex-based replaced tools. We tuned the prompts and tested the new editing mechanism.
+  It is much more reliable, flexible, and at the same time uses fewer tokens.
+  The line-replacement tools are disabled by default and deprecated, we will likely remove them soon.
 * **Better multi-project support and zero-config setup**: We significantly simplified the config setup, you no longer need to manually
   create `project.yaml` for each project. Project activation is now always available. 
   Any project can now be activated by just asking the LLM to do so and passing the path to a repo.
-* Dashboard as web app and possibility to shut down Serena during 
+* Dashboard as web app and possibility to shut down Serena from it (or the old log GUI).
 * Initial prompt for project supported (has to be added manually for the moment)
 * Massive performance improvement of pattern search tool
 
