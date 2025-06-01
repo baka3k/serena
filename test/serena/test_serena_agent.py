@@ -92,7 +92,7 @@ class TestSerenaAgent:
         # sel_start = def_symbol["location"]["selectionRange"]["start"]
         # Now find references
         find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-        result = find_refs_tool.apply(def_file, loc["line"], loc["column"])
+        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_file_path=loc["relative_path"])
         refs = json.loads(result)
         assert any(
             ref["location"]["relative_path"] == ref_file for ref in refs

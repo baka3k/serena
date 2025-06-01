@@ -22,11 +22,15 @@ def get_repo_path(language: Language) -> Path:
     return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
 
 
-def create_default_ls(language: Language) -> SyncLanguageServer:
+def create_ls(language: Language, repo_path: str):
     config = MultilspyConfig(code_language=language)
-    repo_path = str(get_repo_path(language))
     logger = MultilspyLogger()
     return SyncLanguageServer.create(config, logger, repo_path)
+
+
+def create_default_ls(language: Language) -> SyncLanguageServer:
+    repo_path = str(get_repo_path(language))
+    return create_ls(language, repo_path)
 
 
 @pytest.fixture(scope="session")

@@ -40,7 +40,7 @@ class TestLanguageServerSymbols:
         """Test request_referencing_symbols for a variable."""
         file_path = os.path.join("test_repo", "variables.py")
         # Line 75 contains the field status that is later modified
-        ref_symbols = language_server.request_referencing_symbols(file_path, 74, 4)
+        ref_symbols = [ref.symbol for ref in language_server.request_referencing_symbols(file_path, 74, 4)]
 
         assert len(ref_symbols) > 0
         ref_lines = [ref["location"]["range"]["start"]["line"] for ref in ref_symbols if "location" in ref and "range" in ref["location"]]
@@ -111,7 +111,9 @@ class TestLanguageServerSymbols:
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             raise AssertionError("create_user symbol or its selectionRange not found")
         sel_start = create_user_symbol["selectionRange"]["start"]
-        ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        ref_symbols = [
+            ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        ]
         assert len(ref_symbols) > 0, "No referencing symbols found for create_user (selectionRange)"
 
         # Verify the structure of referencing symbols
@@ -133,7 +135,9 @@ class TestLanguageServerSymbols:
         if not user_symbol or "selectionRange" not in user_symbol:
             raise AssertionError("User symbol or its selectionRange not found")
         sel_start = user_symbol["selectionRange"]["start"]
-        ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        ref_symbols = [
+            ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        ]
         services_references = [
             symbol
             for symbol in ref_symbols
@@ -152,7 +156,9 @@ class TestLanguageServerSymbols:
         if not get_user_symbol or "selectionRange" not in get_user_symbol:
             raise AssertionError("get_user symbol or its selectionRange not found")
         sel_start = get_user_symbol["selectionRange"]["start"]
-        ref_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        ref_symbols = [
+            ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        ]
         method_refs = [
             symbol
             for symbol in ref_symbols
@@ -169,7 +175,7 @@ class TestLanguageServerSymbols:
         file_path = os.path.join("test_repo", "services.py")
         # Line 3 is a blank line or comment
         try:
-            ref_symbols = language_server.request_referencing_symbols(file_path, 3, 0)
+            ref_symbols = [ref.symbol for ref in language_server.request_referencing_symbols(file_path, 3, 0)]
             # If we get here, make sure we got an empty result
             assert ref_symbols == [] or ref_symbols is None
         except Exception:
@@ -448,15 +454,19 @@ class TestLanguageServerSymbols:
         # Get the containing symbol of a variable in a file
         file_path = os.path.join("test_repo", "services.py")
         # import of typing
-        references_to_typing = language_server.request_referencing_symbols(
-            file_path, 4, 6, include_imports=False, include_file_symbols=True
-        )
+        references_to_typing = [
+            ref.symbol
+            for ref in language_server.request_referencing_symbols(file_path, 4, 6, include_imports=False, include_file_symbols=True)
+        ]
         assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
         assert {ref["body"] for ref in references_to_typing} == {""}
 
         # now include bodies
-        references_to_typing = language_server.request_referencing_symbols(
-            file_path, 4, 6, include_imports=False, include_file_symbols=True, include_body=True
-        )
+        references_to_typing = [
+            ref.symbol
+            for ref in language_server.request_referencing_symbols(
+                file_path, 4, 6, include_imports=False, include_file_symbols=True, include_body=True
+            )
+        ]
         assert {ref["kind"] for ref in references_to_typing} == {SymbolKind.File}
         assert references_to_typing[0]["body"]
