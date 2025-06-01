@@ -684,7 +684,8 @@ class SymbolManager:
             start_line, start_col = start_pos["line"], start_pos["character"]
             if use_same_indentation:
                 indent = " " * start_col
-                body = "\n".join(indent + line for line in body.splitlines())
+                body_lines = body.splitlines()
+                body = body_lines[0] + "\n" + "\n".join(indent + line for line in body_lines[1:])
 
             # make sure body always ends with at least one newline
             if not body.endswith("\n"):
