@@ -734,13 +734,13 @@ class SerenaAgent:
 
         # Active modes
         active_mode_names = [mode.name for mode in self.get_active_modes()]
-        result_str += "Active modes: {}\n".format(", ".join(active_mode_names))
+        result_str += "Active modes: {}\n".format(", ".join(active_mode_names)) + "\n"
 
         # Available but not active modes
         all_available_modes = SerenaAgentMode.list_registered_mode_names()
         inactive_modes = [mode for mode in all_available_modes if mode not in active_mode_names]
         if inactive_modes:
-            result_str += "Available but not active modes: {}\n".format(", ".join(inactive_modes))
+            result_str += "Available but not active modes: {}\n".format(", ".join(inactive_modes)) + "\n"
 
         # Active tools
         result_str += "Active tools (after all exclusions from the project, context, and modes):\n"
@@ -1942,6 +1942,8 @@ class InitialInstructionsTool(Tool):
         """
         Get the initial instructions for the current coding project.
         You should always call this tool before starting to work (including using any other tool) on any programming task!
+        The only exception is when a user asks you to activate a project, in which case you should call the `activate_project` first
+        instead and then call this tool.
         """
         return self.agent.create_system_prompt()
 
