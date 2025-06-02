@@ -14,7 +14,7 @@ from agno.tools.toolkit import Toolkit
 from dotenv import load_dotenv
 from sensai.util.logging import LogTime
 
-from serena import serena_root_path
+from serena.constants import REPO_ROOT
 from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
 from serena.config import SerenaAgentContext
 
@@ -65,7 +65,7 @@ class SerenaAgnoAgentProvider:
                 return cls._agent
 
             # change to Serena root
-            os.chdir(serena_root_path())
+            os.chdir(REPO_ROOT)
 
             load_dotenv()
 
@@ -94,7 +94,7 @@ class SerenaAgnoAgentProvider:
                 # If project file path is relative, make it absolute by joining with project root
                 if not project_file.is_absolute():
                     # Get the project root directory (parent of scripts directory)
-                    project_root = Path(serena_root_path())
+                    project_root = Path(REPO_ROOT)
                     project_file = project_root / args_project_file
 
                 # Ensure the path is normalized and absolute

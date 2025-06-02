@@ -34,9 +34,9 @@ from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
-from serena import serena_root_path, serena_version
+from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import PROJECT_TEMPLATE_FILE, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.constants import PROJECT_TEMPLATE_FILE, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME, REPO_ROOT
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
@@ -308,7 +308,7 @@ class SerenaConfig(SerenaConfigBase):
 
     @classmethod
     def get_config_file_path(cls) -> str:
-        return os.path.join(serena_root_path(), cls.CONFIG_FILE)
+        return os.path.join(REPO_ROOT, cls.CONFIG_FILE)
 
     @classmethod
     def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":

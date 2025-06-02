@@ -7,6 +7,8 @@ REPO_ROOT = str(_repo_root_path)
 PROMPT_TEMPLATES_DIR = str(_serena_pkg_path / "resources" / "config" / "prompt_templates")
 CONTEXT_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "contexts")
 MODE_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "modes")
+SERENA_DASHBOARD_DIR = str(_serena_pkg_path / "resources" / "dashboard")
+SERENA_ICON_DIR = str(_serena_pkg_path / "resources" / "icons")
 
 SERENA_MANAGED_DIR_NAME = ".serena"
 
