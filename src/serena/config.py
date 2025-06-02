@@ -121,7 +121,13 @@ class SerenaAgentContext:
         try:
             return cls.from_name(str(name_or_path))
         except FileNotFoundError:
-            return cls.from_yaml(name_or_path)
+            try:
+                return cls.from_yaml(name_or_path)
+            except FileNotFoundError as e:
+                raise FileNotFoundError(
+                    f"Context {name_or_path} not found in {CONTEXT_YAMLS_DIR}. You can load a custom context by using from_yaml() instead.\n"
+                    f"Available contexts:\n{cls.list_registered_context_names()}"
+                ) from e
 
     @classmethod
     def list_registered_context_names(cls) -> list[str]:

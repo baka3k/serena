@@ -34,7 +34,6 @@ dependencies = [
   "dotenv>=0.9.9",
   "pathspec>=0.12.1",
   "psutil>=7.0.0",
-  "agno>=1.2.15",
   "docstring_parser>=0.16",
   "joblib>=1.5.1",
 ]
@@ -73,7 +72,7 @@ google = [
 Homepage = "https://github.com/oraios/serena"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/serena", "src/multilspy"]
+packages = ["src/serena", "src/multilspy", "src/interprompt"]
 
 [tool.black]
 line-length = 140

@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sensai.util import logging
 
-from serena import serena_root_path
+from serena.constants import SERENA_DASHBOARD_DIR
 
 log = logging.getLogger(__name__)
 
@@ -75,8 +75,7 @@ class SerenaDashboardAPI:
         self._setup_routes()
 
     def _setup_routes(self) -> None:
-        static_dir = os.path.join(serena_root_path(), "dashboard")
-        self._app.mount("/dashboard", StaticFiles(directory=static_dir), name="dashboard")
+        self._app.mount("/dashboard", StaticFiles(directory=SERENA_DASHBOARD_DIR), name="dashboard")
 
         self._app.add_api_route("/get_log_messages", self._get_log_messages, methods=["POST"], response_model=ResponseLog)
         self._app.add_api_route("/get_tool_names", self._get_tool_names, methods=["GET"], response_model=ResponseToolNames)

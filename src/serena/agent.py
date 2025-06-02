@@ -21,7 +21,7 @@ from functools import cached_property
 from logging import Logger
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 
 import yaml
 from overrides import override
@@ -34,9 +34,9 @@ from multilspy import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
-from serena import serena_root_path, serena_version
+from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.constants import PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
@@ -297,17 +297,29 @@ class SerenaConfig(SerenaConfigBase):
     CONFIG_FILE = "serena_config.yml"
 
     @classmethod
-    def get_config_file_path(cls) -> str:
-        return os.path.join(serena_root_path(), cls.CONFIG_FILE)
+    def autogenerate(cls) -> None:
+        log.info("Autogenerating Serena configuration file")
+        if os.path.exists(cls.get_config_file_path()):
+            raise FileExistsError(
+                f"Serena configuration file already exists at {cls.get_config_file_path()}. Please remove it if you want to autogenerate a new one."
+            )
+        loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
+        save_yaml(cls.get_config_file_path(), loaded_commented_yaml, preserve_comments=True)
 
     @classmethod
-    def from_config_file(cls) -> "SerenaConfig":
+    def get_config_file_path(cls) -> str:
+        return os.path.join(REPO_ROOT, cls.CONFIG_FILE)
+
+    @classmethod
+    def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":
         """
         Static constructor to create SerenaConfig from the configuration file
         """
         config_file = cls.get_config_file_path()
         if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
+            if not generate_if_missing:
+                raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
+            cls.autogenerate()
 
         log.info(f"Loading Serena configuration from {config_file}")
         try:
@@ -466,6 +478,9 @@ class SerenaAgent:
         serena_config: SerenaConfigBase | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
+        enable_web_dashboard: bool | None = None,
+        enable_gui_log_window: bool | None = None,
+        gui_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -476,9 +491,21 @@ class SerenaAgent:
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
+        :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
+        :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
+            If not specified, will take the value from the serena configuration.
+        :param gui_log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
         """
         # obtain serena configuration
         self.serena_config = serena_config or SerenaConfig.from_config_file()
+        if enable_web_dashboard is not None:
+            self.serena_config.web_dashboard = enable_web_dashboard
+        if enable_gui_log_window is not None:
+            self.serena_config.gui_log_window_enabled = enable_gui_log_window
+        if gui_log_level is not None:
+            gui_log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], gui_log_level.upper())
+            # transform to int
+            self.serena_config.gui_log_window_level = logging.getLevelNamesMapping()[gui_log_level]
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
@@ -706,13 +733,13 @@ class SerenaAgent:
 
         # Active modes
         active_mode_names = [mode.name for mode in self.get_active_modes()]
-        result_str += "Active modes: {}\n".format(", ".join(active_mode_names))
+        result_str += "Active modes: {}\n".format(", ".join(active_mode_names)) + "\n"
 
         # Available but not active modes
         all_available_modes = SerenaAgentMode.list_registered_mode_names()
         inactive_modes = [mode for mode in all_available_modes if mode not in active_mode_names]
         if inactive_modes:
-            result_str += "Available but not active modes: {}\n".format(", ".join(inactive_modes))
+            result_str += "Available but not active modes: {}\n".format(", ".join(inactive_modes)) + "\n"
 
         # Active tools
         result_str += "Active tools (after all exclusions from the project, context, and modes):\n"
@@ -1914,6 +1941,8 @@ class InitialInstructionsTool(Tool):
         """
         Get the initial instructions for the current coding project.
         You should always call this tool before starting to work (including using any other tool) on any programming task!
+        The only exception is when a user asks you to activate a project, in which case you should call the `activate_project` first
+        instead and then call this tool.
         """
         return self.agent.create_system_prompt()
 
