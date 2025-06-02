@@ -21,7 +21,7 @@ from functools import cached_property
 from logging import Logger
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 
 import yaml
 from overrides import override
@@ -475,6 +475,9 @@ class SerenaAgent:
         serena_config: SerenaConfigBase | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
+        enable_web_dashboard: bool | None = None,
+        enable_gui_log_window: bool | None = None,
+        gui_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -485,9 +488,21 @@ class SerenaAgent:
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
+        :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
+        :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
+            If not specified, will take the value from the serena configuration.
+        :param gui_log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
         """
         # obtain serena configuration
         self.serena_config = serena_config or SerenaConfig.from_config_file()
+        if enable_web_dashboard is not None:
+            self.serena_config.web_dashboard = enable_web_dashboard
+        if enable_gui_log_window is not None:
+            self.serena_config.gui_log_window_enabled = enable_gui_log_window
+        if gui_log_level is not None:
+            gui_log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], gui_log_level.upper())
+            # transform to int
+            self.serena_config.gui_log_window_level = logging.getLevelNamesMapping()[gui_log_level]
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa

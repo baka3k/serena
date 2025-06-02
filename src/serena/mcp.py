@@ -102,6 +102,9 @@ def create_mcp_server_and_agent(
     port: int = 8000,
     context: str = DEFAULT_CONTEXT,
     modes: Sequence[str] = DEFAULT_MODES,
+    enable_web_dashboard: bool | None = None,
+    enable_gui_log_window: bool | None = None,
+    gui_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
 ) -> tuple[FastMCP, SerenaAgent]:
     """
     Create an MCP server.
@@ -113,6 +116,10 @@ def create_mcp_server_and_agent(
     :param port: The port to bind to
     :param context: The context name or path to context file
     :param modes: List of mode names or paths to mode files
+    :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
+    :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
+        If not specified, will take the value from the serena configuration.
+    :param gui_log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
     """
     mcp: FastMCP | None = None
     context_instance = SerenaAgentContext.load(context)
@@ -125,6 +132,9 @@ def create_mcp_server_and_agent(
             # project_activation_callback=update_tools
             context=context_instance,
             modes=modes_instances,
+            enable_web_dashboard=enable_web_dashboard,
+            enable_gui_log_window=enable_gui_log_window,
+            gui_log_level=gui_log_level,
         )
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -237,6 +247,27 @@ PROJECT_TYPE = ProjectType()
     default=8000,
     help="Port to bind to (for SSE transport).",
 )
+@click.option(
+    "--enable-web-dashboard",
+    type=bool,
+    is_flag=False,
+    default=None,
+    help="Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.",
+)
+@click.option(
+    "--enable-gui-log-window",
+    type=bool,
+    is_flag=False,
+    default=None,
+    help="Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then. "
+    "If not specified, will take the value from the serena configuration.",
+)
+@click.option(
+    "--gui-log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default=None,
+    help="Log level for the GUI log window. If not specified, will take the value from the serena configuration.",
+)
 def start_mcp_server(
     project_file_opt: str | None,
     project_file_arg: str | None,
@@ -245,6 +276,9 @@ def start_mcp_server(
     transport: Literal["stdio", "sse"] = "stdio",
     host: str = "0.0.0.0",
     port: int = 8000,
+    enable_web_dashboard: bool | None = None,
+    enable_gui_log_window: bool | None = None,
+    gui_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
 ) -> None:
     """Starts the Serena MCP server. By default, will not activate any project at startup.
     If you want to start with an already active project, use --project to pass the project name or path.
@@ -256,7 +290,16 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
-    mcp_server, agent = create_mcp_server_and_agent(project=project_file, host=host, port=port, context=context, modes=modes)
+    mcp_server, agent = create_mcp_server_and_agent(
+        project=project_file,
+        host=host,
+        port=port,
+        context=context,
+        modes=modes,
+        enable_web_dashboard=enable_web_dashboard,
+        enable_gui_log_window=enable_gui_log_window,
+        gui_log_level=gui_log_level,
+    )
 
     # log after server creation such that the log appears in the GUI
     if project_file_arg is not None:
