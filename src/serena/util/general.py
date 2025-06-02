@@ -1,3 +1,4 @@
+import os
 from typing import Literal, overload
 
 from ruamel.yaml import YAML
@@ -26,5 +27,6 @@ def load_yaml(path: str, preserve_comments: bool = False) -> dict | CommentedMap
 
 def save_yaml(path: str, data: dict | CommentedMap, preserve_comments: bool = False) -> None:
     yaml = _create_YAML(preserve_comments)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f)
