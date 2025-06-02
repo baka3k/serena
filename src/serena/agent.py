@@ -295,19 +295,32 @@ class SerenaConfig(SerenaConfigBase):
     loaded_commented_yaml: CommentedMap
 
     CONFIG_FILE = "serena_config.yml"
+    _TEMPLATE_FILE = "serena_config.template.yml"
+
+    @classmethod
+    def autogenerate(cls) -> None:
+        log.info("Autogenerating Serena configuration file")
+        if os.path.exists(cls.get_config_file_path()):
+            raise FileExistsError(
+                f"Serena configuration file already exists at {cls.get_config_file_path()}. Please remove it if you want to autogenerate a new one."
+            )
+        loaded_commented_yaml = load_yaml(cls._TEMPLATE_FILE, preserve_comments=True)
+        save_yaml(cls.get_config_file_path(), loaded_commented_yaml, preserve_comments=True)
 
     @classmethod
     def get_config_file_path(cls) -> str:
         return os.path.join(serena_root_path(), cls.CONFIG_FILE)
 
     @classmethod
-    def from_config_file(cls) -> "SerenaConfig":
+    def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":
         """
         Static constructor to create SerenaConfig from the configuration file
         """
         config_file = cls.get_config_file_path()
         if not os.path.exists(config_file):
-            raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
+            if not generate_if_missing:
+                raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
+            cls.autogenerate()
 
         log.info(f"Loading Serena configuration from {config_file}")
         try:
