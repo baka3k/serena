@@ -36,7 +36,7 @@ from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_root_path, serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.constants import PROJECT_TEMPLATE_FILE, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
@@ -295,7 +295,6 @@ class SerenaConfig(SerenaConfigBase):
     loaded_commented_yaml: CommentedMap
 
     CONFIG_FILE = "serena_config.yml"
-    _TEMPLATE_FILE = "serena_config.template.yml"
 
     @classmethod
     def autogenerate(cls) -> None:
@@ -304,7 +303,7 @@ class SerenaConfig(SerenaConfigBase):
             raise FileExistsError(
                 f"Serena configuration file already exists at {cls.get_config_file_path()}. Please remove it if you want to autogenerate a new one."
             )
-        loaded_commented_yaml = load_yaml(cls._TEMPLATE_FILE, preserve_comments=True)
+        loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
         save_yaml(cls.get_config_file_path(), loaded_commented_yaml, preserve_comments=True)
 
     @classmethod

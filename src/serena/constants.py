@@ -1,15 +1,17 @@
 from pathlib import Path
 
 _repo_root_path = Path(__file__).parent.parent.parent.resolve()
+_serena_pkg_path = Path(__file__).parent.resolve()
 
 REPO_ROOT = str(_repo_root_path)
-PROMPT_TEMPLATES_DIR = str(_repo_root_path / "config" / "prompt_templates")
-CONTEXT_YAMLS_DIR = str(_repo_root_path / "config" / "contexts")
-MODE_YAMLS_DIR = str(_repo_root_path / "config" / "modes")
+PROMPT_TEMPLATES_DIR = str(_serena_pkg_path / "resources" / "config" / "prompt_templates")
+CONTEXT_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "contexts")
+MODE_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "modes")
 
 SERENA_MANAGED_DIR_NAME = ".serena"
 
 DEFAULT_CONTEXT = "desktop-app"
 DEFAULT_MODES = ("interactive", "editing")
 
-PROJECT_TEMPLATE_FILE = str(_repo_root_path / "project.template.yml")
+PROJECT_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "project.template.yml")
+SELENA_CONFIG_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "serena_config.template.yml")
