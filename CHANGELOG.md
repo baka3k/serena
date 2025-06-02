@@ -6,7 +6,7 @@ Status of the main branch. Changes prior to the next official version change wil
 ### This version is a major change and improvement of Serena
 
 * **Overhaul and major improvement of editing tools!**
-  This represents a very important change in Serena. Symbols can now be addressed by their name_path (including nested ones)
+  This represents a very important change in Serena. Symbols can now be addressed by their `name_path` (including nested ones)
   and we introduced a regex-based replaced tools. We tuned the prompts and tested the new editing mechanism.
   It is much more reliable, flexible, and at the same time uses fewer tokens.
   The line-replacement tools are disabled by default and deprecated, we will likely remove them soon.
