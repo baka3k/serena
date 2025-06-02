@@ -629,7 +629,7 @@
           # Instance variable with type annotation
           self.typed_instance_var: list[str] = ["item1", "item2"]
   
-                  
+              
       def modify_instance_var(self):
           # This body has been replaced
           self.instance_var = "Replaced!"
@@ -694,7 +694,7 @@
       constructor(value: number) {
           this.value = value;
       }
-          
+      
       function printValue() {
           // This body has been replaced
           console.warn("New value: " + this.value);
