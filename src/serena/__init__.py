@@ -1,5 +1,6 @@
 __version__ = "2025-05-21"
 
+
 def serena_version() -> str:
     """
     :return: the version of the package, including git status if available.

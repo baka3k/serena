@@ -36,7 +36,7 @@ from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import PROJECT_TEMPLATE_FILE, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME, REPO_ROOT
+from serena.constants import PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager

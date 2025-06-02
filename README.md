@@ -173,19 +173,31 @@ Serena can be used in various ways, below you will find instructions for selecte
 
 ### Setup
 
-1. Install `uv` (instructions [here](https://docs.astral.sh/uv/getting-started/installation/))
-2. Clone the repository.
-3. Copy `serena_config.template.yml` to `serena_config.yml`
+Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/)).
+
+Then you can either
+
+1. Clone the repository and cd into it.
+2. Optionally create a config file from the template and adjust it according to your preferences.
    ```shell
-   cp serena_config.template.yml serena_config.yml
+   cp src/serena/resources/serena_config.template.yml serena_config.yml
    ```
-  
+   If you just want the default config, you can skip this part, and a config file will be created when you first run Serena.
+
+or use `uvx` to run Serena directly by relying on
+
+```shell
+uvx --from git+https://github.com/oraios/serena serena-mcp-server.exe
+```
+
+in your MCP config (delete the `.exe` on macOS or Linux).
+
 You can now add Serena to your MCP client as described below for various clients and
 [activate your first project](#project-activation).
 
 > In the default configuration, Serena will start a small dashboard on localhost that will display logs and allow shutting down the 
 > MCP server (since many clients fail to cleanup processes, leaving zombies behind). If you don't want that, simply set `web_dashboard` to `False`
-> in your `serena_config.yml`. 
+> in your `serena_config.yml` or pass 
 
 ### Configuration
 
@@ -195,7 +207,7 @@ Serena's behavior (like available projects, active tools and prompts) is configu
 2. In the arguments passed to the `serena-mcp-server` in your client's config (see below), 
    which will apply to all sessions started by the respective client. In particular, the [context](#contexts) parameter
    should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
-   See for a detailed explanation. 
+   See for a detailed explanation. You can override all entries from the `serena_config.yml` through command line arguments.
 3. In the `.serena/project.yml` file within your project. This will hold project-level configuration that is used whenever
    that project is activated.
 4. Through the currently active set of [modes](#modes).
@@ -253,6 +265,16 @@ That's it! Save the config and then restart Claude Desktop. You are ready for ac
 uv run serena-mcp-server --help
 ```
 
+ℹ️ You can use Serena without cloning or configuring it explicitly by 
+
+{
+    "mcpServers": {
+        "serena": {
+            "command": "/abs/path/to/uv",
+            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server"]
+        }
+    }
+}
 
 #### Troubleshooting
 
