@@ -23,6 +23,8 @@ web_dashboard: True
 gui_log_level: 20
 # minimum log level for the GUI log window (10 = debug, 20 = info, 30 = warning, 40 = error)
 
+tool_timeout: 240
+# timeout, in seconds, after which tool executions are terminated
 
 # MANAGED BY SERENA, KEEP AT THE BOTTOM OF THE YAML AND DON'T EDIT WITHOUT NEED
 # The list of registered projects.

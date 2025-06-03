@@ -45,6 +45,7 @@ from serena.util.file_system import scan_directory
 from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
+from serena.util.thread import ExecutionResult, execute_with_timeout
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
@@ -53,6 +54,7 @@ log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 TTool = TypeVar("TTool", bound="Tool")
 SUCCESS_RESULT = "OK"
+DEFAULT_TOOL_TIMEOUT: float = 240
 
 
 def show_fatal_exception_safe(e: Exception) -> None:
@@ -205,6 +207,7 @@ class SerenaConfigBase(ABC):
     gui_log_window_enabled: bool = False
     gui_log_window_level: int = logging.INFO
     web_dashboard: bool = True
+    tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
     @cached_property
     def project_paths(self) -> list[str]:
@@ -353,6 +356,7 @@ class SerenaConfig(SerenaConfigBase):
         instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
         instance.gui_log_window_level = loaded_commented_yaml.get("gui_log_level", logging.INFO)
         instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
+        instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:
@@ -968,8 +972,15 @@ class Tool(Component):
                 if not self.agent.is_language_server_running():
                     log.info("Language server is not running. Starting it ...")
                     self.agent.reset_language_server()
-            # apply the actual tool
-            result = apply_fn(**kwargs)
+
+            # apply the actual tool with a timeout
+            execution_fn = lambda: apply_fn(**kwargs)
+            execution_result = execute_with_timeout(execution_fn, self.agent.serena_config.tool_timeout, self.get_name())
+            if execution_result.status == ExecutionResult.Status.SUCCESS:
+                result = cast(str, execution_result.result_value)
+            else:
+                assert execution_result.exception is not None
+                raise execution_result.exception
 
         except Exception as e:
             if not catch_exceptions:
