@@ -57,6 +57,22 @@ SUCCESS_RESULT = "OK"
 DEFAULT_TOOL_TIMEOUT: float = 240
 
 
+def _sanitize_symbol_dict(symbol_dict: dict[str, Any]) -> dict[str, Any]:
+    """
+    Sanitize a symbol dictionary inplace by removing unnecessary information.
+    """
+    # We replace the location entry, which repeats line information already included in body_location
+    # and has unnecessary information on column, by just the relative path.
+    symbol_dict = copy(symbol_dict)
+    s_relative_path = symbol_dict.get("location", {}).get("relative_path")
+    if s_relative_path is not None:
+        symbol_dict["relative_path"] = s_relative_path
+    symbol_dict.pop("location", None)
+    # also remove name, name_path should be enough
+    symbol_dict.pop("name")
+    return symbol_dict
+
+
 def show_fatal_exception_safe(e: Exception) -> None:
     """
     Shows the given exception in the GUI log viewer on the main thread and ensures that the exception is logged or at
@@ -1245,7 +1261,7 @@ class FindSymbolTool(Tool):
             substring_matching=substring_matching,
             within_relative_path=relative_path,
         )
-        symbol_dicts = [s.to_dict(kind=True, location=True, depth=depth, include_body=include_body) for s in symbols]
+        symbol_dicts = [_sanitize_symbol_dict(s.to_dict(kind=True, location=True, depth=depth, include_body=include_body)) for s in symbols]
         result = json.dumps(symbol_dicts)
         return self._limit_length(result, max_answer_chars)
 
@@ -1290,6 +1306,7 @@ class FindReferencingSymbolsTool(Tool):
         reference_dicts = []
         for ref in references_in_symbols:
             ref_dict = ref.symbol.to_dict(kind=True, location=True, depth=0, include_body=include_body)
+            ref_dict = _sanitize_symbol_dict(ref_dict)
             if not include_body:
                 ref_relative_path = ref.symbol.location.relative_path
                 assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
