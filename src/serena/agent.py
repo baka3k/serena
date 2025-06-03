@@ -445,6 +445,8 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
         self._memory_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_memory_file_path(self, name: str) -> Path:
+        # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
+        name = name.replace(".md", "")
         filename = f"{name}.md"
         return self._memory_dir / filename
 
@@ -462,7 +464,7 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
         return f"Memory {name} written."
 
     def list_memories(self) -> list[str]:
-        return [f.name for f in self._memory_dir.iterdir() if f.is_file()]
+        return [f.name.replace(".md", "") for f in self._memory_dir.iterdir() if f.is_file()]
 
     def delete_memory(self, name: str) -> str:
         memory_file_path = self._get_memory_file_path(name)
@@ -1167,7 +1169,7 @@ class FindSymbolTool(Tool):
         self,
         name_path: str,
         depth: int = 0,
-        within_relative_path: str | None = None,
+        relative_path: str | None = None,
         include_body: bool = False,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
@@ -1207,7 +1209,11 @@ class FindSymbolTool(Tool):
 
         :param name_path: The name path pattern to search for, see above for details.
         :param depth: Depth to retrieve descendants (e.g., 1 for class methods/attributes).
-        :param within_relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
+        :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
+            If a directory is passed, the search will be restricted to the files in that directory.
+            If a file is passed, the search will be restricted to that file.
+            If you have some knowledge about the codebase, you should use this parameter, as it will significantly
+            speed up the search as well as reduce the number of results.
         :param include_body: If True, include the symbol's source code. Use judiciously.
         :param include_kinds: Optional. List of LSP symbol kind integers to include. (e.g., 5 for Class, 12 for Function).
             Valid kinds: 1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
@@ -1226,7 +1232,7 @@ class FindSymbolTool(Tool):
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
             substring_matching=substring_matching,
-            within_relative_path=within_relative_path,
+            within_relative_path=relative_path,
         )
         symbol_dicts = [s.to_dict(kind=True, location=True, depth=depth, include_body=include_body) for s in symbols]
         result = json.dumps(symbol_dicts)
@@ -1241,7 +1247,7 @@ class FindReferencingSymbolsTool(Tool):
     def apply(
         self,
         name_path: str,
-        relative_file_path: str,
+        relative_path: str,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
@@ -1253,7 +1259,8 @@ class FindReferencingSymbolsTool(Tool):
         as subclasses are referencing symbols that have the kind class.
 
         :param name_path: for finding the symbol to find references for, same logic as in the `find_symbol` tool.
-        :param relative_file_path: the relative path to the file containing the symbol for which to find references.
+        :param relative_path: the relative path to the file containing the symbol for which to find references.
+            Note that here you can't pass a directory but must pass a file.
         :param include_kinds: same as in the `find_symbol` tool.
         :param exclude_kinds: same as in the `find_symbol` tool.
         :param max_answer_chars: same as in the `find_symbol` tool.
@@ -1264,7 +1271,7 @@ class FindReferencingSymbolsTool(Tool):
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
         references_in_symbols = self.symbol_manager.find_referencing_symbols(
             name_path,
-            relative_file_path=relative_file_path,
+            relative_file_path=relative_path,
             include_body=include_body,
             include_kinds=parsed_include_kinds,
             exclude_kinds=parsed_exclude_kinds,
@@ -1610,12 +1617,13 @@ class WriteMemoryTool(Tool):
     Writes a named memory (for future reference) to Serena's project-specific memory store.
     """
 
-    def apply(self, memory_file_name: str, content: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, memory_name: str, content: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Write some information about this project that can be useful for future tasks to a memory file.
+        Write some information about this project that can be useful for future tasks to a memory.
+        Use markdown formatting for the content.
         The information should be short and to the point.
-        The memory file name should be meaningful, such that from the name you can infer what the information is about.
-        It is better to have multiple small memory files than to have a single large one because
+        The memory name should be meaningful, such that from the name you can infer what the information is about.
+        It is better to have multiple small memories than to have a single large one because
         memories will be read one by one and we only ever want to read relevant memories.
 
         This tool is either called during the onboarding process or when you have identified
@@ -1623,11 +1631,10 @@ class WriteMemoryTool(Tool):
         """
         if len(content) > max_answer_chars:
             raise ValueError(
-                f"Content for {memory_file_name} is too long. Max length is {max_answer_chars} characters. "
-                + "Please make the content shorter."
+                f"Content for {memory_name} is too long. Max length is {max_answer_chars} characters. " + "Please make the content shorter."
             )
 
-        return self.memories_manager.save_memory(memory_file_name, content)
+        return self.memories_manager.save_memory(memory_name, content)
 
 
 class ReadMemoryTool(Tool):

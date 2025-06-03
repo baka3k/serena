@@ -26,4 +26,4 @@ if __name__ == "__main__":
     # apply a tool
     find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
     print("Finding the symbol 'SyncLanguageServer'\n")
-    pprint(json.loads(find_refs_tool.apply(name_path="SyncLanguageServer", relative_file_path="src/multilspy/language_server.py")))
+    pprint(json.loads(find_refs_tool.apply(name_path="SyncLanguageServer", relative_path="src/multilspy/language_server.py")))
