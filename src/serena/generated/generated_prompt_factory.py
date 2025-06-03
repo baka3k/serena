@@ -1,12 +1,13 @@
+
 # ruff: noqa
 # black: skip
 # mypy: ignore-errors
 
 # NOTE: This module is auto-generated from interprompt.autogenerate_prompt_factory_module, do not edit manually!
 
-from interprompt.promt_template import PromptFactoryBase, PromptList
+from interprompt.multilang_prompt import PromptList
+from interprompt.prompt_factory import PromptFactoryBase
 from typing import Any
-
 
 class PromptFactory(PromptFactoryBase):
     """
