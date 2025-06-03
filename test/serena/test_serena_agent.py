@@ -83,7 +83,7 @@ class TestSerenaAgent:
         agent = serena_agent
         # Find the symbol location first
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(symbol_name, within_relative_path=def_file)
+        result = find_symbol_tool.apply(symbol_name, relative_path=def_file)
         time.sleep(1)
         symbols = json.loads(result)
         # Find the definition location
@@ -92,7 +92,7 @@ class TestSerenaAgent:
         # sel_start = def_symbol["location"]["selectionRange"]["start"]
         # Now find references
         find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_file_path=loc["relative_path"])
+        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=loc["relative_path"])
         refs = json.loads(result)
         assert any(
             ref["location"]["relative_path"] == ref_file for ref in refs
@@ -178,7 +178,7 @@ class TestSerenaAgent:
         result = find_symbol_tool.apply(
             name_path=name_path,
             depth=0,
-            within_relative_path=None,
+            relative_path=None,
             include_body=False,
             include_kinds=None,
             exclude_kinds=None,
