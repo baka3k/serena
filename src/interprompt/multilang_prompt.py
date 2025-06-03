@@ -1,7 +1,7 @@
 import logging
 import os
 from enum import Enum
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import yaml
 from sensai.util.string import ToStringMixin
@@ -19,8 +19,8 @@ class PromptTemplate(ToStringMixin, ParameterizedTemplateInterface):
     def _tostring_exclude_private(self) -> bool:
         return True
 
-    def render(self, **kwargs: Any) -> str:
-        return self._jinja_template.render(**kwargs)
+    def render(self, **params: Any) -> str:
+        return self._jinja_template.render(**params)
 
     def get_parameters(self) -> list[str]:
         return self._jinja_template.get_parameters()
@@ -123,8 +123,6 @@ class _MultiLangContainer(Generic[T], ToStringMixin):
 
 
 class MultiLangPromptTemplate(ParameterizedTemplateInterface):
-    _FORBIDDEN_PARAM_NAMES: ClassVar[set[str]] = {"lang_code", "fallback_mode"}  # avoid collisions with **kwargs in calls to render
-
     """
     Represents a prompt template with support for multiple languages.
     The parameters of all prompt templates (for all languages) are (must be) the same.
@@ -153,11 +151,6 @@ class MultiLangPromptTemplate(ParameterizedTemplateInterface):
         :param allow_overwrite: whether to allow overwriting an existing entry for the same language
         """
         incoming_parameters = prompt_template.get_parameters()
-        if contained_fobidden_parameters := self._FORBIDDEN_PARAM_NAMES.intersection(incoming_parameters):
-            raise ValueError(
-                f"Cannot add prompt template for language '{lang_code}' to MultiLangPromptTemplate '{self.name}'"
-                f"since it contains forbidden parameter names: {contained_fobidden_parameters}"
-            )
         if len(self) > 0:
             parameters = self.get_parameters()
             if parameters != incoming_parameters:
@@ -182,10 +175,13 @@ class MultiLangPromptTemplate(ParameterizedTemplateInterface):
         return first_prompt_template.get_parameters()
 
     def render(
-        self, lang_code: str = DEFAULT_LANG_CODE, fallback_mode: LanguageFallbackMode = LanguageFallbackMode.EXCEPTION, **kwargs: Any
+        self,
+        params: dict[str, Any],
+        lang_code: str = DEFAULT_LANG_CODE,
+        fallback_mode: LanguageFallbackMode = LanguageFallbackMode.EXCEPTION,
     ) -> str:
         prompt_template = self.get_prompt_template(lang_code, fallback_mode)
-        return prompt_template.render(**kwargs)
+        return prompt_template.render(**params)
 
 
 class MultiLangPromptList(_MultiLangContainer[PromptList]):
@@ -313,8 +309,8 @@ class MultiLangPromptCollection:
     def render_prompt_template(
         self,
         prompt_name: str,
+        params: dict[str, Any],
         lang_code: str = DEFAULT_LANG_CODE,
-        **kwargs: Any,
     ) -> str:
         """Renders the prompt template for the given prompt name and language code."""
-        return self.get_prompt_template(prompt_name, lang_code=lang_code).render(**kwargs)
+        return self.get_prompt_template(prompt_name, lang_code=lang_code).render(**params)

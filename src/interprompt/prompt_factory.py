@@ -1,7 +1,8 @@
 import logging
 import os
-from .multilang_prompt import MultiLangPromptCollection, DEFAULT_LANG_CODE, LanguageFallbackMode, PromptList
+from typing import Any
 
+from .multilang_prompt import DEFAULT_LANG_CODE, LanguageFallbackMode, MultiLangPromptCollection, PromptList
 
 log = logging.getLogger(__name__)
 
@@ -20,8 +21,9 @@ class PromptFactoryBase:
         self.lang_code = lang_code
         self._prompt_collection = MultiLangPromptCollection(prompts_dir, fallback_mode=fallback_mode)
 
-    def _render_prompt(self, prompt_name: str, **kwargs) -> str:
-        return self._prompt_collection.render_prompt_template(prompt_name, self.lang_code, **kwargs)
+    def _render_prompt(self, prompt_name: str, params: dict[str, Any]) -> str:
+        del params["self"]
+        return self._prompt_collection.render_prompt_template(prompt_name, params, lang_code=self.lang_code)
 
     def _get_prompt_list(self, prompt_name: str) -> PromptList:
         return self._prompt_collection.get_prompt_list(prompt_name, self.lang_code)
@@ -48,6 +50,7 @@ from interprompt.multilang_prompt import PromptList
 from interprompt.prompt_factory import PromptFactoryBase
 from typing import Any
 
+
 class PromptFactory(PromptFactoryBase):
     \"""
     A class for retrieving and rendering prompt templates and prompt lists.
@@ -58,15 +61,13 @@ class PromptFactory(PromptFactoryBase):
 
     for template_name in prompt_collection.get_prompt_template_names():
         template_parameters = prompt_collection.get_prompt_template_parameters(template_name)
-        render_call_str = f'"{template_name}"'
         if len(template_parameters) == 0:
             method_params_str = ""
         else:
             method_params_str = ", *, " + ", ".join([f"{param}: Any" for param in template_parameters])
-            render_call_str += ", " + ", ".join([f"{param}={param}" for param in template_parameters])
         generated_code += f"""
     def create_{template_name}(self{method_params_str}) -> str:
-        return self._render_prompt({render_call_str})
+        return self._render_prompt('{template_name}', locals())
 """
     for prompt_list_name in prompt_collection.get_prompt_list_names():
         generated_code += f"""
