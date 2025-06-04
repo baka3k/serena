@@ -221,7 +221,7 @@ class SerenaConfigBase(ABC):
 
     projects: list[Project] = field(default_factory=list)
     gui_log_window_enabled: bool = False
-    gui_log_window_level: int = logging.INFO
+    log_level: int = logging.INFO
     web_dashboard: bool = True
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
@@ -370,7 +370,7 @@ class SerenaConfig(SerenaConfigBase):
             instance.projects.append(project)
 
         instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
-        instance.gui_log_window_level = loaded_commented_yaml.get("gui_log_level", logging.INFO)
+        instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
         instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
 
@@ -527,7 +527,13 @@ class SerenaAgent:
         if gui_log_level is not None:
             gui_log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], gui_log_level.upper())
             # transform to int
-            self.serena_config.gui_log_window_level = logging.getLevelNamesMapping()[gui_log_level]
+            self.serena_config.log_level = logging.getLevelNamesMapping()[gui_log_level]
+
+        # adjust log level
+        log_level = self.serena_config.log_level
+        if Logger.root.level > log_level:
+            log.info(f"Changing the root logger level to {log_level}")
+            Logger.root.setLevel(log_level)
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
@@ -539,10 +545,6 @@ class SerenaAgent:
                 # which uv used as a base, unfortunately)
                 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 
-                log_level = self.serena_config.gui_log_window_level
-                if Logger.root.level > log_level:
-                    log.info(f"Root logger level is higher than GUI log level; changing the root logger level to {log_level}")
-                    Logger.root.setLevel(log_level)
                 self._gui_log_handler = GuiLogViewerHandler(
                     GuiLogViewer("dashboard", title="Serena Logs"), level=log_level, format_string=LOG_FORMAT
                 )
@@ -558,7 +560,7 @@ class SerenaAgent:
 
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
-            dashboard_log_handler = MemoryLogHandler(level=self.serena_config.gui_log_window_level)
+            dashboard_log_handler = MemoryLogHandler(level=log_level)
             Logger.root.addHandler(dashboard_log_handler)
             self._dashboard_thread, port = SerenaDashboardAPI(dashboard_log_handler, tool_names).run_in_thread()
             webbrowser.open(f"http://localhost:{port}/dashboard/index.html")

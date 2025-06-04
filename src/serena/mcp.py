@@ -311,7 +311,7 @@ def start_mcp_server(
 
     log.info(
         f"Starting serena agent in MCP server with config:\n{agent.get_current_config_overview()}."
-        f"\n Loglevel: {agent.serena_config.gui_log_window_level}"
+        f"\n Log level: {agent.serena_config.log_level}"
     )
 
     mcp_server.run(transport=transport)

@@ -20,8 +20,8 @@ web_dashboard: True
 # shows Serena's current session logs - as an alternative to the GUI log window which
 # is supported on all platforms.
 
-gui_log_level: 20
-# minimum log level for the GUI log window (10 = debug, 20 = info, 30 = warning, 40 = error)
+log_level: 20
+# the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
 
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated
