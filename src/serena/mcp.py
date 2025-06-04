@@ -160,7 +160,7 @@ def create_mcp_server_and_agent(
         nonlocal agent
         mark_used(mcp_server)
         yield
-        del agent
+        agent.language_server.stop()
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
     mcp = FastMCP(**mcp_settings.model_dump())
