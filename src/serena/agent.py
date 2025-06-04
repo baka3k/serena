@@ -750,7 +750,7 @@ class SerenaAgent:
             result_str += f"Active project: {self._active_project.project_name}\n"
         else:
             result_str += "No active project\n"
-        result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names))
+        result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names)) + "\n"
         result_str += f"Active context: {self._context.name}\n"
 
         # Active modes
