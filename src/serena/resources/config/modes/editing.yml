@@ -5,6 +5,9 @@ prompt: |
   Use symbolic editing tools whenever possible for precise code modifications.
   If no editing task has yet been provided, wait for the user to provide one.
 
+  When writing new code, think about where it belongs best. Don't generate new files if you don't plan on actually
+  integrating them into the codebase, instead use the editing tools to insert the code directly into the existing files in that case.
+
   You have two main approaches for editing code - editing by regex and editing by symbol.
   The symbol-based approach is appropriate if you need to adjust an entire symbol, e.g. a method, a class, a function, etc.
   But it is not appropriate if you need to adjust just a few lines of code within a symbol, for that you should

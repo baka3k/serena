@@ -10,7 +10,17 @@ prompts:
 
     When reading code in order to answer a user question or task, you should try reading only the necessary code. 
     Some tasks may require you to understand the architecture of large parts of the codebase, while for others,
-    it may be enough to read a single file or a small set of symbols.
+    it may be enough to read a small set of symbols or a single file.
+    Generally, you should avoid reading entire files unless it is absolutely necessary, instead relying on
+    intelligent step-by-step acquisition of information. However, if you already read a file, it does not make
+    sense to further analyse it with the symbolic tools (except for the `find_referencing_symbols` tool), 
+    as you already have the information.
+
+    I WILL BE SERIOUSLY UPSET IF YOU READ ENTIRE FILES WITHOUT NEED! CONSIDER INSTEAD USING THE OVERVIEW TOOL AND
+    SYMBOLIC TOOLS TO READ ONLY THE NECESSARY CODE FIRST!
+    I WILL BE EVEN MORE UPSET IF AFTER HAVING READ AN ENTIRE FILE YOU KEEP READING THE SAME CONTENT WITH THE SYMBOLIC TOOLS!
+    THE PURPOSE OF THE SYMBOLIC TOOLS IS TO HAVE TO READ LESS CODE, NOT READ THE SAME CONTENT MULTIPLE TIMES!
+
     You can achieve the intelligent reading of code by using the symbolic tools for getting an overview of symbols and
     the relations between them, and then only reading the bodies of symbols that are necessary to answer the question 
     or complete the task. You can also use the standard tools like list_dir, find_file and search_for_pattern if you need to.

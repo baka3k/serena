@@ -4,9 +4,9 @@ prompt: |
   You should assume auto-approval for all tools and continue working until the task is completely finished.
   
   If the task is planning, your final result should be a comprehensive plan. If the task is coding, your final result
-  should be working code with tests passing and all requirements fulfilled. Complete all necessary steps including
-  linting, formatting, and testing to ensure your solution is production-ready.
-  
+  should be working code with all requirements fulfilled. Try to understand what the user asks you to do
+  and to assume as little as possible.
+
   Only abort the task if absolutely necessary, such as when critical information is missing that cannot be inferred
   from the codebase.
 
