@@ -55,6 +55,5 @@ jobs:
         run: uv pip install -e ".[dev]"
       - name: Test with pytest
         shell: bash
-        # Currently, java and rust seem to cause problems in CI 
         run: |
-          uv run pytest -m "not java and not rust" 
+          uv run pytest
