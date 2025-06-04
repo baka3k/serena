@@ -256,7 +256,7 @@ class LanguageServer:
         self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self.load_cache()
-        self._cache_has_changed = bool
+        self._cache_has_changed: bool = False
         self.language = Language(language_id)
 
         # Set up the pathspec matcher for the ignored paths
@@ -814,7 +814,7 @@ class LanguageServer:
                     self.logger.log(f"Returning cached document symbols for {relative_file_path}", logging.DEBUG)
                     return result
                 else:
-                    self.logger.log(f"Content for {relative_file_path} has changed. Overwriting cache", logging.INFO)
+                    self.logger.log(f"Content for {relative_file_path} has changed. Overwriting in-memory cache", logging.INFO)
 
 
             response = await self.server.send.document_symbol(
@@ -1565,6 +1565,7 @@ class LanguageServer:
                         f"Failed to save document symbols cache to {self._cache_path}: {e}. "
                         "Note: this may have resulted in a corrupted cache file.", logging.ERROR
                     )
+        self._cache_has_changed = False
 
     def load_cache(self):
         if not self._cache_path.exists():
@@ -2083,6 +2084,7 @@ class SyncLanguageServer:
 
         If the language server is not running, this method will log a warning and do nothing.
         """
+        self.save_cache()
         if not self.is_running():
             self.language_server.logger.log("Language server not running, skipping shutdown.", logging.INFO)
             return
@@ -2093,7 +2095,6 @@ class SyncLanguageServer:
         self.loop_thread.join()
         self.loop = None
         self.loop_thread = None
-        self.save_cache()
 
     def save_cache(self):
         """
