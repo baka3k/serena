@@ -835,6 +835,7 @@ class SerenaAgent:
         if self.is_language_server_running():
             log.info("Stopping the language server ...")
             assert self.language_server is not None
+            self.language_server.save_cache()
             self.language_server.stop()
         if self._gui_log_handler:
             log.info("Stopping the GUI log window ...")
@@ -1007,6 +1008,11 @@ class Tool(Component):
 
         if log_call:
             log.info(f"Result: {result}")
+
+        try:
+            self.language_server.save_cache()
+        except Exception as e:
+            log.error(f"Error saving language server cache: {e}")
 
         return result
 
