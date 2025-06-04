@@ -11,6 +11,8 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Literal
 
+from serena import constants
+
 log = logging.getLogger(__name__)
 
 
@@ -218,7 +220,7 @@ class GuiLogViewer:
             self.root.rowconfigure(0, weight=0)  # Logo row
             self.root.rowconfigure(1, weight=1)  # Text content row
 
-            dashboard_path = Path(__file__).parent.parent.parent / "dashboard"
+            dashboard_path = Path(constants.SERENA_DASHBOARD_DIR)
 
             # Load and display the logo image
             try:
