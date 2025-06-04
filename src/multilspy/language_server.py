@@ -814,9 +814,9 @@ class LanguageServer:
                     self.logger.log(f"Returning cached document symbols for {relative_file_path}", logging.DEBUG)
                     return result
                 else:
-                    self.logger.log(f"Content for {relative_file_path} has changed. Overwriting in-memory cache", logging.INFO)
+                    self.logger.log(f"Content for {relative_file_path} has changed. Overwriting in-memory cache", logging.DEBUG)
 
-
+            self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
             response = await self.server.send.document_symbol(
                 {
                     "textDocument": {
@@ -824,6 +824,7 @@ class LanguageServer:
                     }
                 }
             )
+            self.logger.log(f"Received {len(response) if response is not None else None} document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
 
         def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
             item = cast(multilspy_types.UnifiedSymbolInformation, item)
@@ -1565,6 +1566,8 @@ class LanguageServer:
                         f"Failed to save document symbols cache to {self._cache_path}: {e}. "
                         "Note: this may have resulted in a corrupted cache file.", logging.ERROR
                     )
+        else:
+            self.logger.log(f"No changes to document symbols cache, skipping save", logging.DEBUG)
         self._cache_has_changed = False
 
     def load_cache(self):
