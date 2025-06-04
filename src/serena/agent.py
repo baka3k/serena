@@ -558,7 +558,7 @@ class SerenaAgent:
 
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
-            dashboard_log_handler = MemoryLogHandler()
+            dashboard_log_handler = MemoryLogHandler(level=self.serena_config.gui_log_window_level)
             Logger.root.addHandler(dashboard_log_handler)
             self._dashboard_thread, port = SerenaDashboardAPI(dashboard_log_handler, tool_names).run_in_thread()
             webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
