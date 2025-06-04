@@ -51,7 +51,7 @@ class TestSerenaAgent:
         result = find_symbol_tool.apply(symbol_name)
         symbols = json.loads(result)
         assert any(
-            symbol_name in s["name"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["location"]["relative_path"]
+            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
             for s in symbols
         ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file} for {agent.get_active_project().language.name}"
 
@@ -86,16 +86,14 @@ class TestSerenaAgent:
         result = find_symbol_tool.apply(symbol_name, relative_path=def_file)
         time.sleep(1)
         symbols = json.loads(result)
-        # Find the definition location
+        # Find the definition
         def_symbol = symbols[0]
-        loc = def_symbol["location"]
-        # sel_start = def_symbol["location"]["selectionRange"]["start"]
         # Now find references
         find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=loc["relative_path"])
+        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
         refs = json.loads(result)
         assert any(
-            ref["location"]["relative_path"] == ref_file for ref in refs
+            ref["relative_path"] == ref_file for ref in refs
         ), f"Expected to find reference to {symbol_name} in {ref_file} for {agent._active_project.language.name}. refs={refs}"
 
     @pytest.mark.parametrize(
@@ -186,9 +184,9 @@ class TestSerenaAgent:
         )
         symbols = json.loads(result)
         assert any(
-            expected_symbol_name == s["name"]
+            expected_symbol_name == s["name_path"].split("/")[-1]
             and expected_kind.lower() in s["kind"].lower()
-            and expected_file in s["location"]["relative_path"]
+            and expected_file in s["relative_path"]
             for s in symbols
         ), f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent._active_project.language.name}. Symbols: {symbols}"
 
