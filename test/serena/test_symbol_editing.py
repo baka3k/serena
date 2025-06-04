@@ -14,6 +14,8 @@ from serena.symbol import CodeDiff
 from src.serena.symbol import SymbolManager
 from test.conftest import create_ls, get_repo_path
 
+pytestmark = pytest.mark.snapshot
+
 
 class EditingTest:
     def __init__(self, language: Language, rel_path: str):
@@ -61,7 +63,7 @@ class EditingTest:
     def _apply_edit(self, symbol_manager: SymbolManager) -> None:
         pass
 
-    def _test_diff(self, code_diff: CodeDiff, snapshot) -> None:
+    def _test_diff(self, code_diff: CodeDiff, snapshot: str) -> None:
         assert code_diff.modified_content == snapshot
 
 

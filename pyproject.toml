@@ -258,4 +258,5 @@ markers = [
     "rust: language server running for Rust",
     "typescript: language server running for TypeScript",
     "php: language server running for PHP",
+    "snapshot: snapshot tests",
 ]
