@@ -794,7 +794,7 @@ class SerenaAgent:
         """
         # stop the language server if it is running
         if self.is_language_server_running():
-            log.info("Stopping the language server ...")
+            log.info(f"Stopping the current language server at {self.language_server.repository_root_path} ...")
             assert self.language_server is not None
             self.language_server.stop()
             self.language_server = None
@@ -805,6 +805,7 @@ class SerenaAgent:
             code_language=self._active_project.project_config.language, ignored_paths=self._active_project.project_config.ignored_paths
         )
         ls_logger = MultilspyLogger(log_level=self.serena_config.log_level)
+        log.info(f"Starting language server for {self._active_project.project_root}.")
         self.language_server = SyncLanguageServer.create(
             multilspy_config,
             ls_logger,

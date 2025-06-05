@@ -802,7 +802,6 @@ class LanguageServer:
             where the parent attribute will be the file symbol which in turn may have a package symbol as parent.
             If you need a symbol tree that contains file symbols as well, you should use `request_full_symbol_tree` instead.
         """
-        self.logger.log(f"Requesting document symbols for {relative_file_path} for the first time", logging.DEBUG)
         # TODO: it's kinda dumb to not use the cache if include_body is False after include_body was True once
         #   Should be fixed in the future, it's a small performance optimization
         cache_key = f"{relative_file_path}-{include_body}"
@@ -814,7 +813,9 @@ class LanguageServer:
                     self.logger.log(f"Returning cached document symbols for {relative_file_path}", logging.DEBUG)
                     return result
                 else:
-                    self.logger.log(f"Content for {relative_file_path} has changed. Overwriting in-memory cache", logging.DEBUG)
+                    self.logger.log(f"Content for {relative_file_path} has changed. Will overwrite in-memory cache", logging.DEBUG)
+            else:
+                self.logger.log(f"No cache hit for symbols with {include_body=} in {relative_file_path}", logging.DEBUG)
 
             self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
             response = await self.server.send.document_symbol(
@@ -1653,6 +1654,10 @@ class SyncLanguageServer:
         """
         return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path, add_gitignore_content_to_config=add_gitignore_content_to_config), timeout=timeout)
 
+    @property
+    def repository_root_path(self) -> str:
+        return self.language_server.repository_root_path
+    
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
         """
