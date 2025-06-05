@@ -1,5 +1,5 @@
 gui_log_window: False
-# Whether to open a graphical window with Serena's logs.
+# whether to open a graphical window with Serena's logs.
 # This is mainly supported on Windows and (partly) on Linux; not available on macOS.
 # If you want to see the logs in a web browser, use the `web_dashboard` option instead.
 # Limitations: doesn't seem to work with the community version of Claude Desktop for Linux
@@ -16,12 +16,16 @@ gui_log_window: False
 # we have to live with this limitation for now.
 
 web_dashboard: True
-# Whether to open the Serena web dashboard (which will be accessible through your web browser) that
+# whether to open the Serena web dashboard (which will be accessible through your web browser) that
 # shows Serena's current session logs - as an alternative to the GUI log window which
 # is supported on all platforms.
 
 log_level: 20
 # the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
+
+trace_lsp_communication: False
+# whether to trace the communication between Serena and the language servers.
+# This is useful for debugging language server issues.
 
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated

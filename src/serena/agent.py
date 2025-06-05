@@ -222,6 +222,7 @@ class SerenaConfigBase(ABC):
     projects: list[Project] = field(default_factory=list)
     gui_log_window_enabled: bool = False
     log_level: int = logging.INFO
+    trace_lsp_communication: bool = False
     web_dashboard: bool = True
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
@@ -502,7 +503,8 @@ class SerenaAgent:
         modes: list[SerenaAgentMode] | None = None,
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
-        gui_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+        trace_lsp_communication: bool | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -524,16 +526,18 @@ class SerenaAgent:
             self.serena_config.web_dashboard = enable_web_dashboard
         if enable_gui_log_window is not None:
             self.serena_config.gui_log_window_enabled = enable_gui_log_window
-        if gui_log_level is not None:
-            gui_log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], gui_log_level.upper())
+        if log_level is not None:
+            log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level.upper())
             # transform to int
-            self.serena_config.log_level = logging.getLevelNamesMapping()[gui_log_level]
+            self.serena_config.log_level = logging.getLevelNamesMapping()[log_level]
+        if trace_lsp_communication is not None:
+            self.serena_config.trace_lsp_communication = trace_lsp_communication
 
         # adjust log level
-        log_level = self.serena_config.log_level
-        if Logger.root.level > log_level:
-            log.info(f"Changing the root logger level to {log_level}")
-            Logger.root.setLevel(log_level)
+        serena_log_level = self.serena_config.log_level
+        if Logger.root.level > serena_log_level:
+            log.info(f"Changing the root logger level to {serena_log_level}")
+            Logger.root.setLevel(serena_log_level)
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
@@ -546,7 +550,7 @@ class SerenaAgent:
                 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 
                 self._gui_log_handler = GuiLogViewerHandler(
-                    GuiLogViewer("dashboard", title="Serena Logs"), level=log_level, format_string=LOG_FORMAT
+                    GuiLogViewer("dashboard", title="Serena Logs"), level=serena_log_level, format_string=LOG_FORMAT
                 )
                 Logger.root.addHandler(self._gui_log_handler)
 
@@ -560,7 +564,7 @@ class SerenaAgent:
 
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
-            dashboard_log_handler = MemoryLogHandler(level=log_level)
+            dashboard_log_handler = MemoryLogHandler(level=serena_log_level)
             Logger.root.addHandler(dashboard_log_handler)
             self._dashboard_thread, port = SerenaDashboardAPI(dashboard_log_handler, tool_names).run_in_thread()
             webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
@@ -802,7 +806,9 @@ class SerenaAgent:
         # instantiate and start the language server
         assert self._active_project is not None
         multilspy_config = MultilspyConfig(
-            code_language=self._active_project.project_config.language, ignored_paths=self._active_project.project_config.ignored_paths
+            code_language=self._active_project.project_config.language,
+            ignored_paths=self._active_project.project_config.ignored_paths,
+            trace_lsp_communication=self.serena_config.trace_lsp_communication,
         )
         ls_logger = MultilspyLogger(log_level=self.serena_config.log_level)
         log.info(f"Starting language server for {self._active_project.project_root}.")

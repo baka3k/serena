@@ -104,7 +104,8 @@ def create_mcp_server_and_agent(
     modes: Sequence[str] = DEFAULT_MODES,
     enable_web_dashboard: bool | None = None,
     enable_gui_log_window: bool | None = None,
-    gui_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+    trace_lsp_communication: bool | None = None,
 ) -> tuple[FastMCP, SerenaAgent]:
     """
     Create an MCP server.
@@ -119,7 +120,9 @@ def create_mcp_server_and_agent(
     :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
     :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
         If not specified, will take the value from the serena configuration.
-    :param gui_log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
+    :param log_level: Log level. If not specified, will take the value from the serena configuration.
+    :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
+        This is useful for debugging language server issues.
     """
     mcp: FastMCP | None = None
     context_instance = SerenaAgentContext.load(context)
@@ -134,7 +137,8 @@ def create_mcp_server_and_agent(
             modes=modes_instances,
             enable_web_dashboard=enable_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
-            gui_log_level=gui_log_level,
+            log_level=log_level,
+            trace_lsp_communication=trace_lsp_communication,
         )
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -264,10 +268,17 @@ PROJECT_TYPE = ProjectType()
     "If not specified, will take the value from the serena configuration.",
 )
 @click.option(
-    "--gui-log-level",
+    "--log-level",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
     default=None,
-    help="Log level for the GUI log window. If not specified, will take the value from the serena configuration.",
+    help="Log level for GUI, dashboard and other logging. If not specified, will take the value from the serena configuration.",
+)
+@click.option(
+    "--trace-lsp-communication",
+    type=bool,
+    is_flag=False,
+    default=None,
+    help="Whether to trace the communication between Serena and the language servers. This is useful for debugging language server issues.",
 )
 def start_mcp_server(
     project_file_opt: str | None,
@@ -279,7 +290,8 @@ def start_mcp_server(
     port: int = 8000,
     enable_web_dashboard: bool | None = None,
     enable_gui_log_window: bool | None = None,
-    gui_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+    trace_lsp_communication: bool | None = None,
 ) -> None:
     """Starts the Serena MCP server. By default, will not activate any project at startup.
     If you want to start with an already active project, use --project to pass the project name or path.
@@ -299,7 +311,8 @@ def start_mcp_server(
         modes=modes,
         enable_web_dashboard=enable_web_dashboard,
         enable_gui_log_window=enable_gui_log_window,
-        gui_log_level=gui_log_level,
+        log_level=log_level,
+        trace_lsp_communication=trace_lsp_communication,
     )
 
     # log after server creation such that the log appears in the GUI
