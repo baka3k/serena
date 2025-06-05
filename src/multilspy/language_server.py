@@ -19,7 +19,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
+from typing import AsyncIterator, Callable, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
 
@@ -31,6 +31,7 @@ from .lsp_protocol_handler.server import (
     Error,
     LanguageServerHandler,
     ProcessLaunchInfo,
+    StringDict,
 )
 from .multilspy_config import Language, MultilspyConfig
 from .multilspy_exceptions import MultilspyException
@@ -232,18 +233,15 @@ class LanguageServer:
         self.completions_available = asyncio.Event()
 
         if config.trace_lsp_communication:
-
-            def logging_fn(source, target, msg):
+            def logging_fn(source: str, target: str, msg: StringDict | str):
                 self.logger.log(f"LSP: {source} -> {target}: {str(msg)}", logging.DEBUG)
-
         else:
-
-            def logging_fn(source, target, msg):
-                pass
+            logging_fn = None
+            
 
         # cmd is obtained from the child classes, which provide the language specific command to start the language server
         # LanguageServerHandler provides the functionality to start the language server and communicate with it
-        self.server: LanguageServerHandler = LanguageServerHandler(
+        self.server = LanguageServerHandler(
             process_launch_info,
             logger=logging_fn,
             start_independent_lsp_process=config.start_independent_lsp_process,

@@ -34,7 +34,7 @@ import json
 import logging
 import os
 import psutil
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from .lsp_requests import LspNotification, LspRequest
 from .lsp_types import ErrorCodes
@@ -184,7 +184,7 @@ class LanguageServerHandler:
     def __init__(
         self,
         process_launch_info: ProcessLaunchInfo,
-        logger=None,
+        logger: Optional[Callable[[str, str, StringDict | str], None]] = None,
         start_independent_lsp_process=True,
     ) -> None:
         """
@@ -366,11 +366,11 @@ class LanguageServerHandler:
             # in the run_forever and run_forever_stderr methods
             await asyncio.sleep(0)
 
-    def _log(self, message: str) -> None:
+    def _log(self, message: str | StringDict) -> None:
         """
         Create a log message
         """
-        if self.logger:
+        if self.logger is not None:
             self.logger("client", "logger", message)
 
     async def run_forever(self) -> bool:
@@ -470,7 +470,7 @@ class LanguageServerHandler:
         )
         self.task_counter += 1
 
-    async def send_request(self, method: str, params: Optional[dict] = None) -> None:
+    async def send_request(self, method: str, params: Optional[dict] = None) -> PayloadLike:
         """
         Send request to the server, register the request id, and wait for the response
         """
@@ -480,9 +480,12 @@ class LanguageServerHandler:
         self._response_handlers[request_id] = request
         async with request.cv:
             await self._send_payload(make_request(method, request_id, params))
+            self._log(f"Waiting for asyncio condition for request {method} with params:\n{params}")
             await request.cv.wait()
+        self._log(f"Finished waiting, processing result")
         if isinstance(request.error, Error):
             raise MultilspyException(f"Could not process request {method} with params:\n{params}.\n  Language server error: {request.error}") from request.error
+        self._log(f"Returning non-error result, which is:\n{request.result}")
         return request.result
 
     def _send_payload_sync(self, payload: StringDict) -> None:
@@ -502,9 +505,8 @@ class LanguageServerHandler:
         """
         if not self.process or not self.process.stdin:
             return
+        self._log(payload)
         msg = create_message(payload)
-        if self.logger:
-            self.logger("client", "server", payload)
         self.process.stdin.writelines(msg)
         await self.process.stdin.drain()
 
