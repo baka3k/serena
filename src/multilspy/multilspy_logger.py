@@ -25,9 +25,9 @@ class MultilspyLogger:
     Logger class
     """
 
-    def __init__(self, json_format: bool = False) -> None:
+    def __init__(self, json_format: bool = False, log_level: int = logging.INFO) -> None:
         self.logger = logging.getLogger("multilspy")
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(log_level)
         self.json_format = json_format
 
     def log(self, debug_message: str, level: int, sanitized_error_message: str = "") -> None:

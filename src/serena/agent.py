@@ -804,7 +804,7 @@ class SerenaAgent:
         multilspy_config = MultilspyConfig(
             code_language=self._active_project.project_config.language, ignored_paths=self._active_project.project_config.ignored_paths
         )
-        ls_logger = MultilspyLogger()
+        ls_logger = MultilspyLogger(log_level=self.serena_config.log_level)
         self.language_server = SyncLanguageServer.create(
             multilspy_config,
             ls_logger,
