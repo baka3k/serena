@@ -5,8 +5,11 @@ services:
       context: ./
       dockerfile: Dockerfile
       target: production
-    tty: true
-    stdin_open: true
+    ports:
+      - "9121:9121"
+      - "24282:24282"
+    command:
+      - "uv run --directory . serena-mcp-server --transport sse --port 9121 --host 0.0.0.0"
 
   serena-dev:
     image: serena:dev
