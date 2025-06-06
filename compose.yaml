@@ -1,0 +1,22 @@
+services:
+  serena:
+    image: serena:latest
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: production
+    tty: true
+    stdin_open: true
+
+  serena-dev:
+    image: serena:dev
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: development
+    tty: true
+    stdin_open: true
+    volumes:
+      - .:/workspaces/serena
+    command:
+      - "uv run --directory . serena-mcp-server"
