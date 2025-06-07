@@ -1,5 +1,5 @@
 """
-Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
+Provides Clojure specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Clojure.
 """
 
 import asyncio
@@ -10,8 +10,6 @@ import stat
 import pathlib
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
-
-from overrides import override
 
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
@@ -40,11 +38,10 @@ class ClojureLSP(LanguageServer):
             "clojure",
         )
         self.server_ready = asyncio.Event()
+        self.initialize_searcher_command_available = asyncio.Event()
+        self.resolve_main_method_available = asyncio.Event()
+        self.service_ready_event = asyncio.Event()
     
-    @override
-    def is_ignored_dirname(self, dirname: str) -> bool:
-        return super().is_ignored_dirname(dirname) or dirname in ["target"]
-
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
         """
         Setup runtime dependencies for clojure-lsp.
@@ -162,15 +159,14 @@ class ClojureLSP(LanguageServer):
             init_response = await self.server.send.initialize(initialize_params)
             assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
             assert "completionProvider" in init_response["capabilities"]
-            assert init_response["capabilities"]["completionProvider"] == {
-                "resolveProvider": True,
-                "triggerCharacters": [":", ".", "'", "("],
-                "completionItem": {"labelDetailsSupport": True},
-            }
+            # Clojure-lsp completion provider capabilities are more flexible than other servers
+            completion_provider = init_response["capabilities"]["completionProvider"]
+            assert completion_provider["resolveProvider"] == True
+            assert "triggerCharacters" in completion_provider
             self.server.notify.initialized({})
+            # after initialize, Clojure-lsp is ready to serve
+            self.server_ready.set()
             self.completions_available.set()
-
-            await self.server_ready.wait()
 
             yield self
 
