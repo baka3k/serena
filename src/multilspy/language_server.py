@@ -241,6 +241,7 @@ class LanguageServer:
 
         # cmd is obtained from the child classes, which provide the language specific command to start the language server
         # LanguageServerHandler provides the functionality to start the language server and communicate with it
+        self.logger.log(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}", logging.DEBUG)
         self.server = LanguageServerHandler(
             process_launch_info,
             logger=logging_fn,
@@ -265,6 +266,7 @@ class LanguageServer:
             pattern = pattern.replace(os.path.sep, '/')
             processed_patterns.append(pattern)
         # Combine explicitly passed patterns with the content of the .gitignore file
+        self.logger.log(f"Processing gitignore content", logging.DEBUG)
         if config.gitignore_file_content is not None:
             for line in config.gitignore_file_content.splitlines():
                 if not line.startswith('#') and line.strip() != '':
@@ -1677,6 +1679,9 @@ class SyncLanguageServer:
         self.timeout = timeout
 
         self._server_context = None
+        
+        self._shutdown_lock = threading.Lock()
+        self._is_shutting_down = False
 
     @classmethod
     def create(
@@ -2151,11 +2156,13 @@ class SyncLanguageServer:
 
         If the language server is not running, this method will log a warning and do nothing.
         """
-        self.save_cache()
-        if not self.is_running():
-            self.language_server.logger.log("Language server not running, skipping shutdown.", logging.INFO)
-            return
+        with self._shutdown_lock:
+            if self._is_shutting_down or not self.is_running():
+                self.language_server.logger.log("Language server is already shutting down or not running, skipping shutdown.", logging.INFO)
+                return
+            self._is_shutting_down = True
 
+        self.save_cache()
         assert self.loop is not None
         self.language_server.logger.log(f"Initiating shutdown for {self.language_server.repository_root_path}", logging.INFO)
         
