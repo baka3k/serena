@@ -19,7 +19,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from typing import AsyncIterator, Callable, Dict, Iterator, List, Optional, Tuple, Union, cast
+from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
 
@@ -336,29 +336,76 @@ class LanguageServer:
             return True
 
         return False
+    
+    async def _shutdown(self, timeout: int = 15):
+        """
+        Performs the complete and robust shutdown sequence for the language server.
+        1. Sends the graceful LSP shutdown/exit notifications.
+        2. Stops the underlying process and cleans up tasks.
+        3. Wraps the entire operation in a timeout to prevent hangs.
+        """
+        if not self.server.is_running():
+            self.logger.log("Server process not running, skipping shutdown.", logging.DEBUG)
+            return
 
+        self.logger.log(f"Initiating full shutdown sequence with a {timeout}s timeout...", logging.INFO)
+
+        async def full_shutdown_sequence():
+            """The sequence of shutdown operations."""
+            # Step 1: Graceful LSP shutdown.
+            # This sends the `shutdown` and `exit` notifications.
+            # It's quick and just sends messages, so it's unlikely to hang.
+            self.logger.log("Sending LSP shutdown/exit notifications...", logging.DEBUG)
+            await self.server.shutdown()
+            
+            # Step 2: Stop the process and cleanup tasks.
+            # This is the part that can hang if the process is unresponsive.
+            # The LanguageServerHandler.stop() method has its own internal timeouts,
+            # but we wrap it in our own as a failsafe.
+            self.logger.log("Stopping process and cleaning up tasks...", logging.DEBUG)
+            await self.server.stop()
+
+        try:
+            # Wrap the entire sequence in our own timeout.
+            # This ensures that even if a part of the handler's logic hangs
+            # unexpectedly, our application will not be blocked indefinitely.
+            await asyncio.wait_for(full_shutdown_sequence(), timeout=timeout)
+            self.logger.log("Language server shutdown sequence completed successfully.", logging.INFO)
+
+        except asyncio.TimeoutError:
+            self.logger.log(
+                f"The full shutdown sequence did not complete within {timeout}s. "
+                "The process might be left in an orphaned state. This indicates a "
+                "potential hang in LanguageServerHandler.stop().",
+                logging.ERROR
+            )
+            # At this point, the handler's internal kill logic has likely failed.
+            # We can make one last-ditch effort to kill the process if we know its PID.
+            if self.server.process and self.server.process.returncode is None:
+                self.logger.log("Attempting final forceful kill of the process.", logging.WARNING)
+                try:
+                    self.server.process.kill()
+                    await self.server.process.wait()
+                except ProcessLookupError:
+                    pass # Process already gone
+                except Exception as e:
+                    self.logger.log(f"Final kill attempt failed: {e}", logging.ERROR)
+
+        except Exception as e:
+            self.logger.log(f"An unexpected error occurred during shutdown: {e}", logging.ERROR)
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["LanguageServer"]:
         """
         Starts the Language Server and yields the LanguageServer instance.
-
-        Usage:
-        ```
-        async with lsp.start_server():
-            # LanguageServer has been initialized and ready to serve requests
-            await lsp.request_definition(...)
-            await lsp.request_references(...)
-            # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
-        ```
         """
         self.server_started = True
-        yield self
-        self.server_started = False
-
-    # TODO: Add support for more LSP features
-
+        try:
+            yield self
+        finally:
+            self.server_started = False
+            await self._shutdown()
+    
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
         """
@@ -1704,9 +1751,7 @@ class SyncLanguageServer:
         ctx = self.language_server.start_server()
         asyncio.run_coroutine_threadsafe(ctx.__aenter__(), loop=self.loop).result()
         yield self
-        asyncio.run_coroutine_threadsafe(ctx.__aexit__(None, None, None), loop=self.loop).result()
-        self.loop.call_soon_threadsafe(self.loop.stop)
-        self.loop_thread.join()
+        self.stop()
 
     def request_definition(self, file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
         """
@@ -2071,11 +2116,16 @@ class SyncLanguageServer:
 
         :return: self for method chaining
         """
+        self.language_server.logger.log(f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}", logging.INFO)
+        self.language_server.logger.log("Creating new event loop", logging.DEBUG)
         self.loop = asyncio.new_event_loop()
+        self.language_server.logger.log("Creating new thread for event loop", logging.DEBUG)
         self.loop_thread = threading.Thread(target=self.loop.run_forever, daemon=True)
         self.loop_thread.start()
+        self.language_server.logger.log("Starting server (async) context", logging.DEBUG)
         self._server_context = self.language_server.start_server()
-        asyncio.run_coroutine_threadsafe(self._server_context.__aenter__(), loop=self.loop).result()
+        self.language_server.logger.log("Entering server context", logging.DEBUG)
+        asyncio.run_coroutine_threadsafe(self._server_context.__aenter__(), loop=self.loop).result(timeout=self.timeout)
         return self
 
     def is_running(self) -> bool:
@@ -2083,10 +2133,21 @@ class SyncLanguageServer:
         Check if the language server is running.
         """
         return self.loop is not None and self.loop_thread is not None and self.loop_thread.is_alive()
+    
+    async def _shutdown_and_stop_loop(self):
+        """A coroutine that performs the full shutdown and then stops the event loop."""
+        try:
+            if self._server_context:
+                await self._server_context.__aexit__(None, None, None)
+        except Exception as e:
+            self.language_server.logger.log(f"Exception during async shutdown: {e}", logging.ERROR)
+        finally:
+            if self.loop and self.loop.is_running():
+                self.loop.stop()
 
     def stop(self) -> None:
         """
-        Shuts down the language server process and cleans up resources.
+        Shuts down the language server process, saves the cache and cleans up resources.
 
         If the language server is not running, this method will log a warning and do nothing.
         """
@@ -2095,12 +2156,18 @@ class SyncLanguageServer:
             self.language_server.logger.log("Language server not running, skipping shutdown.", logging.INFO)
             return
 
-        assert self.loop
-        asyncio.run_coroutine_threadsafe(self._server_context.__aexit__(None, None, None), loop=self.loop).result()
-        self.loop.call_soon_threadsafe(self.loop.stop)
-        self.loop_thread.join()
+        assert self.loop is not None
+        self.language_server.logger.log(f"Initiating shutdown for {self.language_server.repository_root_path}", logging.INFO)
+        
+        asyncio.run_coroutine_threadsafe(self._shutdown_and_stop_loop(), loop=self.loop)
+
+        if self.loop_thread:
+            self.loop_thread.join()
+
         self.loop = None
         self.loop_thread = None
+        self._server_context = None
+        self.language_server.logger.log("Shutdown complete.", logging.INFO)
 
     def save_cache(self):
         """

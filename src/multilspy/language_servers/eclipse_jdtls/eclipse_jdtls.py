@@ -420,6 +420,3 @@ class EclipseJDTLS(LanguageServer):
             await self.service_ready_event.wait()
 
             yield self
-
-            await self.server.shutdown()
-            await self.server.stop()

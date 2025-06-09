@@ -181,9 +181,6 @@ class Intelephense(LanguageServer):
             await self.server_ready.wait()
 
             yield self
-
-            await self.server.shutdown()
-            await self.server.stop()
             
     @override
     # For some reason, the LS may need longer to process this, so we just retry

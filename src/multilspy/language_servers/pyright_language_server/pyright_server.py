@@ -198,6 +198,3 @@ class PyrightServer(LanguageServer):
             self.server.notify.initialized({})
 
             yield self
-
-            await self.server.shutdown()
-            await self.server.stop()

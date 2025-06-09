@@ -404,6 +404,3 @@ class OmniSharp(LanguageServer):
             await self.references_available.wait()
 
             yield self
-
-            await self.server.shutdown()
-            await self.server.stop()

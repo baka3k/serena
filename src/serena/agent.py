@@ -798,8 +798,8 @@ class SerenaAgent:
         """
         # stop the language server if it is running
         if self.is_language_server_running():
-            log.info(f"Stopping the current language server at {self.language_server.repository_root_path} ...")
             assert self.language_server is not None
+            log.info(f"Stopping the current language server at {self.language_server.repository_root_path} ...")
             self.language_server.stop()
             self.language_server = None
 

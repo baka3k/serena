@@ -221,9 +221,6 @@ class TypeScriptLanguageServer(LanguageServer):
 
             yield self
 
-            await self.server.shutdown()
-            await self.server.stop()
-
     @override
     # For some reason, the LS may need longer to process this, so we just retry
     async def _send_references_request(self, relative_file_path: str, line: int, column: int):

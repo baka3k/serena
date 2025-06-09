@@ -225,10 +225,3 @@ class KotlinLanguageServer(LanguageServer):
             self.completions_available.set()
 
             yield self
-
-            try:
-                await self.server.shutdown()
-            except Exception as e:
-                self.logger.log(f"Error during Kotlin server shutdown: {str(e)}", logging.WARNING)
-            finally:
-                await self.server.stop()

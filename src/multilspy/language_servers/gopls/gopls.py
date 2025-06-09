@@ -152,6 +152,3 @@ class Gopls(LanguageServer):
             await self.server_ready.wait()
 
             yield self
-
-            await self.server.shutdown()
-            await self.server.stop()
