@@ -19,6 +19,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
 from pathlib import Path, PurePath
+import time
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
@@ -124,15 +125,16 @@ class LanguageServer:
             gitignore_path = os.path.join(repository_root_path, ".gitignore")
             if not os.path.exists(gitignore_path):
                 logger.log(
-                    f"Should ignore all files in gitignore not not .gitignore found at {gitignore_path}. Skipping.",
+                    f"Should ignore all files in gitignore but no .gitignore found at {gitignore_path}. Skipping.",
                     logging.WARNING
                 )
                 gitignore_file_content = None
             else:
                 if config.gitignore_file_content is not None:
                     raise ValueError(
-                        f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry"
+                        f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry there:\n{config.gitignore_file_content=}"
                     )
+                logger.log(f"Reading gitignore file from {gitignore_path}", logging.DEBUG)
                 with open(gitignore_path, "r", encoding="utf-8") as f:
                     gitignore_file_content = f.read()
             config.gitignore_file_content = gitignore_file_content
@@ -228,10 +230,18 @@ class LanguageServer:
             )
 
         self.logger = logger
-        self.server_started = False
         self.repository_root_path: str = repository_root_path
-        self.completions_available = asyncio.Event()
+        self.logger.log(f"Creating language server instance for {repository_root_path=} with {language_id=} and process launch info: {process_launch_info}", logging.DEBUG)
+        
+        # load cache first to prevent any racing conditions due to asyncio stuff
+        self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
+        """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
+        self._cache_lock = threading.Lock()
+        self._cache_has_changed: bool = False
+        self.load_cache()
 
+        self.server_started = False
+        self.completions_available = asyncio.Event()
         if config.trace_lsp_communication:
             def logging_fn(source: str, target: str, msg: StringDict | str):
                 self.logger.log(f"LSP: {source} -> {target}: {str(msg)}", logging.DEBUG)
@@ -251,12 +261,6 @@ class LanguageServer:
         self.language_id = language_id
         self.open_file_buffers: Dict[str, LSPFileBuffer] = {}
 
-        # --------------------------------- MODIFICATIONS BY ORAIOS ---------------------------------
-        self._cache_lock = threading.Lock()
-        self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
-        """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
-        self.load_cache()
-        self._cache_has_changed: bool = False
         self.language = Language(language_id)
 
         # Set up the pathspec matcher for the ignored paths
@@ -340,62 +344,78 @@ class LanguageServer:
 
         return False
     
-    async def _shutdown(self, timeout: int = 15):
+    async def _shutdown(self, timeout: float = 10.0):
         """
-        Performs the complete and robust shutdown sequence for the language server.
-        1. Sends the graceful LSP shutdown/exit notifications.
-        2. Stops the underlying process and cleans up tasks.
-        3. Wraps the entire operation in a timeout to prevent hangs.
+        A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
+        by explicitly closing all I/O pipes.
         """
         if not self.server.is_running():
             self.logger.log("Server process not running, skipping shutdown.", logging.DEBUG)
             return
 
-        self.logger.log(f"Initiating full shutdown sequence with a {timeout}s timeout...", logging.INFO)
+        self.logger.log(f"Initiating final robust shutdown with a {timeout}s timeout...", logging.INFO)
+        process = self.server.process
+        reader_tasks = list(self.server.tasks.values())
 
-        async def full_shutdown_sequence():
-            """The sequence of shutdown operations."""
-            # Step 1: Graceful LSP shutdown.
-            # This sends the `shutdown` and `exit` notifications.
-            # It's quick and just sends messages, so it's unlikely to hang.
-            self.logger.log("Sending LSP shutdown/exit notifications...", logging.DEBUG)
-            await self.server.shutdown()
-            
-            # Step 2: Stop the process and cleanup tasks.
-            # This is the part that can hang if the process is unresponsive.
-            # The LanguageServerHandler.stop() method has its own internal timeouts,
-            # but we wrap it in our own as a failsafe.
-            self.logger.log("Stopping process and cleaning up tasks...", logging.DEBUG)
-            await self.server.stop()
-
+        # --- Main Shutdown Logic ---
         try:
-            # Wrap the entire sequence in our own timeout.
-            # This ensures that even if a part of the handler's logic hangs
-            # unexpectedly, our application will not be blocked indefinitely.
-            await asyncio.wait_for(full_shutdown_sequence(), timeout=timeout)
-            self.logger.log("Language server shutdown sequence completed successfully.", logging.INFO)
+            # Stage 1: Graceful Termination Request
+            # Send LSP shutdown and close stdin to signal no more input.
+            try:
+                await asyncio.wait_for(self.server.shutdown(), timeout=2.0)
+                if process.stdin and not process.stdin.is_closing():
+                    process.stdin.close()
+            except Exception:
+                pass # Ignore errors here, we are proceeding to terminate anyway.
+
+            # Stage 2: Terminate and Concurrently Drain stdout/stderr
+            process.terminate()
+            
+            # Wait for the process to exit AND for the output pipes to be drained.
+            # The reader tasks will exit when they hit EOF.
+            await asyncio.wait_for(
+                asyncio.gather(process.wait(), *reader_tasks),
+                timeout=timeout - 2.0
+            )
+            self.logger.log("Process terminated and output pipes drained.", logging.INFO)
 
         except asyncio.TimeoutError:
-            self.logger.log(
-                f"The full shutdown sequence did not complete within {timeout}s. "
-                "The process might be left in an orphaned state. This indicates a "
-                "potential hang in LanguageServerHandler.stop().",
-                logging.ERROR
-            )
-            # At this point, the handler's internal kill logic has likely failed.
-            # We can make one last-ditch effort to kill the process if we know its PID.
-            if self.server.process and self.server.process.returncode is None:
-                self.logger.log("Attempting final forceful kill of the process.", logging.WARNING)
+            # Stage 3: Forceful Kill
+            self.logger.log("Graceful termination failed. Forcefully killing process...", logging.WARNING)
+            if self.server.is_running():
                 try:
-                    self.server.process.kill()
-                    await self.server.process.wait()
-                except ProcessLookupError:
-                    pass # Process already gone
+                    process.kill()
+                    # Wait for the killed process to be reaped by the OS.
+                    await process.wait()
                 except Exception as e:
-                    self.logger.log(f"Final kill attempt failed: {e}", logging.ERROR)
-
+                    self.logger.log(f"Error during forceful kill: {e}", logging.ERROR)
+        
         except Exception as e:
-            self.logger.log(f"An unexpected error occurred during shutdown: {e}", logging.ERROR)
+            self.logger.log(f"An unexpected error occurred during shutdown logic: {e}", logging.ERROR)
+
+        finally:
+            # === STAGE 4: EXPLICIT TASK & PIPE CLEANUP ===
+            self.logger.log("Performing final task cancellation and pipe handle cleanup...", logging.DEBUG)
+            
+            # 1. Cancel any lingering reader tasks.
+            for task in reader_tasks:
+                if not task.done():
+                    task.cancel()
+            # Wait for cancellations to complete.
+            await asyncio.gather(*reader_tasks, return_exceptions=True)
+            self.server.tasks = {}
+
+            # 2. Explicitly close each pipe to release OS handles.
+            for pipe in [process.stdin, process.stdout, process.stderr]:
+                if pipe and hasattr(pipe, 'is_closing') and not pipe.is_closing():
+                    try:
+                        pipe.close()
+                    except Exception:
+                        pass
+            
+            # 3. Null out the process object in the handler.
+            self.server.process = None
+            self.logger.log("Shutdown sequence fully finished.", logging.DEBUG)
 
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["LanguageServer"]:
@@ -1633,6 +1653,7 @@ class LanguageServer:
             try:
                 with open(self._cache_path, "rb") as f:
                     self._document_symbols_cache = pickle.load(f)
+                self.logger.log(f"Loaded {len(self._document_symbols_cache)} document symbols from cache.", logging.INFO)   
             except Exception as e:
                 # cache often becomes corrupt, so just skip loading it
                 self.logger.log(
@@ -2158,30 +2179,58 @@ class SyncLanguageServer:
             if self.loop and self.loop.is_running():
                 self.loop.stop()
 
-    def stop(self) -> None:
+    def stop(self, shutdown_timeout: float = 5.0) -> None:
         """
-        Shuts down the language server process, saves the cache and cleans up resources.
-
-        If the language server is not running, this method will log a warning and do nothing.
+        Stops the language server and robustly cleans up all associated resources,
+        including the asyncio event loop, to prevent hangs on process exit.
         """
+        # 1. Use a lock and flag to make the shutdown call thread-safe and idempotent,
+        # ensuring the shutdown logic runs only once.
         with self._shutdown_lock:
-            if self._is_shutting_down or not self.is_running():
-                self.language_server.logger.log("Language server is already shutting down or not running, skipping shutdown.", logging.INFO)
+            if self._is_shutting_down:
+                self.language_server.logger.log("Already shutting down or stopped, skipping", logging.DEBUG)
                 return
             self._is_shutting_down = True
 
+        if not self.is_running():
+            self.language_server.logger.log("Language server is not running, skipping", logging.DEBUG)
+            return
+
+        self.language_server.logger.log("Initiating server shutdown...", logging.INFO)
         self.save_cache()
-        assert self.loop is not None
-        self.language_server.logger.log(f"Initiating shutdown for {self.language_server.repository_root_path}", logging.INFO)
-        
-        asyncio.run_coroutine_threadsafe(self._shutdown_and_stop_loop(), loop=self.loop)
 
+        # 2. From the main thread, schedule the async shutdown tasks to be run on
+        # the event loop. This coroutine will gracefully shut down the LSP
+        # connection and then call `loop.stop()`, which allows the background
+        # thread's `loop.run_forever()` call to finally return.
+        if self.loop and self.loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._shutdown_and_stop_loop(), self.loop)
+
+        # 3. Wait for the background thread to exit. We use a timeout as a crucial
+        # safety net against deadlocks.
         if self.loop_thread:
-            self.loop_thread.join()
+            self.loop_thread.join(timeout=shutdown_timeout)
+            if self.loop_thread.is_alive():
+                self.language_server.logger.log(
+                    "Event loop thread did not terminate within timeout. The process may be stuck.",
+                    logging.ERROR
+                )
 
+        # 4. Perform the final, authoritative cleanup from the main thread. This is
+        # the most critical step to prevent hangs.
+        if self.loop and not self.loop.is_closed():
+            # Schedule the loop's `close()` method to be run. This releases
+            # underlying OS resources (like the IocpProactor on Windows).
+            self.loop.call_soon_threadsafe(self.loop.close)
+            # Give the event loop a brief moment to process the close command
+            # before the main process exits.
+            time.sleep(0.1)
+
+        # 5. Null out attributes for clean garbage collection.
         self.loop = None
         self.loop_thread = None
         self._server_context = None
+        self._is_shutting_down = False
         self.language_server.logger.log("Shutdown complete.", logging.INFO)
 
     def save_cache(self):

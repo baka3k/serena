@@ -248,6 +248,7 @@ class LanguageServerHandler:
         self.task_counter += 1
         self.tasks[self.task_counter] = self.loop.create_task(self.run_forever_stderr())
         self.task_counter += 1
+        
 
     async def stop(self) -> None:
         """
