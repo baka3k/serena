@@ -252,6 +252,7 @@ class LanguageServer:
         self.open_file_buffers: Dict[str, LSPFileBuffer] = {}
 
         # --------------------------------- MODIFICATIONS BY ORAIOS ---------------------------------
+        self._cache_lock = threading.Lock()
         self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self.load_cache()
@@ -853,16 +854,17 @@ class LanguageServer:
         #   Should be fixed in the future, it's a small performance optimization
         cache_key = f"{relative_file_path}-{include_body}"
         with self.open_file(relative_file_path) as file_data:
-            file_hash_and_result = self._document_symbols_cache.get(cache_key)
-            if file_hash_and_result is not None:
-                file_hash, result = file_hash_and_result
-                if file_hash == file_data.content_hash:
-                    self.logger.log(f"Returning cached document symbols for {relative_file_path}", logging.DEBUG)
-                    return result
+            with self._cache_lock:
+                file_hash_and_result = self._document_symbols_cache.get(cache_key)
+                if file_hash_and_result is not None:
+                    file_hash, result = file_hash_and_result
+                    if file_hash == file_data.content_hash:
+                        self.logger.log(f"Returning cached document symbols for {relative_file_path}", logging.DEBUG)
+                        return result
+                    else:
+                        self.logger.log(f"Content for {relative_file_path} has changed. Will overwrite in-memory cache", logging.DEBUG)
                 else:
-                    self.logger.log(f"Content for {relative_file_path} has changed. Will overwrite in-memory cache", logging.DEBUG)
-            else:
-                self.logger.log(f"No cache hit for symbols with {include_body=} in {relative_file_path}", logging.DEBUG)
+                    self.logger.log(f"No cache hit for symbols with {include_body=} in {relative_file_path}", logging.DEBUG)
 
             self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
             response = await self.server.send.document_symbol(
@@ -947,8 +949,9 @@ class LanguageServer:
 
         result = flat_all_symbol_list, root_nodes
         self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
-        self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
-        self._cache_has_changed = True
+        with self._cache_lock:
+            self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
+            self._cache_has_changed = True
         return result
     
     async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
@@ -1603,35 +1606,40 @@ class LanguageServer:
         return Path(self.repository_root_path) / ".serena" / "cache" / "document_symbols_cache_v20-05-25.pkl"
 
     def save_cache(self):
-        if self._cache_has_changed:
+        with self._cache_lock:
+            if not self._cache_has_changed:
+                self.logger.log("No changes to document symbols cache, skipping save", logging.DEBUG)
+                return
+
             self.logger.log(f"Saving updated document symbols cache to {self._cache_path}", logging.INFO)
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 with open(self._cache_path, "wb") as f:
                     pickle.dump(self._document_symbols_cache, f)
+                self._cache_has_changed = False
             except Exception as e:
                 self.logger.log(
-                        f"Failed to save document symbols cache to {self._cache_path}: {e}. "
-                        "Note: this may have resulted in a corrupted cache file.", logging.ERROR
-                    )
-        else:
-            self.logger.log(f"No changes to document symbols cache, skipping save", logging.DEBUG)
-        self._cache_has_changed = False
+                    f"Failed to save document symbols cache to {self._cache_path}: {e}. "
+                    "Note: this may have resulted in a corrupted cache file.",
+                    logging.ERROR,
+                )
 
     def load_cache(self):
         if not self._cache_path.exists():
             return
-        self.logger.log(f"Loading document symbols cache from {self._cache_path}", logging.INFO)
-        with open(self._cache_path, "rb") as f:
+
+        with self._cache_lock:
+            self.logger.log(f"Loading document symbols cache from {self._cache_path}", logging.INFO)
             try:
-                self._document_symbols_cache = pickle.load(f)
+                with open(self._cache_path, "rb") as f:
+                    self._document_symbols_cache = pickle.load(f)
             except Exception as e:
                 # cache often becomes corrupt, so just skip loading it
                 self.logger.log(
-                        f"Failed to load document symbols cache from {self._cache_path}: {e}. Possible cause: the cache file is corrupted. " 
-                        "Check for any errors related to saving the cache in the logs.",
-                        logging.ERROR
-                    )
+                    f"Failed to load document symbols cache from {self._cache_path}: {e}. Possible cause: the cache file is corrupted. "
+                    "Check for any errors related to saving the cache in the logs.",
+                    logging.ERROR,
+                )
 
 
     async def request_workspace_symbol(self, query: str) -> Union[List[multilspy_types.UnifiedSymbolInformation], None]:
