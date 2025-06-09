@@ -44,7 +44,7 @@ class EditingTest:
             # prevent deadlock on Windows due to file locks caused by antivirus or some other external software
             # wait for a long time here
             if os.name == "nt":
-                time.sleep(1)
+                time.sleep(0.1)
             log.info(f"Creating language server for {self.language} {self.rel_path}")
             language_server = create_ls(self.language, str(self.repo_path))
             log.info(f"Starting language server for {self.language} {self.rel_path}")
@@ -61,7 +61,7 @@ class EditingTest:
 
             # prevent deadlock on Windows due to lingering file locks
             if os.name == "nt":
-                time.sleep(1)
+                time.sleep(0.1)
             log.info(f"Removing temp directory {temp_dir}")
             shutil.rmtree(temp_dir, ignore_errors=True)
             log.info(f"Temp directory {temp_dir} removed")

@@ -2176,8 +2176,23 @@ class SyncLanguageServer:
         except Exception as e:
             self.language_server.logger.log(f"Exception during async shutdown: {e}", logging.ERROR)
         finally:
+            # Clean up tasks but DON'T stop the loop from here
+            # Let the main thread handle loop stopping to avoid coroutine deadlocks
             if self.loop and self.loop.is_running():
-                self.loop.stop()
+                current_task = asyncio.current_task(self.loop)
+                pending_tasks = [task for task in asyncio.all_tasks(self.loop) 
+                               if not task.done() and task is not current_task]
+                
+                if pending_tasks:
+                    self.language_server.logger.log(f"Cancelling {len(pending_tasks)} pending tasks", logging.DEBUG)
+                    for task in pending_tasks:
+                        try:
+                            task.cancel()
+                        except Exception:
+                            pass
+                
+                self.language_server.logger.log("Async shutdown tasks completed, returning to main thread", logging.DEBUG)
+                # Note: NOT calling loop.stop() here - let main thread do it
 
     def stop(self, shutdown_timeout: float = 5.0) -> None:
         """
@@ -2191,47 +2206,85 @@ class SyncLanguageServer:
                 self.language_server.logger.log("Already shutting down or stopped, skipping", logging.DEBUG)
                 return
             self._is_shutting_down = True
-
+    
         if not self.is_running():
             self.language_server.logger.log("Language server is not running, skipping", logging.DEBUG)
             return
-
+    
         self.language_server.logger.log("Initiating server shutdown...", logging.INFO)
         self.save_cache()
-
-        # 2. From the main thread, schedule the async shutdown tasks to be run on
-        # the event loop. This coroutine will gracefully shut down the LSP
-        # connection and then call `loop.stop()`, which allows the background
-        # thread's `loop.run_forever()` call to finally return.
-        if self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._shutdown_and_stop_loop(), self.loop)
-
-        # 3. Wait for the background thread to exit. We use a timeout as a crucial
-        # safety net against deadlocks.
-        if self.loop_thread:
-            self.loop_thread.join(timeout=shutdown_timeout)
-            if self.loop_thread.is_alive():
-                self.language_server.logger.log(
-                    "Event loop thread did not terminate within timeout. The process may be stuck.",
-                    logging.ERROR
-                )
-
-        # 4. Perform the final, authoritative cleanup from the main thread. This is
-        # the most critical step to prevent hangs.
-        if self.loop and not self.loop.is_closed():
-            # Schedule the loop's `close()` method to be run. This releases
-            # underlying OS resources (like the IocpProactor on Windows).
-            self.loop.call_soon_threadsafe(self.loop.close)
-            # Give the event loop a brief moment to process the close command
-            # before the main process exits.
-            time.sleep(0.1)
-
-        # 5. Null out attributes for clean garbage collection.
+        
+        # Detect platform to choose shutdown strategy
+        is_windows = os.name == "nt"
+        
+        if not is_windows:
+            # 2. Graceful shutdown for Linux/Unix - try proper async cleanup first
+            shutdown_future = None
+            if self.loop and self.loop.is_running():
+                shutdown_future = asyncio.run_coroutine_threadsafe(self._shutdown_and_stop_loop(), self.loop)
+            
+            # 3. Wait for the background thread to exit
+            if self.loop_thread:
+                self.loop_thread.join(timeout=shutdown_timeout)
+                if self.loop_thread.is_alive():
+                    self.language_server.logger.log("Event loop thread did not terminate within timeout", logging.WARNING)
+            
+            # 4. Wait for the shutdown coroutine to complete if it was scheduled
+            if shutdown_future:
+                try:
+                    shutdown_future.result(timeout=2.0)
+                    self.language_server.logger.log("Graceful async shutdown completed", logging.DEBUG)
+                except Exception as e:
+                    self.language_server.logger.log(f"Async shutdown failed: {e}", logging.WARNING)
+            
+            # 5. Close the loop properly after graceful shutdown
+            if self.loop and not self.loop.is_closed():
+                try:
+                    self.loop.close()
+                    self.language_server.logger.log("Event loop closed successfully", logging.DEBUG)
+                except Exception as e:
+                    self.language_server.logger.log(f"Event loop close failed: {e}", logging.WARNING)
+        
+        else:
+            # WINDOWS NUCLEAR OPTION: Skip graceful shutdown - go straight to nuclear
+            # Windows IocpProactor has too many issues with proper cleanup
+            self.language_server.logger.log("Windows detected - using nuclear shutdown to prevent zombies", logging.WARNING)
+            
+            # Force stop the loop immediately without waiting for async cleanup
+            if self.loop and self.loop.is_running():
+                try:
+                    self.loop.call_soon_threadsafe(lambda: setattr(self.loop, '_stopping', True))
+                    self.loop.call_soon_threadsafe(self.loop.stop)
+                except Exception:
+                    pass
+                
+                # Force mark loop as closed IMMEDIATELY to prevent zombies
+                try:
+                    if hasattr(self.loop, '_closed'):
+                        self.loop._closed = True
+                    if hasattr(self.loop, '_stopping'):
+                        self.loop._stopping = True
+                    if hasattr(self.loop, '_ready'):
+                        self.loop._ready.clear()
+                except Exception:
+                    pass
+            
+            # Give thread minimal time to exit, then abandon it
+            if self.loop_thread:
+                self.loop_thread.join(timeout=1.0)  # Only 1 second on Windows
+                if self.loop_thread.is_alive():
+                    self.language_server.logger.log("Thread stuck - abandoning to prevent GC deadlock", logging.WARNING)
+    
+        # 6. Null out everything immediately - same for both platforms
         self.loop = None
         self.loop_thread = None
         self._server_context = None
         self._is_shutting_down = False
-        self.language_server.logger.log("Shutdown complete.", logging.INFO)
+        
+        shutdown_type = "Nuclear" if is_windows else "Graceful"
+        self.language_server.logger.log(f"{shutdown_type} shutdown complete - all references cleared", logging.INFO)
+
+
 
     def save_cache(self):
         """

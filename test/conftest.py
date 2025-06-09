@@ -29,8 +29,10 @@ def get_repo_path(language: Language) -> Path:
 def create_ls(language: Language, repo_path: str):
     config = MultilspyConfig(code_language=language)
     logger = MultilspyLogger(log_level=logging.DEBUG)
-    logger.logger.setLevel(logging.DEBUG)
-    logger.logger.handlers[0].setFormatter(logging.Formatter(LOG_DEFAULT_FORMAT))
+
+    # Simple way: Use basicConfig to set format for all handlers
+    logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=logging.DEBUG, force=True)  # Override existing configuration
+
     return SyncLanguageServer.create(config, logger, repo_path)
 
 
