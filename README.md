@@ -256,7 +256,9 @@ which will let you open the JSON file `claude_desktop_config.json`. Add the foll
 }
 ```
 
-#### Docker Installation
+#### Docker Installation (Experimental)
+
+⚠️ **EXPERIMENTAL**: Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using.
 
 Alternatively, you can run Serena using Docker:
 
@@ -271,7 +273,12 @@ Alternatively, you can run Serena using Docker:
 }
 ```
 
-Replace `/path/to/your/projects` with the absolute path to your projects directory. The Docker approach has the advantage of not requiring local installation of dependencies.
+Replace `/path/to/your/projects` with the absolute path to your projects directory. The Docker approach provides:
+- Better security isolation for shell command execution
+- No need to install language servers and dependencies locally
+- Consistent environment across different systems
+
+See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
 If you are using paths containing backslashes for paths on Windows
 (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
