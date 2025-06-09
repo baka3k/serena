@@ -1,6 +1,8 @@
+import logging
 import os
 import shutil
 import tempfile
+import time
 from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,6 +17,8 @@ from src.serena.symbol import SymbolManager
 from test.conftest import create_ls, get_repo_path
 
 pytestmark = pytest.mark.snapshot
+
+log = logging.getLogger(__name__)
 
 
 class EditingTest:
@@ -35,14 +39,32 @@ class EditingTest:
         self.repo_path = temp_dir / self.original_repo_path.name
         language_server = None  # Initialize language_server
         try:
+            print(f"Copying repo from {self.original_repo_path} to {self.repo_path}")
             shutil.copytree(self.original_repo_path, self.repo_path)
+            # prevent deadlock on Windows due to file locks caused by antivirus or some other external software
+            # wait for a long time here
+            if os.name == "nt":
+                time.sleep(1)
+            log.info(f"Creating language server for {self.language} {self.rel_path}")
             language_server = create_ls(self.language, str(self.repo_path))
+            log.info(f"Starting language server for {self.language} {self.rel_path}")
             language_server.start()
+            log.info(f"Language server started for {self.language} {self.rel_path}")
             yield SymbolManager(lang_server=language_server)
         finally:
             if language_server is not None and language_server.is_running():
+                log.info(f"Stopping language server for {self.language} {self.rel_path}")
                 language_server.stop()
-            shutil.rmtree(temp_dir)
+                # attempt at trigger of garbage collection
+                language_server = None
+                log.info(f"Language server stopped for {self.language} {self.rel_path}")
+
+            # prevent deadlock on Windows due to lingering file locks
+            if os.name == "nt":
+                time.sleep(1)
+            log.info(f"Removing temp directory {temp_dir}")
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            log.info(f"Temp directory {temp_dir} removed")
 
     def _read_file(self, rel_path: str) -> str:
         """Read the content of a file in the test repository."""
