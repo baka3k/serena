@@ -1,10 +1,14 @@
+import logging
 from pathlib import Path
 
 import pytest
+from sensai.util.logging import LOG_DEFAULT_FORMAT, configure
 
 from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
+
+configure(level=logging.DEBUG)
 
 
 @pytest.fixture(scope="session")
@@ -24,7 +28,11 @@ def get_repo_path(language: Language) -> Path:
 
 def create_ls(language: Language, repo_path: str):
     config = MultilspyConfig(code_language=language)
-    logger = MultilspyLogger()
+    logger = MultilspyLogger(log_level=logging.DEBUG)
+
+    # Simple way: Use basicConfig to set format for all handlers
+    logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=logging.DEBUG, force=True)  # Override existing configuration
+
     return SyncLanguageServer.create(config, logger, repo_path)
 
 
