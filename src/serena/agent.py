@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 
 import yaml
 from overrides import override
+from pathspec import PathSpec
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
 from sensai.util.logging import FallbackHandler
@@ -41,7 +42,7 @@ from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
 from serena.text_utils import search_files
-from serena.util.file_system import scan_directory
+from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
@@ -583,6 +584,8 @@ class SerenaAgent:
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
+        self.ignore_spec: PathSpec  # not set to None to avoid assert statements
+        """Ignore spec, extracted from the project's gitignore files and the explicitly configured ignored paths."""
 
         # Apply context and mode tool configurations
         if context is None:
@@ -614,6 +617,46 @@ class SerenaAgent:
         if project is None:
             raise ValueError("Cannot get project root if no project is active.")
         return project.project_root
+
+    def path_is_inside_project(self, path: str | Path) -> bool:
+        """
+        Checks if the given (absolute or relative) path is inside the project directory.
+        Note that even relative paths may be outside if the contain ".." or point to symlinks.
+        """
+        path = Path(path)
+        _proj_root = Path(self.get_project_root())
+        if not path.is_absolute():
+            path = _proj_root / path
+
+        path = path.resolve()
+        return path.is_relative_to(_proj_root)
+
+    def path_is_gitignored(self, path: str | Path) -> bool:
+        """
+        Checks if the given path is ignored by git. Non absolute paths are assumed to be relative to the project root.
+        """
+        path = Path(path)
+        if path.is_absolute():
+            relative_path = path.relative_to(self.get_project_root())
+        else:
+            relative_path = path
+
+        # always ignore paths inside .git
+        if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
+            return True
+
+        return match_path(str(relative_path), self.ignore_spec)
+
+    def validate_relative_path(self, relative_path: str) -> None:
+        """
+        Validates that the given relative path is safe to read or edit,
+        meaning it's inside the project directory and is not ignored by git.
+        """
+        if not self.path_is_inside_project(relative_path):
+            raise ValueError(f"{relative_path=} points to path outside of the repository root, can't use it for safety reasons")
+
+        if self.path_is_gitignored(relative_path):
+            raise ValueError(f"File {relative_path} is gitignored, can't read or edit it for safety reasons")
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
@@ -685,6 +728,7 @@ class SerenaAgent:
         # start the language server
         self.reset_language_server()
         assert self.language_server is not None
+        self.ignore_spec = self.language_server.get_ignore_spec()
 
         # initialize project-specific instances
         self.symbol_manager = SymbolManager(self.language_server, self)
@@ -805,9 +849,21 @@ class SerenaAgent:
 
         # instantiate and start the language server
         assert self._active_project is not None
+        ignored_paths = self._active_project.project_config.ignored_paths
+        if len(ignored_paths) > 0:
+            log.info(f"Using {len(ignored_paths)} ignored paths from the explicit project configuration.")
+            log.debug(f"Ignored paths: {ignored_paths}")
+        if self._active_project.project_config.ignore_all_files_in_gitignore:
+            log.info(f"Parsing all gitignore files in {self._active_project.project_root}")
+            gitignore_parser = GitignoreParser(self._active_project.project_root)
+            log.info(f"Found {len(gitignore_parser.get_ignore_specs())} gitignore files.")
+            for spec in gitignore_parser.get_ignore_specs():
+                log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
+                ignored_paths.extend(spec.patterns)
+        log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
         multilspy_config = MultilspyConfig(
             code_language=self._active_project.project_config.language,
-            ignored_paths=self._active_project.project_config.ignored_paths,
+            ignored_paths=ignored_paths,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
         )
         ls_logger = MultilspyLogger(log_level=self.serena_config.log_level)
@@ -816,7 +872,6 @@ class SerenaAgent:
             multilspy_config,
             ls_logger,
             self._active_project.project_root,
-            add_gitignore_content_to_config=self._active_project.project_config.ignore_all_files_in_gitignore,
         )
         self.language_server.start()
         if not self.language_server.is_running():
@@ -1061,6 +1116,8 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
+        self.agent.validate_relative_path(relative_path)
+
         result = self.language_server.retrieve_full_file_content(relative_path)
         result_lines = result.splitlines()
         if end_line is None:
@@ -1093,11 +1150,17 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         :param content: the (utf-8-encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        absolute_path = os.path.join(self.get_project_root(), relative_path)
-        os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
-        with open(absolute_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return f"File created: {relative_path}"
+        self.agent.validate_relative_path(relative_path)
+
+        abs_path = (Path(self.get_project_root()) / relative_path).resolve()
+        will_overwrite_existing = abs_path.exists()
+
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text(content, encoding="utf-8")
+        answer = f"File created: {relative_path}."
+        if will_overwrite_existing:
+            answer += " Overwrote existing file."
+        return answer
 
 
 class ListDirTool(Tool):
@@ -1107,7 +1170,7 @@ class ListDirTool(Tool):
 
     def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
-        Lists files and directories in the given directory (optionally with recursion).
+        Lists all non-gitignored files and directories in the given directory (optionally with recursion).
 
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
@@ -1116,17 +1179,14 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
-
-        def is_ignored_path(abs_path: str) -> bool:
-            rel_path = os.path.relpath(abs_path, self.get_project_root())
-            return self.language_server.is_ignored_path(rel_path, ignore_unsupported_files=False)
+        self.agent.validate_relative_path(relative_path)
 
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=is_ignored_path,
-            is_ignored_file=is_ignored_path,
+            is_ignored_dir=self.agent.path_is_gitignored,
+            is_ignored_file=self.agent.path_is_gitignored,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})
@@ -1140,31 +1200,27 @@ class FindFileTool(Tool):
 
     def apply(self, file_mask: str, relative_path: str) -> str:
         """
-        Finds files matching the given file mask within the given relative path
+        Finds non-gitignored files matching the given file mask within the given relative path
 
         :param file_mask: the filename or file mask (using the wildcards * or ?) to search for
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
         :return: a JSON object with the list of matching files
         """
+        self.agent.validate_relative_path(relative_path)
 
-        def is_ignored_path(abs_path: str) -> bool:
-            rel_path = os.path.relpath(abs_path, self.get_project_root())
-            return self.language_server.is_ignored_path(rel_path, ignore_unsupported_files=False)
+        dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
+        # find the files by ignoring everything that doesn't match
         def is_ignored_file(abs_path: str) -> bool:
-            if is_ignored_path(abs_path):
+            if self.agent.path_is_gitignored(abs_path):
                 return True
             filename = os.path.basename(abs_path)
-            is_ignored = not fnmatch(filename, file_mask)
-            if not is_ignored:
-                is_ignored = not fnmatch(filename, file_mask)
-            return is_ignored
+            return not fnmatch(filename, file_mask)
 
         dirs, files = scan_directory(
-            os.path.join(self.get_project_root(), relative_path),
-            relative_to=self.get_project_root(),
+            path=dir_to_scan,
             recursive=True,
-            is_ignored_dir=is_ignored_path,
+            is_ignored_dir=self.agent.path_is_gitignored,
             is_ignored_file=is_ignored_file,
         )
 
@@ -1512,6 +1568,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
             If this is set to False and the regex matches multiple occurrences, an error will be returned
             (and you may retry with a revised, more specific regex).
         """
+        self.agent.validate_relative_path(relative_path)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
             updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
@@ -1833,16 +1890,16 @@ class SearchForPatternTool(Tool):
         else:
             # we walk through all files in the project starting from the root
             files_to_search = []
-            ignore_spec = self.language_server.get_ignore_spec()
             for root, dirs, files in os.walk(self.get_project_root()):
                 # Don't go into directories that are ignored by modifying dirs inplace
                 # Explanation for the  + "/" part:
                 # pathspec can't handle the matching of directories if they don't end with a slash!
                 # see https://github.com/cpburnz/python-pathspec/issues/89
-                dirs[:] = [d for d in dirs if not ignore_spec.match_file(d + "/")]
+                dirs[:] = [d for d in dirs if not self.agent.path_is_gitignored(os.path.join(root, d))]
                 for file in files:
-                    if not ignore_spec.match_file(os.path.join(root, file)):
-                        files_to_search.append(os.path.join(root, file))
+                    file_path = os.path.join(root, file)
+                    if not self.agent.path_is_gitignored(file_path):
+                        files_to_search.append(file_path)
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
             #   but it probably never matters and this version required no further refactoring
             matches = search_files(

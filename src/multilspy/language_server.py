@@ -105,7 +105,7 @@ class LanguageServer:
         return dirname.startswith('.')
 
     @classmethod
-    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config: bool = True) -> "LanguageServer":
+    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str) -> "LanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
 
@@ -115,30 +115,8 @@ class LanguageServer:
         :param repository_root_path: The root path of the repository.
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
-        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
-            the paths ignored there are also ignored by the language server
-
         :return LanguageServer: A language specific LanguageServer instance.
         """
-        config = copy(config)  # prevent mutation
-        if add_gitignore_content_to_config:
-            gitignore_path = os.path.join(repository_root_path, ".gitignore")
-            if not os.path.exists(gitignore_path):
-                logger.log(
-                    f"Should ignore all files in gitignore but no .gitignore found at {gitignore_path}. Skipping.",
-                    logging.WARNING
-                )
-                gitignore_file_content = None
-            else:
-                if config.gitignore_file_content is not None:
-                    raise ValueError(
-                        f"Asked to add gitignore content to the config for {repository_root_path=} but there already is a non-empty entry there:\n{config.gitignore_file_content=}"
-                    )
-                logger.log(f"Reading gitignore file from {gitignore_path}", logging.DEBUG)
-                with open(gitignore_path, "r", encoding="utf-8") as f:
-                    gitignore_file_content = f.read()
-            config.gitignore_file_content = gitignore_file_content
-
         if config.code_language == Language.PYTHON:
             from multilspy.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
@@ -270,12 +248,7 @@ class LanguageServer:
             # Normalize separators (pathspec expects forward slashes)
             pattern = pattern.replace(os.path.sep, '/')
             processed_patterns.append(pattern)
-        # Combine explicitly passed patterns with the content of the .gitignore file
-        self.logger.log(f"Processing gitignore content", logging.DEBUG)
-        if config.gitignore_file_content is not None:
-            for line in config.gitignore_file_content.splitlines():
-                if not line.startswith('#') and line.strip() != '':
-                    processed_patterns.append(line.strip())
+        self.logger.log(f"Processing {len(processed_patterns)} ignored paths from the config", logging.DEBUG)
 
         # Create a pathspec matcher from the processed patterns
         self._ignore_spec = pathspec.PathSpec.from_lines(
@@ -285,7 +258,7 @@ class LanguageServer:
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """Returns the pathspec matcher for the paths that were configured to be ignored through
-        the multilspy config file and the .gitignore file.
+        the multilspy config.
 
         This is is a subset of the full language-specific ignore spec that determines
         which files are relevant for the language server.
@@ -339,7 +312,7 @@ class LanguageServer:
             normalized_path = normalized_path + '/'
 
         # Use the pathspec matcher to check if the path matches any ignore pattern
-        if self._ignore_spec.match_file(normalized_path):
+        if self.get_ignore_spec().match_file(normalized_path):
             return True
 
         return False
@@ -1697,7 +1670,7 @@ class SyncLanguageServer:
     It is used to communicate with Language Servers of different programming languages.
     """
 
-    def __init__(self, language_server: LanguageServer, timeout: Optional[int] = None):
+    def __init__(self, language_server: LanguageServer, timeout: Optional[float] = None):
         """
         :param language_server: the async language server being wrapped
         :param timeout: the timeout, in seconds, to use for requests to the language server.
@@ -1714,8 +1687,8 @@ class SyncLanguageServer:
 
     @classmethod
     def create(
-        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, add_gitignore_content_to_config=True,
-        timeout: Optional[int] = None
+        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str,
+        timeout: Optional[float] = None
     ) -> "SyncLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
@@ -1725,13 +1698,11 @@ class SyncLanguageServer:
         :param repository_root_path: The root path of the repository (must be absolute).
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
-        :param add_gitignore_content_to_config: whether to add the content of the .gitignore file (if any found) to the config, so that
-            the paths ignored there are also ignored by the language server
         :param timeout: the timeout, in seconds, to use for requests; if None, use no timeout
 
         :return SyncLanguageServer: A language specific LanguageServer instance.
         """
-        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path, add_gitignore_content_to_config=add_gitignore_content_to_config), timeout=timeout)
+        return SyncLanguageServer(LanguageServer.create(config, logger, repository_root_path), timeout=timeout)
 
     @property
     def repository_root_path(self) -> str:
@@ -2313,7 +2284,7 @@ class SyncLanguageServer:
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """Returns the pathspec matcher for the paths that were configured to be ignored through
-        the multilspy config file and the .gitignore file.
+        the multilspy config.
 
         This is is a subset of the full language-specific ignore spec that determines
         which files are relevant for the language server.

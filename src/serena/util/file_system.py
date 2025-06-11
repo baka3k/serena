@@ -78,17 +78,14 @@ def find_all_non_ignored_files(repo_root: str) -> list[str]:
 
 @dataclass
 class GitignoreSpec:
-    """
-    Represents a single gitignore file and its parsed patterns.
-
-    :param file_path: Path to the gitignore file
-    :param patterns: List of adjusted patterns from the gitignore file
-    :param pathspec: Compiled PathSpec object for pattern matching
-    """
-
     file_path: str
+    """Path to the gitignore file."""
     patterns: list[str] = field(default_factory=list)
+    """List of patterns from the gitignore file.
+    The patterns are adjusted based on the gitignore file location.
+    """
     pathspec: PathSpec = field(init=False)
+    """Compiled PathSpec object for pattern matching."""
 
     def __post_init__(self) -> None:
         """Initialize the PathSpec from patterns."""
@@ -276,3 +273,14 @@ class GitignoreParser:
         """Reload all gitignore files from the repository."""
         self.ignore_specs.clear()
         self._load_gitignore_files()
+
+
+def match_path(path: str, path_spec: PathSpec) -> bool:
+    path = os.path.abspath(path)
+    normalized_path = str(path).replace(os.path.sep, "/")
+
+    # pathspec can't handle the matching of directories if they don't end with a slash!
+    # see https://github.com/cpburnz/python-pathspec/issues/89
+    if os.path.isdir(normalized_path) and not normalized_path.endswith("/"):
+        normalized_path = normalized_path + "/"
+    return path_spec.match_file(normalized_path)
