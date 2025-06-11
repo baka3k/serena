@@ -133,7 +133,7 @@ build/
 
         assert "*.log" in patterns
         assert "build/" in patterns
-        assert "temp.txt" in patterns
+        assert "/temp.txt" in patterns
 
     def test_parse_patterns_subdirectory(self):
         """Test parsing gitignore patterns in subdirectory."""
@@ -227,6 +227,127 @@ data.json
         assert parser.should_ignore("src/subdir/data.json")
         assert parser.should_ignore("src/subdir/deep/data.json")
 
+    def test_root_anchored_patterns(self):
+        """Test anchored patterns in root .gitignore only match root-level files."""
+        # Create new test structure for root anchored patterns
+        test_dir = self.repo_path / "test_root_anchored"
+        test_dir.mkdir()
+        (test_dir / "src").mkdir()
+        (test_dir / "docs").mkdir()
+        (test_dir / "src" / "nested").mkdir()
+
+        # Create root .gitignore with anchored patterns
+        gitignore = test_dir / ".gitignore"
+        gitignore.write_text(
+            """/config.json
+/temp.log
+/build
+*.pyc
+"""
+        )
+
+        # Create test files at root level
+        (test_dir / "config.json").touch()
+        (test_dir / "temp.log").touch()
+        (test_dir / "build").mkdir()
+        (test_dir / "file.pyc").touch()
+
+        # Create same-named files in subdirectories
+        (test_dir / "src" / "config.json").touch()
+        (test_dir / "src" / "temp.log").touch()
+        (test_dir / "src" / "build").mkdir()
+        (test_dir / "src" / "file.pyc").touch()
+        (test_dir / "docs" / "config.json").touch()
+        (test_dir / "docs" / "temp.log").touch()
+        (test_dir / "src" / "nested" / "config.json").touch()
+        (test_dir / "src" / "nested" / "temp.log").touch()
+        (test_dir / "src" / "nested" / "build").mkdir()
+
+        parser = GitignoreParser(str(test_dir))
+
+        # Anchored patterns should only match root-level files
+        assert parser.should_ignore("config.json")
+        assert not parser.should_ignore("src/config.json")
+        assert not parser.should_ignore("docs/config.json")
+        assert not parser.should_ignore("src/nested/config.json")
+
+        assert parser.should_ignore("temp.log")
+        assert not parser.should_ignore("src/temp.log")
+        assert not parser.should_ignore("docs/temp.log")
+        assert not parser.should_ignore("src/nested/temp.log")
+
+        assert parser.should_ignore("build")
+        assert not parser.should_ignore("src/build")
+        assert not parser.should_ignore("src/nested/build")
+
+        # Non-anchored patterns should match everywhere
+        assert parser.should_ignore("file.pyc")
+        assert parser.should_ignore("src/file.pyc")
+
+    def test_mixed_anchored_and_non_anchored_root_patterns(self):
+        """Test mix of anchored and non-anchored patterns in root .gitignore."""
+        test_dir = self.repo_path / "test_mixed_patterns"
+        test_dir.mkdir()
+        (test_dir / "app").mkdir()
+        (test_dir / "tests").mkdir()
+        (test_dir / "app" / "modules").mkdir()
+
+        # Create root .gitignore with mixed patterns
+        gitignore = test_dir / ".gitignore"
+        gitignore.write_text(
+            """/secrets.env
+/dist/
+node_modules/
+*.tmp
+/app/local.config
+debug.log
+"""
+        )
+
+        # Create test files and directories
+        (test_dir / "secrets.env").touch()
+        (test_dir / "dist").mkdir()
+        (test_dir / "node_modules").mkdir()
+        (test_dir / "file.tmp").touch()
+        (test_dir / "app" / "local.config").touch()
+        (test_dir / "debug.log").touch()
+
+        # Create same files in subdirectories
+        (test_dir / "app" / "secrets.env").touch()
+        (test_dir / "app" / "dist").mkdir()
+        (test_dir / "app" / "node_modules").mkdir()
+        (test_dir / "app" / "file.tmp").touch()
+        (test_dir / "app" / "debug.log").touch()
+        (test_dir / "tests" / "secrets.env").touch()
+        (test_dir / "tests" / "node_modules").mkdir()
+        (test_dir / "tests" / "debug.log").touch()
+        (test_dir / "app" / "modules" / "local.config").touch()
+
+        parser = GitignoreParser(str(test_dir))
+
+        # Anchored patterns should only match at root
+        assert parser.should_ignore("secrets.env")
+        assert not parser.should_ignore("app/secrets.env")
+        assert not parser.should_ignore("tests/secrets.env")
+
+        assert parser.should_ignore("dist")
+        assert not parser.should_ignore("app/dist")
+
+        assert parser.should_ignore("app/local.config")
+        assert not parser.should_ignore("app/modules/local.config")
+
+        # Non-anchored patterns should match everywhere
+        assert parser.should_ignore("node_modules")
+        assert parser.should_ignore("app/node_modules")
+        assert parser.should_ignore("tests/node_modules")
+
+        assert parser.should_ignore("file.tmp")
+        assert parser.should_ignore("app/file.tmp")
+
+        assert parser.should_ignore("debug.log")
+        assert parser.should_ignore("app/debug.log")
+        assert parser.should_ignore("tests/debug.log")
+
     def test_negation_patterns(self):
         """Test negation patterns are parsed correctly."""
         test_dir = self.repo_path / "test_negation"
@@ -248,7 +369,7 @@ data.json
 
         assert "*.log" in patterns
         assert "!important.log" in patterns
-        assert "!src/keep.log" in patterns
+        assert "!/src/keep.log" in patterns
 
     def test_comments_and_empty_lines(self):
         """Test that comments and empty lines are ignored."""

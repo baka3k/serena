@@ -225,7 +225,13 @@ class GitignoreParser:
                         # Add the directory prefix but also allow matching in subdirectories
                         adjusted_pattern = os.path.join(rel_dir, "**", line)
             else:
-                adjusted_pattern = line
+                if is_anchored:
+                    # Anchored patterns in root should only match at root level
+                    # Add leading slash back to indicate root-only matching
+                    adjusted_pattern = "/" + line
+                else:
+                    # Non-anchored patterns can match anywhere
+                    adjusted_pattern = line
 
             # Re-add negation if needed
             if is_negation:
@@ -251,8 +257,13 @@ class GitignoreParser:
         else:
             rel_path = path
 
+        abs_path = os.path.join(self.repo_root, rel_path)
+
         # Normalize path separators
         rel_path = rel_path.replace(os.sep, "/")
+
+        if os.path.exists(abs_path) and os.path.isdir(abs_path) and not rel_path.endswith("/"):
+            rel_path = rel_path + "/"
 
         # Check against each ignore spec
         for spec in self.ignore_specs:
