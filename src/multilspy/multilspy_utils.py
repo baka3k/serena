@@ -313,29 +313,38 @@ class PlatformUtils:
         """
         try:
             result = subprocess.run(["dotnet", "--list-runtimes"], capture_output=True, check=True)
-            version = ''
+            available_version_cmd_output = []
             for line in result.stdout.decode('utf-8').split('\n'):
                 if line.startswith('Microsoft.NETCore.App'):
-                    version = line.split(' ')[1]
-                    break
-            if version == '':
+                    version_cmd_output = line.split(' ')[1]
+                    available_version_cmd_output.append(version_cmd_output)
+            
+            if not available_version_cmd_output:
                 raise MultilspyException("dotnet not found on the system")
-            if version.startswith("8"):
-                return DotnetVersion.V8
-            elif version.startswith("7"):
-                return DotnetVersion.V7
-            elif version.startswith("6"):
-                return DotnetVersion.V6
-            elif version.startswith("4"):
-                return DotnetVersion.V4
-            else:
-                raise MultilspyException("Unknown dotnet version: " + version)
+            
+            # Check for supported versions in order of preference (latest first)
+            for version_cmd_output in available_version_cmd_output:
+                if version_cmd_output.startswith("8"):
+                    return DotnetVersion.V8
+            for version_cmd_output in available_version_cmd_output:
+                if version_cmd_output.startswith("7"):
+                    return DotnetVersion.V7
+            for version_cmd_output in available_version_cmd_output:
+                if version_cmd_output.startswith("6"):
+                    return DotnetVersion.V6
+            for version_cmd_output in available_version_cmd_output:
+                if version_cmd_output.startswith("4"):
+                    return DotnetVersion.V4
+            
+            # If no supported version found, raise exception with all available versions
+            raise MultilspyException(f"No supported dotnet version found. Available versions: {', '.join(available_version_cmd_output)}. Supported versions: 4, 6, 7, 8")
         except (FileNotFoundError, subprocess.CalledProcessError):
             try:
                 result = subprocess.run(["mono", "--version"], capture_output=True, check=True)
                 return DotnetVersion.VMONO
             except (FileNotFoundError, subprocess.CalledProcessError):
                 raise MultilspyException("dotnet or mono not found on the system")
+
 
 
 class SymbolUtils:
