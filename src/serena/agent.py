@@ -1071,7 +1071,11 @@ class Tool(Component):
             if not catch_exceptions:
                 raise
             msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
-            log.error(f"Error executing tool: {e}", exc_info=e)
+            log.error(
+                f"Error executing tool: {e}. "
+                f"Consider restarting the language server to solve this (especially, if it's a timeout of a symbolic operation)",
+                exc_info=e,
+            )
             result = msg
 
         if log_call:
