@@ -506,6 +506,7 @@ class SerenaAgent:
         enable_gui_log_window: bool | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
+        tool_timeout: float | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -520,6 +521,7 @@ class SerenaAgent:
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
             If not specified, will take the value from the serena configuration.
         :param gui_log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
+        :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
         """
         # obtain serena configuration
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -533,6 +535,8 @@ class SerenaAgent:
             self.serena_config.log_level = logging.getLevelNamesMapping()[log_level]
         if trace_lsp_communication is not None:
             self.serena_config.trace_lsp_communication = trace_lsp_communication
+        if tool_timeout is not None:
+            self.serena_config.tool_timeout = tool_timeout
 
         # adjust log level
         serena_log_level = self.serena_config.log_level

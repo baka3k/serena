@@ -106,6 +106,7 @@ def create_mcp_server_and_agent(
     enable_gui_log_window: bool | None = None,
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
+    tool_timeout: float | None = None,
 ) -> tuple[FastMCP, SerenaAgent]:
     """
     Create an MCP server.
@@ -123,6 +124,7 @@ def create_mcp_server_and_agent(
     :param log_level: Log level. If not specified, will take the value from the serena configuration.
     :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
         This is useful for debugging language server issues.
+    :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
     """
     mcp: FastMCP | None = None
     context_instance = SerenaAgentContext.load(context)
@@ -139,6 +141,7 @@ def create_mcp_server_and_agent(
             enable_gui_log_window=enable_gui_log_window,
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
+            tool_timeout=tool_timeout,
         )
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -280,6 +283,12 @@ PROJECT_TYPE = ProjectType()
     default=None,
     help="Whether to trace the communication between Serena and the language servers. This is useful for debugging language server issues.",
 )
+@click.option(
+    "--tool-timeout",
+    type=float,
+    default=None,
+    help="Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.",
+)
 def start_mcp_server(
     project_file_opt: str | None,
     project_file_arg: str | None,
@@ -292,6 +301,7 @@ def start_mcp_server(
     enable_gui_log_window: bool | None = None,
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
+    tool_timeout: float | None = None,
 ) -> None:
     """Starts the Serena MCP server. By default, will not activate any project at startup.
     If you want to start with an already active project, use --project to pass the project name or path.
@@ -313,6 +323,7 @@ def start_mcp_server(
         enable_gui_log_window=enable_gui_log_window,
         log_level=log_level,
         trace_lsp_communication=trace_lsp_communication,
+        tool_timeout=tool_timeout,
     )
 
     # log after server creation such that the log appears in the GUI
