@@ -317,7 +317,7 @@ class LanguageServer:
 
         return False
     
-    async def _shutdown(self, timeout: float = 10.0):
+    async def _shutdown(self, timeout: float = 5.0):
         """
         A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
         by explicitly closing all I/O pipes.
@@ -946,7 +946,7 @@ class LanguageServer:
             self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
             self._cache_has_changed = True
         return result
-    
+
     async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols. 
@@ -1750,12 +1750,9 @@ class SyncLanguageServer:
 
         :return: None
         """
-        self.loop = asyncio.new_event_loop()
-        self.loop_thread = threading.Thread(target=self.loop.run_forever, daemon=True)
-        self.loop_thread.start()
-        ctx = self.language_server.start_server()
-        asyncio.run_coroutine_threadsafe(ctx.__aenter__(), loop=self.loop).result()
+        self.start()
         yield self
+        self.language_server.logger.log("SyncLS Startup: exiting LS context", logging.DEBUG)
         self.stop()
 
     def request_definition(self, file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
