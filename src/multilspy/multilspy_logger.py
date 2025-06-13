@@ -30,7 +30,7 @@ class MultilspyLogger:
         self.logger.setLevel(log_level)
         self.json_format = json_format
 
-    def log(self, debug_message: str, level: int, sanitized_error_message: str = "") -> None:
+    def log(self, debug_message: str, level: int, sanitized_error_message: str = "", stacklevel: int = 2) -> None:
         """
         Log the debug and santized messages using the logger
         """
@@ -59,6 +59,7 @@ class MultilspyLogger:
             self.logger.log(
                 level=level,
                 msg=debug_log_line.json(),
+                stacklevel=stacklevel,
             )
         else:
-            self.logger.log(level, debug_message)
+            self.logger.log(level, debug_message, stacklevel=stacklevel)
