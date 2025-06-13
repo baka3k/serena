@@ -2,10 +2,12 @@
 Provides Python specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Python.
 """
 
+import asyncio
 import json
 import logging
 import os
 import pathlib
+import re
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Tuple
 
@@ -38,6 +40,10 @@ class PyrightServer(LanguageServer):
             "python",
         )
         
+        # Event to signal when initial workspace analysis is complete
+        self.analysis_complete = asyncio.Event()
+        self.found_source_files = False
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["venv", "__pycache__"]
@@ -145,16 +151,19 @@ class PyrightServer(LanguageServer):
     @asynccontextmanager
     async def start_server(self) -> AsyncIterator["PyrightServer"]:
         """
-        Starts the Pyright Language Server, waits for the server to be ready and yields the LanguageServer instance.
+        Starts the Pyright Language Server and waits for initial workspace analysis to complete.
+        
+        This prevents zombie processes by ensuring Pyright has finished its initial background
+        tasks before we consider the server ready.
 
         Usage:
         ```
         async with lsp.start_server():
-            # LanguageServer has been initialized and ready to serve requests
+            # LanguageServer has been initialized and workspace analysis is complete
             await lsp.request_definition(...)
             await lsp.request_references(...)
             # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
+        # LanguageServer has been shutdown cleanly
         ```
         """
 
@@ -164,13 +173,33 @@ class PyrightServer(LanguageServer):
         async def do_nothing(params):
             return
 
-        async def check_experimental_status(params):
-            if params["quiescent"] == True:
+        async def window_log_message(msg):
+            """
+            Monitor Pyright's log messages to detect when initial analysis is complete.
+            Pyright logs "Found X source files" when it finishes scanning the workspace.
+            """
+            message_text = msg.get("message", "")
+            self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
+            
+            # Look for "Found X source files" which indicates workspace scanning is complete
+            # Unfortunately, pyright is unreliable and there seems to be no better way
+            if re.search(r"Found \d+ source files?", message_text):
+                self.logger.log("Pyright workspace scanning complete", logging.INFO)
+                self.found_source_files = True
+                self.analysis_complete.set()
                 self.completions_available.set()
 
-        async def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+        async def check_experimental_status(params):
+            """
+            Also listen for experimental/serverStatus as a backup signal
+            """
+            if params.get("quiescent") == True:
+                self.logger.log("Received experimental/serverStatus with quiescent=true", logging.INFO)
+                if not self.found_source_files:
+                    self.analysis_complete.set()
+                    self.completions_available.set()
 
+        # Set up notification handlers
         self.server.on_request("client/registerCapability", do_nothing)
         self.server.on_notification("language/status", do_nothing)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -195,6 +224,23 @@ class PyrightServer(LanguageServer):
             self.logger.log(f"Received initialize response from pyright server: {init_response}", logging.INFO)
 
             # Verify that the server supports our required features
+            assert "textDocumentSync" in init_response["capabilities"]
+            assert "completionProvider" in init_response["capabilities"]
+            assert "definitionProvider" in init_response["capabilities"]
+
+            # Complete the initialization handshake
             self.server.notify.initialized({})
+            
+            # Wait for Pyright to complete its initial workspace analysis
+            # This prevents zombie processes by ensuring background tasks finish
+            self.logger.log("Waiting for Pyright to complete initial workspace analysis...", logging.INFO)
+            try:
+                await asyncio.wait_for(self.analysis_complete.wait(), timeout=1.0)
+                self.logger.log("Pyright initial analysis complete, server ready", logging.INFO)
+            except asyncio.TimeoutError:
+                self.logger.log("Timeout waiting for Pyright analysis completion, proceeding anyway", logging.WARNING)
+                # Fallback: assume analysis is complete after timeout
+                self.analysis_complete.set()
+                self.completions_available.set()
 
             yield self
