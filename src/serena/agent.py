@@ -10,7 +10,6 @@ import re
 import shutil
 import sys
 import threading
-from time import time
 import traceback
 import webbrowser
 from abc import ABC, abstractmethod
@@ -22,6 +21,7 @@ from fnmatch import fnmatch
 from functools import cached_property
 from logging import Logger
 from pathlib import Path
+from time import time
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 
