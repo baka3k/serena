@@ -9,7 +9,6 @@ import platform
 import re
 import shutil
 import sys
-import threading
 import traceback
 import webbrowser
 from abc import ABC, abstractmethod
@@ -21,7 +20,6 @@ from fnmatch import fnmatch
 from functools import cached_property
 from logging import Logger
 from pathlib import Path
-from time import time
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 
@@ -305,6 +303,59 @@ class SerenaConfigBase(ABC):
                 break
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
+
+    def to_dict(self) -> dict:
+        """Convert configuration to dictionary for serialization."""
+        return {
+            "projects": [
+                {
+                    "project_root": project.project_root,
+                    "project_config": {
+                        "project_name": project.project_config.project_name,
+                        "language": project.project_config.language,
+                        "ignored_paths": project.project_config.ignored_paths,
+                        "ignore_all_files_in_gitignore": project.project_config.ignore_all_files_in_gitignore,
+                    },
+                }
+                for project in self.projects
+            ],
+            "gui_log_window_enabled": self.gui_log_window_enabled,
+            "log_level": self.log_level,
+            "trace_lsp_communication": self.trace_lsp_communication,
+            "web_dashboard": self.web_dashboard,
+            "tool_timeout": self.tool_timeout,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SerenaConfigBase":
+        """Create configuration from dictionary."""
+        projects = []
+        for project_data in data.get("projects", []):
+            project_config = ProjectConfig(
+                project_name=project_data["project_config"]["project_name"],
+                language=project_data["project_config"]["language"],
+                ignored_paths=project_data["project_config"]["ignored_paths"],
+                ignore_all_files_in_gitignore=project_data["project_config"]["ignore_all_files_in_gitignore"],
+            )
+            project = Project(project_root=project_data["project_root"], project_config=project_config)
+            projects.append(project)
+
+        # Create a basic config class that can be instantiated
+        from dataclasses import dataclass
+
+        @dataclass(kw_only=True)
+        class DeserializedConfig(SerenaConfigBase):
+            def _add_new_project(self, project: Project) -> None:
+                self.projects.append(project)
+
+        return DeserializedConfig(
+            projects=projects,
+            gui_log_window_enabled=data.get("gui_log_window_enabled", False),
+            log_level=data.get("log_level", logging.INFO),
+            trace_lsp_communication=data.get("trace_lsp_communication", False),
+            web_dashboard=data.get("web_dashboard", True),
+            tool_timeout=data.get("tool_timeout", DEFAULT_TOOL_TIMEOUT),
+        )
 
 
 @dataclass(kw_only=True)
@@ -851,14 +902,13 @@ class SerenaAgent:
         """
         Starts/resets the language server for the current project
         """
-
         tool_timeout = self.serena_config.tool_timeout
         if tool_timeout is None or tool_timeout < 0:
             ls_timeout = None
         else:
             if tool_timeout < 10:
                 raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
-            ls_timeout = tool_timeout - 5 # the LS timeout is for a single call, it should be smaller than the tool timeout
+            ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
 
         # stop the language server if it is running
         if self.is_language_server_running():
