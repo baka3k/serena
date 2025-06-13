@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from multilspy.multilspy_config import Language
-from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, SerenaAgent, SerenaConfigBase
+from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfigBase
 from test.conftest import LanguageParamRequest, get_repo_path
 
 
@@ -19,17 +19,46 @@ class SerenaConfigForTests(SerenaConfigBase):
     gui_log_window_enabled: bool = False
     web_dashboard: bool = False
 
+    def __post_init__(self):
+        # Initialize with empty projects list if not already set
+        if not hasattr(self, "projects") or self.projects is None:
+            self.projects = []
+
 
 @pytest.fixture
 def serena_config():
-    return SerenaConfigForTests()
+    """Create an in-memory configuration for tests with test repositories pre-registered."""
+    # Create test projects for all supported languages
+    test_projects = []
+    for language in [Language.PYTHON, Language.GO, Language.JAVA, Language.RUST, Language.TYPESCRIPT, Language.PHP]:
+        repo_path = get_repo_path(language)
+        if repo_path.exists():
+            project_name = f"test_repo_{language}"
+            project = Project(
+                project_root=str(repo_path),
+                project_config=ProjectConfig(
+                    project_name=project_name,
+                    language=language,
+                    ignored_paths=[],
+                    excluded_tools=set(),
+                    read_only=False,
+                    ignore_all_files_in_gitignore=True,
+                    initial_prompt="",
+                    encoding="utf-8",
+                ),
+            )
+            test_projects.append(project)
+
+    config = SerenaConfigForTests()
+    config.projects = test_projects
+    return config
 
 
 @pytest.fixture
 def serena_agent(request: LanguageParamRequest, serena_config) -> SerenaAgent:
     language = Language(request.param)
-    repo = get_repo_path(language)
-    return SerenaAgent(project=str(repo), serena_config=serena_config)
+    project_name = f"test_repo_{language}"
+    return SerenaAgent(project=project_name, serena_config=serena_config)
 
 
 class TestSerenaAgent:

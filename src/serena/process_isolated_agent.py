@@ -15,7 +15,9 @@ import time
 import traceback
 from typing import Any, Self
 
-from serena.agent import SerenaAgent, SerenaConfig, ToolProtocol
+from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
+
+from serena.agent import SerenaAgent, SerenaConfig, SerenaConfigBase, Tool, ToolInterface, ToolRegistry
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +112,7 @@ class SerenaAgentWorker:
             # Get the tool by name
             tool = None
             for tool_instance in self.agent._active_tools.values():
-                if tool_instance.get_name() == tool_name:
+                if tool_instance.get_name_from_cls() == tool_name:
                     tool = tool_instance
                     break
 
@@ -159,23 +161,15 @@ class SerenaAgentWorker:
             return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
 
     def _get_tool_instances(self, request_id: str) -> dict[str, Any]:
-        """Get exposed tool instances for MCP tool creation."""
+        """Get exposed tool names for MCP tool creation."""
         if self.agent is None:
             return {"id": request_id, "error": "SerenaAgent not initialized"}
 
         try:
             tool_instances = self.agent.get_exposed_tool_instances()
-            # Serialize tool information that can be used to recreate tools on the MCP side
-            tool_data = []
-            for tool in tool_instances:
-                tool_data.append(
-                    {
-                        "name": tool.get_name(),
-                        "class_name": tool.__class__.__name__,
-                        "apply_method_doc": getattr(tool, "apply").__doc__,
-                    }
-                )
-            return {"id": request_id, "result": tool_data}
+            # Return only tool names - metadata will be reconstructed from ToolRegistry
+            tool_names = [tool.get_name_from_cls() for tool in tool_instances]
+            return {"id": request_id, "result": tool_names}
         except Exception as e:
             return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
 
@@ -193,7 +187,7 @@ class SerenaAgentWorker:
 class ProcessIsolatedSerenaAgent:
     """Process-isolated wrapper for SerenaAgent that prevents asyncio contamination."""
 
-    def __init__(self, serena_config: SerenaConfig):
+    def __init__(self, serena_config: SerenaConfigBase):
         self.serena_config = serena_config
         self.process: multiprocessing.Process | None = None
         self.request_queue: multiprocessing.Queue | None = None
@@ -320,8 +314,8 @@ class ProcessIsolatedSerenaAgent:
         """Reset the language server."""
         self._make_request_with_result("reset_language_server")
 
-    def get_tool_instances(self) -> list[dict[str, Any]]:
-        """Get tool instances data for MCP tool creation."""
+    def get_tool_instances(self) -> list[str]:
+        """Get tool names for MCP tool creation."""
         return self._make_request_with_result("get_tool_instances")
 
     def __enter__(self) -> Self:
@@ -332,30 +326,36 @@ class ProcessIsolatedSerenaAgent:
         self.stop()
 
 
-class ProcessIsolatedTool(ToolProtocol):
+class ProcessIsolatedTool(ToolInterface):
     """A clean tool wrapper that delegates to ProcessIsolatedSerenaAgent."""
 
-    def __init__(self, process_agent: ProcessIsolatedSerenaAgent, tool_name: str, tool_doc: str | None = None):
+    def __init__(self, process_agent: ProcessIsolatedSerenaAgent, tool_name: str):
         self.process_agent = process_agent
-        self.tool_name = tool_name
-        self._tool_doc = tool_doc
-        # Set the docstring for the apply method if provided
-        if tool_doc:
-            self.apply.__doc__ = tool_doc
+        self._tool_name = tool_name
 
-    def apply(self, **kwargs: Any) -> str:
-        """Apply the tool through the process-isolated agent."""
-        return self.process_agent.tool_call(self.tool_name, **kwargs)
+    @property
+    def _tool_class(self) -> type[Tool]:
+        return ToolRegistry.get_tool_class_by_name(self._tool_name)
 
     def get_name(self) -> str:
         """Get the tool name for this process-isolated tool."""
-        return self.tool_name
+        return self._tool_name
+
+    def get_apply_docstring(self) -> str:
+        """Get the docstring for the apply method."""
+        # in the actual tool, this is a classmethod
+        return self._tool_class.get_apply_docstring_from_cls()
+
+    def get_apply_fn_metadata(self) -> FuncMetadata:
+        """Get the metadata for the apply method."""
+        # in the actual tool, this is a classmethod
+        return self._tool_class.get_apply_fn_metadata_from_cls()
 
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs: Any) -> str:
         """Apply the tool with logging and exception handling."""
         try:
-            return self.apply(**kwargs)
+            return self.process_agent.tool_call(self._tool_name, **kwargs)
         except Exception as e:
             if catch_exceptions:
-                return f"Error executing tool {self.tool_name}: {e!s}"
+                return f"Error executing tool {self._tool_name}: {e!s}"
             raise

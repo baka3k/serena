@@ -8,21 +8,23 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import click  # Add click import
 import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
-from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 from sensai.util import logging
 from sensai.util.helper import mark_used
 
-from serena.agent import SerenaAgent, SerenaConfig, ToolProtocol, show_fatal_exception_safe
+from serena.agent import SerenaAgent, ToolInterface, create_serena_config, show_fatal_exception_safe
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
-from serena.process_isolated_agent import ProcessIsolatedSerenaAgent, ProcessIsolatedTool
+
+# Import for type annotations
+if TYPE_CHECKING:
+    from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -47,18 +49,12 @@ class SerenaMCPRequestContext:
 
 
 def make_tool(
-    tool: ToolProtocol,
+    tool: ToolInterface,
 ) -> MCPTool:
     func_name = tool.get_name()
-
-    apply_fn = getattr(tool, "apply")
-    if apply_fn is None:
-        raise ValueError(f"Tool does not have an apply method: {tool}")
-
-    func_doc = apply_fn.__doc__ or ""
+    func_doc = tool.get_apply_docstring() or ""
+    func_arg_metadata = tool.get_apply_fn_metadata()
     is_async = False
-
-    func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
 
     docstring = docstring_parser.parse(func_doc)
@@ -94,6 +90,7 @@ def make_tool(
         fn_metadata=func_arg_metadata,
         is_async=is_async,
         context_kwarg=None,
+        annotations=None,
     )
 
 
@@ -108,7 +105,7 @@ def create_mcp_server_and_agent(
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
     tool_timeout: float | None = None,
-) -> tuple[FastMCP, SerenaAgent]:
+) -> tuple[FastMCP, "ProcessIsolatedSerenaAgent"]:
     """
     Create an MCP server (legacy - now uses process isolation).
 
@@ -141,7 +138,7 @@ def create_mcp_server_and_agent(
         tool_timeout=tool_timeout,
     )
     # Return a dummy agent for compatibility
-    return mcp, process_agent  # type: ignore
+    return mcp, process_agent
 
 
 def create_mcp_server_and_process_isolated_agent(
@@ -155,7 +152,7 @@ def create_mcp_server_and_process_isolated_agent(
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
     tool_timeout: float | None = None,
-) -> tuple[FastMCP, ProcessIsolatedSerenaAgent]:
+) -> tuple[FastMCP, "ProcessIsolatedSerenaAgent"]:
     """
     Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
@@ -179,8 +176,8 @@ def create_mcp_server_and_process_isolated_agent(
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
     try:
-        # First create a regular agent to get the config
-        temp_agent = SerenaAgent(
+        # Create configuration without instantiating a full SerenaAgent
+        serena_config = create_serena_config(
             project=project,
             context=context_instance,
             modes=modes_instances,
@@ -191,15 +188,10 @@ def create_mcp_server_and_process_isolated_agent(
             tool_timeout=tool_timeout,
         )
 
-        # Create process-isolated agent with the same config
-        if not isinstance(temp_agent.serena_config, SerenaConfig):
-            raise TypeError("Expected SerenaConfig instance")
-        process_agent = ProcessIsolatedSerenaAgent(temp_agent.serena_config)
+        # Create process-isolated agent with the configuration
+        from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
 
-        # Clean up temp agent
-        if temp_agent.language_server is not None:
-            temp_agent.language_server.stop()
-        del temp_agent
+        process_agent = ProcessIsolatedSerenaAgent(serena_config)
 
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -209,23 +201,29 @@ def create_mcp_server_and_process_isolated_agent(
         """Update the tools in the MCP server - adapted for process isolation."""
         nonlocal mcp, process_agent
 
-        # Get tool instances data from process-isolated agent
+        # Check if process agent is running
+        if process_agent.process is None or not process_agent.process.is_alive():
+            log.debug("Process agent not running yet, skipping tool update")
+            return
+
+        # Get tool names from process-isolated agent
         try:
-            tool_instances_data = process_agent.get_tool_instances()
+            tool_names = process_agent.get_tool_instances()
         except Exception as e:
-            log.error(f"Failed to get tool instances from process agent: {e}")
+            log.error(f"Failed to get tool names from process agent: {e}")
             return
 
         if mcp is not None:
+            from serena.process_isolated_agent import ProcessIsolatedTool
+
             mcp._tool_manager._tools = {}
-            for tool_data in tool_instances_data:
+            for tool_name in tool_names:
                 # Create ProcessIsolatedTool instance that can be used with make_tool
-                tool_instance = ProcessIsolatedTool(
-                    process_agent=process_agent, tool_name=tool_data["name"], tool_doc=tool_data["apply_method_doc"]
-                )
+                # Metadata is extracted from ToolRegistry using classmethods
+                tool_instance = ProcessIsolatedTool(process_agent=process_agent, tool_name=tool_name)
                 # Use the original make_tool function to get full docstring parsing
                 mcp_tool = make_tool(tool_instance)
-                mcp._tool_manager._tools[tool_data["name"]] = mcp_tool
+                mcp._tool_manager._tools[tool_name] = mcp_tool
 
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
@@ -235,6 +233,8 @@ def create_mcp_server_and_process_isolated_agent(
 
         try:
             process_agent.start()
+            # Update tools now that the process agent is running
+            update_tools()
             yield
         finally:
             process_agent.stop()
