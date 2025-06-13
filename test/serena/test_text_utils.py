@@ -182,6 +182,24 @@ class TestSearchText:
         assert any("isinstance(item, dict)" in line for line in instance_matches)
         assert any("isinstance(item, list)" in line for line in instance_matches)
 
+    def test_search_text_glob_with_special_chars(self):
+        """Glob patterns containing regex special characters should match literally."""
+        content = """
+        def func_square():
+            print("value[42]")
+
+        def func_curly():
+            print("value{bar}")
+        """
+
+        matches_square = search_text(r"*\[42\]*", content=content, is_glob=True)
+        assert len(matches_square) == 1
+        assert "[42]" in matches_square[0].lines[0].line_content
+
+        matches_curly = search_text("*{bar}*", content=content, is_glob=True)
+        assert len(matches_curly) == 1
+        assert "{bar}" in matches_curly[0].lines[0].line_content
+
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
         content = """
