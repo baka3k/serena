@@ -107,7 +107,9 @@ exclude = "^build/|^docs/"
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
 
 [tool.poe.tasks]
-test = "pytest test --color=yes"
+# Uses PYTEST_MARKERS env var for default markers (defaults to "not java and not rust")
+# Set PYTEST_MARKERS="" to run all tests
+test = "pytest test --color=yes -m \"${PYTEST_MARKERS:-not java and not rust}\""
 _black_check = "black --check --exclude src/multilspy/ src scripts test"
 _ruff_check = "ruff check --exclude .venv/ --exclude src/multilspy/ src scripts test"
 _black_format = "black --exclude .venv/|src/multilspy/ src scripts test"
