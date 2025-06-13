@@ -2252,8 +2252,6 @@ class SyncLanguageServer:
         shutdown_type = "Nuclear" if is_windows else "Graceful"
         self.language_server.logger.log(f"{shutdown_type} shutdown complete - all references cleared", logging.INFO)
 
-
-
     def save_cache(self):
         """
         Save the cache to a file.

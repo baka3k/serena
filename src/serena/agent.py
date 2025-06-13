@@ -522,7 +522,7 @@ class SerenaAgent:
         :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
             If not specified, will take the value from the serena configuration.
-        :param gui_log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
+        :param log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
         """
         # obtain serena configuration
@@ -804,6 +804,8 @@ class SerenaAgent:
         :return: a string overview of the current configuration, including the active and available configuration options
         """
         result_str = "Current configuration:\n"
+        result_str += f"Serena version: {serena_version()}\n"
+        result_str += f"Loglevel: {self.serena_config.log_level}, trace_lsp_communication={self.serena_config.trace_lsp_communication}\n"
         if self._active_project is not None:
             result_str += f"Active project: {self._active_project.project_name}\n"
         else:
