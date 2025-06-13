@@ -377,6 +377,7 @@ class SerenaConfig(SerenaConfigBase):
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
         instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
+        instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:
