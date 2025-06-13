@@ -21,7 +21,7 @@ from functools import cached_property
 from logging import Logger
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, Self, TypeVar, Union, cast
 
 import yaml
 from overrides import override
@@ -1024,6 +1024,22 @@ class ToolMarkerCanEdit:
 
 class ToolMarkerDoesNotRequireActiveProject:
     pass
+
+
+class ToolProtocol(Protocol):
+    """Protocol defining the complete interface that make_tool() expects from a tool."""
+
+    def get_name(self) -> str:
+        """Get the tool name."""
+        ...
+
+    def apply(self, **kwargs: Any) -> str:
+        """The application logic of the tool, docstring will be set here and used for MCP tool description."""
+        ...
+
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs: Any) -> str:
+        """Apply the tool with logging and exception handling."""
+        ...
 
 
 class Tool(Component):

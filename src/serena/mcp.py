@@ -19,9 +19,10 @@ from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 from sensai.util import logging
 from sensai.util.helper import mark_used
 
-from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
+from serena.agent import SerenaAgent, SerenaConfig, ToolProtocol, show_fatal_exception_safe
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
+from serena.process_isolated_agent import ProcessIsolatedSerenaAgent, ProcessIsolatedTool
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -46,7 +47,7 @@ class SerenaMCPRequestContext:
 
 
 def make_tool(
-    tool: Tool,
+    tool: ToolProtocol,
 ) -> MCPTool:
     func_name = tool.get_name()
 
@@ -68,17 +69,17 @@ def make_tool(
         func_doc = f"{docstring.description.strip().strip('.')}."
     else:
         func_doc = ""
-    if (docstring.returns) and (docstring_returns := docstring.returns.description):
+    if docstring.returns and (docstring_returns_descr := docstring.returns.description):
         # Only add a space before "Returns" if func_doc is not empty
         prefix = " " if func_doc else ""
-        func_doc = f"{func_doc}{prefix}Returns {docstring_returns.strip().strip('.')}."
+        func_doc = f"{func_doc}{prefix}Returns {docstring_returns_descr.strip().strip('.')}."
 
     # Parse the parameter descriptions from the docstring and add pass its description
     # to the parameters schema.
     docstring_params = {param.arg_name: param for param in docstring.params}
     parameters_properties: dict[str, dict[str, Any]] = parameters["properties"]
     for parameter, properties in parameters_properties.items():
-        if (param_doc := docstring_params.get(parameter)) and (param_doc.description):
+        if (param_doc := docstring_params.get(parameter)) and param_doc.description:
             param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
             properties["description"] = param_desc[0].upper() + param_desc[1:]
 
@@ -109,7 +110,54 @@ def create_mcp_server_and_agent(
     tool_timeout: float | None = None,
 ) -> tuple[FastMCP, SerenaAgent]:
     """
-    Create an MCP server.
+    Create an MCP server (legacy - now uses process isolation).
+
+    :param project: "Either an absolute path to the project directory or a name of an already registered project. "
+        "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name "
+        "afterwards.
+    :param host: The host to bind to
+    :param port: The port to bind to
+    :param context: The context name or path to context file
+    :param modes: List of mode names or paths to mode files
+    :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
+    :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
+        If not specified, will take the value from the serena configuration.
+    :param log_level: Log level. If not specified, will take the value from the serena configuration.
+    :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
+        This is useful for debugging language server issues.
+    :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+    """
+    # Delegate to process-isolated version for safety
+    mcp, process_agent = create_mcp_server_and_process_isolated_agent(
+        project=project,
+        host=host,
+        port=port,
+        context=context,
+        modes=modes,
+        enable_web_dashboard=enable_web_dashboard,
+        enable_gui_log_window=enable_gui_log_window,
+        log_level=log_level,
+        trace_lsp_communication=trace_lsp_communication,
+        tool_timeout=tool_timeout,
+    )
+    # Return a dummy agent for compatibility
+    return mcp, process_agent  # type: ignore
+
+
+def create_mcp_server_and_process_isolated_agent(
+    project: str | None,
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    context: str = DEFAULT_CONTEXT,
+    modes: Sequence[str] = DEFAULT_MODES,
+    enable_web_dashboard: bool | None = None,
+    enable_gui_log_window: bool | None = None,
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+    trace_lsp_communication: bool | None = None,
+    tool_timeout: float | None = None,
+) -> tuple[FastMCP, ProcessIsolatedSerenaAgent]:
+    """
+    Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
     :param project: "Either an absolute path to the project directory or a name of an already registered project. "
         "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name "
@@ -131,10 +179,9 @@ def create_mcp_server_and_agent(
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
     try:
-        agent = SerenaAgent(
+        # First create a regular agent to get the config
+        temp_agent = SerenaAgent(
             project=project,
-            # Callback disabled for the time being (see above)
-            # project_activation_callback=update_tools
             context=context_instance,
             modes=modes_instances,
             enable_web_dashboard=enable_web_dashboard,
@@ -143,39 +190,61 @@ def create_mcp_server_and_agent(
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
         )
+
+        # Create process-isolated agent with the same config
+        if not isinstance(temp_agent.serena_config, SerenaConfig):
+            raise TypeError("Expected SerenaConfig instance")
+        process_agent = ProcessIsolatedSerenaAgent(temp_agent.serena_config)
+
+        # Clean up temp agent
+        if temp_agent.language_server is not None:
+            temp_agent.language_server.stop()
+        del temp_agent
+
     except Exception as e:
         show_fatal_exception_safe(e)
         raise
 
     def update_tools() -> None:
-        """Update the tools in the MCP server."""
-        # Tools may change as a result of project activation.
-        # NOTE: While we could pass updated tool information on to the MCP server via the callback, Claude Desktop does not,
-        # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
-        # so we need to register all tools at startup, unfortunately.
-        nonlocal mcp, agent
-        tools = agent.get_exposed_tool_instances()
+        """Update the tools in the MCP server - adapted for process isolation."""
+        nonlocal mcp, process_agent
+
+        # Get tool instances data from process-isolated agent
+        try:
+            tool_instances_data = process_agent.get_tool_instances()
+        except Exception as e:
+            log.error(f"Failed to get tool instances from process agent: {e}")
+            return
+
         if mcp is not None:
             mcp._tool_manager._tools = {}
-            for tool in tools:
-                # noinspection PyProtectedMember
-                mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
+            for tool_data in tool_instances_data:
+                # Create ProcessIsolatedTool instance that can be used with make_tool
+                tool_instance = ProcessIsolatedTool(
+                    process_agent=process_agent, tool_name=tool_data["name"], tool_doc=tool_data["apply_method_doc"]
+                )
+                # Use the original make_tool function to get full docstring parsing
+                mcp_tool = make_tool(tool_instance)
+                mcp._tool_manager._tools[tool_data["name"]] = mcp_tool
 
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        nonlocal agent
+        nonlocal process_agent
         mark_used(mcp_server)
-        yield
-        if agent.language_server is not None:
-            agent.language_server.stop()
+
+        try:
+            process_agent.start()
+            yield
+        finally:
+            process_agent.stop()
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
     mcp = FastMCP(**mcp_settings.model_dump())
 
     update_tools()
 
-    return mcp, agent
+    return mcp, process_agent
 
 
 class ProjectType(click.ParamType):
@@ -313,7 +382,8 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
-    mcp_server, agent = create_mcp_server_and_agent(
+    # Use process isolation by default to prevent asyncio event loop contamination
+    mcp_server, agent = create_mcp_server_and_process_isolated_agent(
         project=project_file,
         host=host,
         port=port,
@@ -335,7 +405,7 @@ def start_mcp_server(
         )
 
     log.info(
-        f"Starting serena agent in MCP server with config:\n{agent.get_current_config_overview()}."
+        f"Starting process-isolated serena agent in MCP server with config:\n{agent.serena_config}."
         f"\n Log level: {agent.serena_config.log_level}"
     )
 
