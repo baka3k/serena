@@ -153,9 +153,28 @@ def search_text(
 
     # Convert pattern to a compiled regex if it's a string
     if is_glob and isinstance(pattern, str):
-        # Convert glob pattern to regex. Use re.escape to handle special
-        # characters and replace glob wildcards afterwards.
-        escaped_pattern = "".join(".*" if ch == "*" else "." if ch == "?" else re.escape(ch) for ch in pattern)
+        # Convert glob pattern with optional backslash escaping to regex
+        def glob_to_regex(glob_pat: str) -> str:
+            regex_parts: list[str] = []
+            i = 0
+            while i < len(glob_pat):
+                ch = glob_pat[i]
+                if ch == "*":
+                    regex_parts.append(".*")
+                elif ch == "?":
+                    regex_parts.append(".")
+                elif ch == "\\":
+                    i += 1
+                    if i < len(glob_pat):
+                        regex_parts.append(re.escape(glob_pat[i]))
+                    else:
+                        regex_parts.append("\\")
+                else:
+                    regex_parts.append(re.escape(ch))
+                i += 1
+            return "".join(regex_parts)
+
+        escaped_pattern = glob_to_regex(pattern)
         # For glob patterns, don't anchor with ^ and $ to allow partial line matches
         compiled_pattern = re.compile(escaped_pattern)
     elif isinstance(pattern, str):
