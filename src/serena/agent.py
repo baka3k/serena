@@ -9,6 +9,8 @@ import platform
 import re
 import shutil
 import sys
+import threading
+from time import time
 import traceback
 import webbrowser
 from abc import ABC, abstractmethod
@@ -846,6 +848,15 @@ class SerenaAgent:
         """
         Starts/resets the language server for the current project
         """
+
+        tool_timeout = self.serena_config.tool_timeout
+        if tool_timeout is None or tool_timeout < 0:
+            ls_timeout = None
+        else:
+            if tool_timeout < 10:
+                raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
+            ls_timeout = tool_timeout - 5 # the LS timeout is for a single call, it should be smaller than the tool timeout
+
         # stop the language server if it is running
         if self.is_language_server_running():
             assert self.language_server is not None
@@ -878,6 +889,7 @@ class SerenaAgent:
             multilspy_config,
             ls_logger,
             self._active_project.project_root,
+            timeout=ls_timeout,
         )
         self.language_server.start()
         if not self.language_server.is_running():
