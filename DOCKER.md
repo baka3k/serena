@@ -158,4 +158,4 @@ We're working on:
 - Dynamic port allocation
 - Windows line-ending handling
 
-For updates and issues, please check the [GitHub repository](https://github.com/AbanteAI/serena).
+For updates and issues, please check the [GitHub repository](https://github.com/diazoxide/serena).

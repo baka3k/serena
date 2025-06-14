@@ -111,7 +111,7 @@ def is_running_in_docker() -> bool:
     try:
         with open('/proc/self/cgroup', 'r') as f:
             return 'docker' in f.read()
-    except:
+    except FileNotFoundError:
         return False
 
 
@@ -328,7 +328,7 @@ class SerenaConfig(SerenaConfigBase):
     loaded_commented_yaml: CommentedMap
 
     CONFIG_FILE = "serena_config.yml"
-    CONFIG_FILE_DOCKER = "serena_config.docker.yml"
+    CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
 
     @classmethod
     def autogenerate(cls) -> None:
