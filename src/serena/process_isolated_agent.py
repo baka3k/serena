@@ -13,12 +13,14 @@ import queue
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
 
 from serena.agent import SerenaAgent, SerenaConfig, SerenaConfigBase, Tool, ToolInterface, ToolRegistry
+from serena.config import SerenaAgentContext, SerenaAgentMode
 
 log = logging.getLogger(__name__)
 
@@ -93,10 +95,37 @@ class SerenaAgentWorker:
     def _initialize(self, request_id: str, params: dict[str, Any]) -> dict[str, Any]:
         """Initialize the SerenaAgent."""
         try:
-            config_dict = params["config"]
-            serena_config = SerenaConfig.from_dict(config_dict)
+            # Extract all possible initialization parameters
+            project = params.get("project")
+            project_activation_callback = params.get("project_activation_callback")
+            serena_config = params.get("serena_config")
+            context = params.get("context")
+            modes = params.get("modes")
+            enable_web_dashboard = params.get("enable_web_dashboard")
+            enable_gui_log_window = params.get("enable_gui_log_window")
+            log_level = params.get("log_level")
+            trace_lsp_communication = params.get("trace_lsp_communication")
+            tool_timeout = params.get("tool_timeout")
 
-            self.agent = SerenaAgent(serena_config=serena_config)
+            # Handle legacy config_dict parameter for backward compatibility
+            if "config" in params and serena_config is None:
+                config_dict = params["config"]
+                serena_config = SerenaConfig.from_dict(config_dict)
+            elif serena_config is not None and isinstance(serena_config, dict):
+                serena_config = SerenaConfig.from_dict(serena_config)
+
+            self.agent = SerenaAgent(
+                project=project,
+                project_activation_callback=project_activation_callback,
+                serena_config=serena_config,
+                context=context,
+                modes=modes,
+                enable_web_dashboard=enable_web_dashboard,
+                enable_gui_log_window=enable_gui_log_window,
+                log_level=log_level,
+                trace_lsp_communication=trace_lsp_communication,
+                tool_timeout=tool_timeout,
+            )
 
             return {"id": request_id, "result": "SerenaAgent initialized successfully"}
         except Exception as e:
@@ -199,8 +228,39 @@ class SerenaAgentWorker:
 class ProcessIsolatedSerenaAgent:
     """Process-isolated wrapper for SerenaAgent that prevents asyncio contamination."""
 
-    def __init__(self, serena_config: SerenaConfigBase):
-        self.serena_config = serena_config
+    def __init__(
+        self,
+        project: str | None = None,
+        project_activation_callback: Callable[[], None] | None = None,
+        serena_config: SerenaConfigBase | None = None,
+        context: SerenaAgentContext | None = None,
+        modes: list[SerenaAgentMode] | None = None,
+        enable_web_dashboard: bool | None = None,
+        enable_gui_log_window: bool | None = None,
+        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
+        trace_lsp_communication: bool | None = None,
+        tool_timeout: float | None = None,
+    ):
+        # Store all initialization parameters to pass to worker
+        self._init_params = {
+            "project": project,
+            "project_activation_callback": project_activation_callback,
+            "serena_config": serena_config,
+            "context": context,
+            "modes": modes,
+            "enable_web_dashboard": enable_web_dashboard,
+            "enable_gui_log_window": enable_gui_log_window,
+            "log_level": log_level,
+            "trace_lsp_communication": trace_lsp_communication,
+            "tool_timeout": tool_timeout,
+        }
+
+        # Keep serena_config for compatibility
+        if serena_config is not None:
+            self.serena_config = serena_config
+        else:
+            # Use the default config loader
+            self.serena_config = SerenaConfig.from_config_file()
         self.process: multiprocessing.Process | None = None
         self.request_queue: multiprocessing.Queue | None = None
         self.response_queue: multiprocessing.Queue | None = None
@@ -225,7 +285,20 @@ class ProcessIsolatedSerenaAgent:
 
         # Initialize the agent in the worker process
         try:
-            self._make_request_with_result(SerenaAgentWorker.RequestMethod.INITIALIZE, {"config": self.serena_config.to_dict()})
+            # Prepare initialization parameters, converting complex objects to dict if present
+            init_params = self._init_params.copy()
+            if init_params["serena_config"] is not None and hasattr(init_params["serena_config"], "to_dict"):
+                # Convert SerenaConfigBase to dict for serialization
+                serena_config_obj = init_params["serena_config"]
+                init_params["serena_config"] = serena_config_obj.to_dict()  # type: ignore
+            # Note: context and modes are not serializable across processes,
+            # so they will be None and SerenaAgent will use defaults
+            init_params["context"] = None
+            init_params["modes"] = None
+            # project_activation_callback cannot be serialized across processes
+            init_params["project_activation_callback"] = None
+
+            self._make_request_with_result(SerenaAgentWorker.RequestMethod.INITIALIZE, init_params)
         except Exception as e:
             self.stop()
             raise RuntimeError(f"Failed to initialize SerenaAgent: {e}") from e
@@ -315,6 +388,11 @@ class ProcessIsolatedSerenaAgent:
         return self._make_request_with_result(
             SerenaAgentWorker.RequestMethod.TOOL_CALL, {"tool_name": tool_name, "tool_params": tool_params}
         )
+
+    def get_tool(self, tool_cls: type[Tool]) -> "ProcessIsolatedTool":
+        """Get a process-isolated tool that delegates to this agent."""
+        tool_name = tool_cls.get_name_from_cls()
+        return ProcessIsolatedTool(self, tool_name)
 
     def get_active_tool_names(self) -> list[str]:
         """Get list of active tool names."""

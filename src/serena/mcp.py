@@ -144,7 +144,7 @@ def create_mcp_server_and_agent(
         # Create process-isolated agent with the configuration
         from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
 
-        process_agent = ProcessIsolatedSerenaAgent(serena_config)
+        process_agent = ProcessIsolatedSerenaAgent(serena_config=serena_config)
 
     except Exception as e:
         show_fatal_exception_safe(e)
