@@ -2,8 +2,13 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import asyncio
 import contextlib
+import os
+import signal
 import sys
+import threading
+import time
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -11,7 +16,7 @@ from logging import Formatter, Logger, StreamHandler
 from pathlib import Path
 from typing import Any, Literal
 
-import click  # Add click import
+import click
 import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
@@ -22,7 +27,13 @@ from sensai.util.helper import mark_used
 from serena.agent import SerenaAgent, ToolInterface, create_serena_config, show_fatal_exception_safe
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
-from serena.process_isolated_agent import ProcessIsolatedDashboard, ProcessIsolatedSerenaAgent
+from serena.process_isolated_agent import (
+    ProcessIsolatedDashboard,
+    ProcessIsolatedSerenaAgent,
+    ProcessIsolatedTool,
+    global_shutdown_event,
+    request_global_shutdown,
+)
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -103,7 +114,7 @@ def create_mcp_server_and_agent(
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
     tool_timeout: float | None = None,
-) -> tuple[FastMCP, "ProcessIsolatedSerenaAgent"]:
+) -> tuple[FastMCP, ProcessIsolatedSerenaAgent]:
     """
     Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
@@ -127,7 +138,6 @@ def create_mcp_server_and_agent(
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
     try:
-        # Create configuration without instantiating a full SerenaAgent
         serena_config = create_serena_config(
             project=project,
             context=context_instance,
@@ -138,9 +148,12 @@ def create_mcp_server_and_agent(
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
         )
-
         serena_agent_process = ProcessIsolatedSerenaAgent(serena_config=serena_config)
 
+        # Start process-isolated dashboard if enabled
+        serena_dashboard_process = None
+        if serena_config.web_dashboard:
+            serena_dashboard_process = ProcessIsolatedDashboard(tool_names=[])
     except Exception as e:
         show_fatal_exception_safe(e)
         raise
@@ -149,25 +162,13 @@ def create_mcp_server_and_agent(
         """Update the tools in the MCP server - adapted for process isolation."""
         nonlocal mcp, serena_agent_process
 
-        # Check if process agent is running
-        if serena_agent_process.process is None or not serena_agent_process.process.is_alive():
-            log.debug("Process agent not running yet, skipping tool update")
-            return
-
         # Get tool names from process-isolated agent
         # Tools may change as a result of project activation.
         # NOTE: While we could pass updated tool information on to the MCP server via the callback, Claude Desktop does not,
         # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
         # so we need to register all tools at startup, unfortunately.
-        try:
-            tool_names = serena_agent_process.get_exposed_tool_names()
-        except Exception as e:
-            log.error(f"Failed to get tool names from process agent: {e}")
-            return
-
+        tool_names = serena_agent_process.get_exposed_tool_names()
         if mcp is not None:
-            from serena.process_isolated_agent import ProcessIsolatedTool
-
             mcp._tool_manager._tools = {}
             for tool_name in tool_names:
                 process_isolated_tool = ProcessIsolatedTool(process_agent=serena_agent_process, tool_name=tool_name)
@@ -177,163 +178,69 @@ def create_mcp_server_and_agent(
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        nonlocal serena_agent_process
-        import asyncio
-        import webbrowser
-
         mark_used(mcp_server)
 
-        serena_dashboard_process: ProcessIsolatedDashboard | None = None
-        shutdown_event = asyncio.Event()
+        def signal_handler(signum: int, frame: Any) -> None:
+            log.info(f"Received signal {signum} in main process")
+            request_global_shutdown()
 
-        async def monitor_worker_process() -> None:
-            """Monitor the worker process and shutdown server if it exits."""
-            while not shutdown_event.is_set():
-                try:
-                    if serena_agent_process.process is None or not serena_agent_process.process.is_alive():
-                        log.info("Worker process has exited, shutting down MCP server")
-                        shutdown_event.set()
-                        break
-                    await asyncio.sleep(1)
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    log.error(f"Error monitoring worker process: {e}")
-                    await asyncio.sleep(1)
+            def force_exit() -> None:
+                time.sleep(2.0)  # Wait 2 seconds for graceful shutdown
+                log.warning("Forcing exit after timeout")
+                os._exit(1)
 
-        async def monitor_dashboard_shutdown() -> None:
-            """Monitor the dashboard shutdown queue."""
-            if serena_dashboard_process is None or serena_dashboard_process.shutdown_queue is None:
-                return
+            threading.Thread(target=force_exit, daemon=True).start()
 
-            while not shutdown_event.is_set():
-                try:
-                    # Check if dashboard sent shutdown signal
-                    if not serena_dashboard_process.shutdown_queue.empty():
-                        serena_dashboard_process.shutdown_queue.get_nowait()
-                        log.info("Dashboard shutdown signal received via queue")
-                        shutdown_event.set()
-                        # Force immediate exit since MCP server doesn't respond properly
-                        import os
-                        import sys
+        # Install signal handlers
+        sigint_singal = signal.signal(signal.SIGINT, signal_handler)
+        sigterm_signal = signal.signal(signal.SIGTERM, signal_handler)
 
-                        log.info("Forcing immediate process exit from dashboard signal")
-                        sys.stdout.flush()
-                        sys.stderr.flush()
-                        os._exit(0)
-                    await asyncio.sleep(0.1)  # Check more frequently
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    log.error(f"Error monitoring dashboard shutdown: {e}")
-                    await asyncio.sleep(1)
+        if serena_dashboard_process is not None:
+            log.info("Starting dashboard process")
+            serena_dashboard_process.start()
+        log.info("Starting serena agent process")
+        serena_agent_process.start()
+        update_tools()
 
-        def shutdown_server() -> None:
-            """Shutdown the server."""
-            log.info("Shutdown initiated by dashboard")
-            shutdown_event.set()
-            # Force immediate exit since the MCP server doesn't respond to shutdown events
-            import os
-            import sys
+        async def monitor_global_shutdown() -> None:
+            """Monitor the global shutdown event and trigger local shutdown."""
+            while not global_shutdown_event.is_set():
+                # Poll the multiprocessing Event in async context
+                await asyncio.sleep(0.1)
+                continue
+            log.info("Global shutdown event detected, initiating server shutdown")
+            request_global_shutdown()
+            # Send SIGTERM to self to trigger graceful shutdown
+            os.kill(os.getpid(), signal.SIGTERM)
 
-            log.info("Dashboard shutdown - forcing process exit immediately")
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os._exit(0)
+        # Start monitoring task
+        monitor_task = asyncio.create_task(monitor_global_shutdown())
 
         try:
-
-            # Set up global shutdown function for dashboard
-            from serena.process_isolated_agent import set_global_shutdown_func
-
-            set_global_shutdown_func(shutdown_server)
-
-            # Start process-isolated dashboard if enabled
-            if serena_config.web_dashboard:
-                try:
-                    serena_dashboard_process = ProcessIsolatedDashboard(tool_names=[])
-                    port = serena_dashboard_process.start()
-                    webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
-                    log.info(f"Dashboard started on port {port}")
-                except Exception as e:
-                    log.error(f"Failed to start dashboard: {e}")
-                    serena_dashboard_process = None
-
-            serena_agent_process.start()
-            # Update tools now that the process agent is running
-            update_tools()
-
-            # Start monitoring tasks
-            tasks = []
-            monitor_task = asyncio.create_task(monitor_worker_process())
-            tasks.append(monitor_task)
-
-            # Start dashboard shutdown monitor if dashboard is running
-            if serena_dashboard_process is not None:
-                dashboard_monitor_task = asyncio.create_task(monitor_dashboard_shutdown())
-                tasks.append(dashboard_monitor_task)
-
-            # Set up signal handlers in main process
-            def signal_handler(signum: int, frame: Any) -> None:
-                log.info(f"Received signal {signum} in main process")
-                shutdown_event.set()
-                # Give a short delay for graceful shutdown, then force exit
-                import os
-                import threading
-
-                def force_exit() -> None:
-                    import time
-
-                    time.sleep(2.0)  # Wait 2 seconds for graceful shutdown
-                    log.warning("Forcing exit after timeout")
-                    os._exit(1)
-
-                threading.Thread(target=force_exit, daemon=True).start()
-
-            import signal
-
-            signal.signal(signal.SIGTERM, signal_handler)
-            signal.signal(signal.SIGINT, signal_handler)
-
-            try:
-                # Start the server and wait for shutdown
-                yield
-            except (KeyboardInterrupt, SystemExit):
-                log.info("Received shutdown signal")
-                shutdown_event.set()
-
+            yield
+        except (KeyboardInterrupt, SystemExit):
+            log.info("Received shutdown signal")
+            request_global_shutdown()
         except Exception as e:
             log.error(f"Error in server lifespan: {e}")
-            shutdown_event.set()
+            request_global_shutdown()
         finally:
-            log.info("Starting server shutdown cleanup")
+            # Cancel monitor task
+            monitor_task.cancel()
 
-            if "tasks" in locals():
-                for task in tasks:
-                    task.cancel()
-                    with contextlib.suppress(TimeoutError, asyncio.CancelledError):
-                        await asyncio.wait_for(task, timeout=1.0)
+            with contextlib.suppress(asyncio.CancelledError):
+                await monitor_task
 
-            # Stop dashboard first
+            serena_agent_process.stop()
             if serena_dashboard_process is not None:
-                try:
-                    serena_dashboard_process.stop()
-                except Exception as e:
-                    log.error(f"Error stopping dashboard: {e}")
-
-            # Stop process agent
-            try:
-                serena_agent_process.stop()
-            except Exception as e:
-                log.error(f"Error stopping process agent: {e}")
-
-            log.info("Server shutdown cleanup completed")
+                serena_dashboard_process.stop()
+            request_global_shutdown()
+            log.info("Shutting down all processes")
+            signal.signal(signal.SIGINT, sigint_singal)
+            signal.signal(signal.SIGTERM, sigterm_signal)
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
     mcp = FastMCP(**mcp_settings.model_dump())
-
-    update_tools()
-
     return mcp, serena_agent_process
 
 
@@ -494,9 +401,6 @@ def start_mcp_server(
             f"Used path: {project_file}"
         )
 
-    log.info(
-        f"Starting process-isolated serena agent in MCP server with config:\n{agent.serena_config}."
-        f"\n Log level: {agent.serena_config.log_level}"
-    )
+    log.info(f"Starting MCP server with config:\n{agent.serena_config}.\n Log level: {agent.serena_config.log_level}")
 
     mcp_server.run(transport=transport)

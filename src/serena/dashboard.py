@@ -1,7 +1,6 @@
 import os
 import queue
 import socket
-import sys
 import threading
 from collections.abc import Callable
 
@@ -98,21 +97,16 @@ class SerenaDashboardAPI:
         return ResponseToolNames(tool_names=self._tool_names)
 
     async def _shutdown(self) -> None:
-        print("Shutdown initiated by dashbaord ...", file=sys.stderr)
         log.info("Shutting down Serena")
         if self._shutdown_callback:
             self._shutdown_callback()
         else:
             # Try to use the global shutdown function from process_isolated_agent
-            try:
-                from serena.process_isolated_agent import call_global_shutdown
+            from serena.process_isolated_agent import request_global_shutdown
 
-                call_global_shutdown()
-            except ImportError:
-                # Fallback to the old behavior if not in process-isolated mode
-                # noinspection PyUnresolvedReferences
-                # noinspection PyProtectedMember
-                os._exit(0)
+            request_global_shutdown()
+            # noinspection PyProtectedMember
+            os._exit(0)
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:
