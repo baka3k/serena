@@ -24,7 +24,6 @@ dependencies = [
   "python-dotenv>=1.0.0, <2",
   "mcp>=1.5.0",
   "fastapi>=0.115.12",
-  "fastmcp>=0.4.1",
   "sensai-utils>=1.4.0",
   "pydantic>=2.10.6",
   "types-pyyaml>=6.0.12.20241230",
