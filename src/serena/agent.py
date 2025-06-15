@@ -107,12 +107,12 @@ def get_serena_managed_dir(project_root: str | Path) -> str:
 def is_running_in_docker() -> bool:
     """Check if we're running inside a Docker container."""
     # Check for Docker-specific files
-    if os.path.exists('/.dockerenv'):
+    if os.path.exists("/.dockerenv"):
         return True
     # Check cgroup for docker references
     try:
-        with open('/proc/self/cgroup', 'r') as f:
-            return 'docker' in f.read()
+        with open("/proc/self/cgroup") as f:
+            return "docker" in f.read()
     except FileNotFoundError:
         return False
 

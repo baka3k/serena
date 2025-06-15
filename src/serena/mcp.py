@@ -107,53 +107,6 @@ def create_mcp_server_and_agent(
     tool_timeout: float | None = None,
 ) -> tuple[FastMCP, "ProcessIsolatedSerenaAgent"]:
     """
-    Create an MCP server (legacy - now uses process isolation).
-
-    :param project: "Either an absolute path to the project directory or a name of an already registered project. "
-        "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name "
-        "afterwards.
-    :param host: The host to bind to
-    :param port: The port to bind to
-    :param context: The context name or path to context file
-    :param modes: List of mode names or paths to mode files
-    :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
-    :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
-        If not specified, will take the value from the serena configuration.
-    :param log_level: Log level. If not specified, will take the value from the serena configuration.
-    :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
-        This is useful for debugging language server issues.
-    :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
-    """
-    # Delegate to process-isolated version for safety
-    mcp, process_agent = create_mcp_server_and_process_isolated_agent(
-        project=project,
-        host=host,
-        port=port,
-        context=context,
-        modes=modes,
-        enable_web_dashboard=enable_web_dashboard,
-        enable_gui_log_window=enable_gui_log_window,
-        log_level=log_level,
-        trace_lsp_communication=trace_lsp_communication,
-        tool_timeout=tool_timeout,
-    )
-    # Return a dummy agent for compatibility
-    return mcp, process_agent
-
-
-def create_mcp_server_and_process_isolated_agent(
-    project: str | None,
-    host: str = "0.0.0.0",
-    port: int = 8000,
-    context: str = DEFAULT_CONTEXT,
-    modes: Sequence[str] = DEFAULT_MODES,
-    enable_web_dashboard: bool | None = None,
-    enable_gui_log_window: bool | None = None,
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
-    trace_lsp_communication: bool | None = None,
-    tool_timeout: float | None = None,
-) -> tuple[FastMCP, "ProcessIsolatedSerenaAgent"]:
-    """
     Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
     :param project: "Either an absolute path to the project directory or a name of an already registered project. "
@@ -218,11 +171,8 @@ def create_mcp_server_and_process_isolated_agent(
 
             mcp._tool_manager._tools = {}
             for tool_name in tool_names:
-                # Create ProcessIsolatedTool instance that can be used with make_tool
-                # Metadata is extracted from ToolRegistry using classmethods
-                tool_instance = ProcessIsolatedTool(process_agent=process_agent, tool_name=tool_name)
-                # Use the original make_tool function to get full docstring parsing
-                mcp_tool = make_tool(tool_instance)
+                process_isolated_tool = ProcessIsolatedTool(process_agent=process_agent, tool_name=tool_name)
+                mcp_tool = make_tool(process_isolated_tool)
                 mcp._tool_manager._tools[tool_name] = mcp_tool
 
     @asynccontextmanager
@@ -383,7 +333,7 @@ def start_mcp_server(
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
     # Use process isolation by default to prevent asyncio event loop contamination
-    mcp_server, agent = create_mcp_server_and_process_isolated_agent(
+    mcp_server, agent = create_mcp_server_and_agent(
         project=project_file,
         host=host,
         port=port,
