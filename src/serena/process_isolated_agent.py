@@ -9,12 +9,10 @@ This module provides:
 
 import logging
 import multiprocessing
-import queue
-import threading
-import time
 import traceback
 from collections.abc import Callable
 from enum import StrEnum
+from multiprocessing.connection import Connection
 from typing import Any, Literal, Self
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
@@ -28,37 +26,40 @@ log = logging.getLogger(__name__)
 class SerenaAgentWorker:
     """Worker process that hosts the actual SerenaAgent."""
 
-    def __init__(self, request_queue: multiprocessing.Queue, response_queue: multiprocessing.Queue):
-        self.request_queue = request_queue
-        self.response_queue = response_queue
+    def __init__(self, conn: Connection):
+        self.conn = conn
         self.agent: SerenaAgent | None = None
-        self.running = True
 
     def run(self) -> None:
         """Main worker loop - runs in separate process."""
         try:
             log.info("SerenaAgent worker process started")
 
-            while self.running:
+            while True:
                 try:
-                    # Wait for requests with timeout to allow clean shutdown
-                    request = self.request_queue.get(timeout=1.0)
+                    # Block until request received or connection closed
+                    request = self.conn.recv()
                     if request is None:  # Shutdown signal
                         break
 
                     response = self._handle_request(request)
-                    self.response_queue.put(response)
+                    self.conn.send(response)
 
-                except queue.Empty:
-                    continue
+                except EOFError:
+                    # Connection closed - parent process terminated
+                    log.info("Connection closed, worker shutting down")
+                    break
                 except Exception as e:
                     log.error(f"Error in worker process: {e}")
-                    response = {
-                        "id": getattr(request, "id", None),
-                        "error": f"Worker process error: {e!s}",
-                        "traceback": traceback.format_exc(),
-                    }
-                    self.response_queue.put(response)
+                    try:
+                        response = {
+                            "error": f"Worker process error: {e!s}",
+                            "traceback": traceback.format_exc(),
+                        }
+                        self.conn.send(response)
+                    except (EOFError, BrokenPipeError):
+                        # Connection is broken, can't send error response
+                        break
 
         except Exception as e:
             log.error(f"Fatal error in worker process: {e}")
@@ -71,28 +72,27 @@ class SerenaAgentWorker:
         try:
             method = request["method"]
             params = request.get("params", {})
-            request_id = request["id"]
 
             match method:
                 case self.RequestMethod.INITIALIZE:
-                    return self._initialize(request_id, params)
+                    return self._initialize(params)
                 case self.RequestMethod.TOOL_CALL:
-                    return self._tool_call(request_id, params)
+                    return self._tool_call(params)
                 case self.RequestMethod.GET_ACTIVE_TOOL_NAMES:
-                    return self._get_active_tool_names(request_id)
+                    return self._get_active_tool_names()
                 case self.RequestMethod.IS_LANGUAGE_SERVER_RUNNING:
-                    return self._is_language_server_running(request_id)
+                    return self._is_language_server_running()
                 case self.RequestMethod.RESET_LANGUAGE_SERVER:
-                    return self._reset_language_server(request_id)
+                    return self._reset_language_server()
                 case self.RequestMethod.GET_EXPOSED_TOOL_NAMES:
-                    return self._get_exposed_tool_names(request_id)
+                    return self._get_exposed_tool_names()
                 case _:
-                    return {"id": request_id, "error": f"Unknown method: {method}"}
+                    return {"error": f"Unknown method: {method}"}
 
         except Exception as e:
-            return {"id": request.get("id"), "error": str(e), "traceback": traceback.format_exc()}
+            return {"error": str(e), "traceback": traceback.format_exc()}
 
-    def _initialize(self, request_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         """Initialize the SerenaAgent."""
         try:
             # Extract all possible initialization parameters
@@ -127,14 +127,14 @@ class SerenaAgentWorker:
                 tool_timeout=tool_timeout,
             )
 
-            return {"id": request_id, "result": "SerenaAgent initialized successfully"}
+            return {"result": "SerenaAgent initialized successfully"}
         except Exception as e:
-            return {"id": request_id, "error": f"Failed to initialize SerenaAgent: {e!s}", "traceback": traceback.format_exc()}
+            return {"error": f"Failed to initialize SerenaAgent: {e!s}", "traceback": traceback.format_exc()}
 
-    def _tool_call(self, request_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _tool_call(self, params: dict[str, Any]) -> dict[str, Any]:
         """Execute a tool call."""
         if self.agent is None:
-            return {"id": request_id, "error": "SerenaAgent not initialized"}
+            return {"error": "SerenaAgent not initialized"}
 
         try:
             tool_name = params["tool_name"]
@@ -148,61 +148,61 @@ class SerenaAgentWorker:
                     break
 
             if tool is None:
-                return {"id": request_id, "error": f"Tool '{tool_name}' not found or not active"}
+                return {"error": f"Tool '{tool_name}' not found or not active"}
 
             # Execute the tool
             result = tool.apply_ex(**tool_params)
 
-            return {"id": request_id, "result": result}
+            return {"result": result}
 
         except Exception as e:
-            return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
+            return {"error": str(e), "traceback": traceback.format_exc()}
 
-    def _get_active_tool_names(self, request_id: str) -> dict[str, Any]:
+    def _get_active_tool_names(self) -> dict[str, Any]:
         """Get list of active tool names."""
         if self.agent is None:
-            return {"id": request_id, "error": "SerenaAgent not initialized"}
+            return {"error": "SerenaAgent not initialized"}
 
         try:
             tool_names = self.agent.get_active_tool_names()
-            return {"id": request_id, "result": tool_names}
+            return {"result": tool_names}
         except Exception as e:
-            return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
+            return {"error": str(e), "traceback": traceback.format_exc()}
 
-    def _is_language_server_running(self, request_id: str) -> dict[str, Any]:
+    def _is_language_server_running(self) -> dict[str, Any]:
         """Check if language server is running."""
         if self.agent is None:
-            return {"id": request_id, "error": "SerenaAgent not initialized"}
+            return {"error": "SerenaAgent not initialized"}
 
         try:
             is_running = self.agent.is_language_server_running()
-            return {"id": request_id, "result": is_running}
+            return {"result": is_running}
         except Exception as e:
-            return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
+            return {"error": str(e), "traceback": traceback.format_exc()}
 
-    def _reset_language_server(self, request_id: str) -> dict[str, Any]:
+    def _reset_language_server(self) -> dict[str, Any]:
         """Reset the language server."""
         if self.agent is None:
-            return {"id": request_id, "error": "SerenaAgent not initialized"}
+            return {"error": "SerenaAgent not initialized"}
 
         try:
             self.agent.reset_language_server()
-            return {"id": request_id, "result": "Language server reset successfully"}
+            return {"result": "Language server reset successfully"}
         except Exception as e:
-            return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
+            return {"error": str(e), "traceback": traceback.format_exc()}
 
-    def _get_exposed_tool_names(self, request_id: str) -> dict[str, Any]:
+    def _get_exposed_tool_names(self) -> dict[str, Any]:
         """Get exposed tool names for MCP tool creation."""
         if self.agent is None:
-            return {"id": request_id, "error": "SerenaAgent not initialized"}
+            return {"error": "SerenaAgent not initialized"}
 
         try:
             tool_instances = self.agent.get_exposed_tool_instances()
             # Return only tool names - metadata will be reconstructed from ToolRegistry
             tool_names = [tool.get_name_from_cls() for tool in tool_instances]
-            return {"id": request_id, "result": tool_names}
+            return {"result": tool_names}
         except Exception as e:
-            return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
+            return {"error": str(e), "traceback": traceback.format_exc()}
 
     def _cleanup(self) -> None:
         """Clean up resources."""
@@ -215,7 +215,7 @@ class SerenaAgentWorker:
             self.agent = None
 
     class RequestMethod(StrEnum):
-        """Enumeration of available request methods for type-safe IPC."""
+        """Enumeration of available request methods."""
 
         INITIALIZE = "initialize"
         TOOL_CALL = "tool_call"
@@ -262,10 +262,7 @@ class ProcessIsolatedSerenaAgent:
             # Use the default config loader
             self.serena_config = SerenaConfig.from_config_file()
         self.process: multiprocessing.Process | None = None
-        self.request_queue: multiprocessing.Queue | None = None
-        self.response_queue: multiprocessing.Queue | None = None
-        self.request_id_counter = 0
-        self._lock = threading.Lock()
+        self.conn: Connection | None = None
 
     def start(self) -> None:
         """Start the worker process."""
@@ -274,12 +271,12 @@ class ProcessIsolatedSerenaAgent:
 
         log.info("Starting process-isolated SerenaAgent")
 
-        # Create communication queues
-        self.request_queue = multiprocessing.Queue()
-        self.response_queue = multiprocessing.Queue()
+        # Create communication pipe
+        parent_conn, child_conn = multiprocessing.Pipe()
+        self.conn = parent_conn
 
         # Create and start worker process
-        worker = SerenaAgentWorker(self.request_queue, self.response_queue)
+        worker = SerenaAgentWorker(child_conn)
         self.process = multiprocessing.Process(target=worker.run)
         self.process.start()
 
@@ -313,9 +310,9 @@ class ProcessIsolatedSerenaAgent:
         log.info("Stopping process-isolated SerenaAgent")
 
         try:
-            # Send shutdown signal
-            if self.request_queue is not None:
-                self.request_queue.put(None)
+            # Close connection to signal worker to shutdown
+            if self.conn is not None:
+                self.conn.close()
 
             # Wait for process to terminate
             if self.process.is_alive():
@@ -336,8 +333,7 @@ class ProcessIsolatedSerenaAgent:
 
         finally:
             self.process = None
-            self.request_queue = None
-            self.response_queue = None
+            self.conn = None
 
         log.info("Process-isolated SerenaAgent stopped")
 
@@ -346,35 +342,27 @@ class ProcessIsolatedSerenaAgent:
         if self.process is None or not self.process.is_alive():
             raise RuntimeError("Worker process is not running")
 
-        with self._lock:
-            self.request_id_counter += 1
-            request_id = str(self.request_id_counter)
+        if self.conn is None:
+            raise RuntimeError("Connection is not initialized")
 
-        request = {"id": request_id, "method": method, "params": params or {}}
+        request = {"method": method, "params": params or {}}
 
         # Send request
-        if self.request_queue is not None:
-            self.request_queue.put(request)
+        try:
+            self.conn.send(request)
+        except (EOFError, BrokenPipeError) as e:
+            raise RuntimeError("Failed to send request: worker process may have crashed") from e
 
-        # Wait for response
+        # Wait for response with timeout
         timeout = self.serena_config.tool_timeout
-        start_time = time.time()
-        while time.time() - start_time < timeout:
+        if self.conn.poll(timeout):
             try:
-                if self.response_queue is not None:
-                    response = self.response_queue.get(timeout=1.0)
-                else:
-                    raise RuntimeError("Response queue is not initialized")
-                if response["id"] == request_id:
-                    return response
-                else:
-                    # Put back response for different request
-                    if self.response_queue is not None:
-                        self.response_queue.put(response)
-            except queue.Empty:
-                continue
-
-        raise TimeoutError(f"Request {request_id} timed out after {timeout} seconds")
+                response = self.conn.recv()
+                return response
+            except (EOFError, BrokenPipeError) as e:
+                raise RuntimeError("Failed to receive response: worker process may have crashed") from e
+        else:
+            raise TimeoutError(f"Request {method} timed out after {timeout} seconds")
 
     def _make_request_with_result(self, method: SerenaAgentWorker.RequestMethod, params: dict[str, Any] | None = None) -> Any:
         """Make a request and return the result, raising an exception if there's an error."""
