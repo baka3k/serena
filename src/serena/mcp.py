@@ -142,7 +142,7 @@ def create_mcp_server_and_agent(
         )
 
         # Create process-isolated agent with the configuration
-        from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
+        from serena.process_isolated_agent import ProcessIsolatedDashboard, ProcessIsolatedSerenaAgent
 
         process_agent = ProcessIsolatedSerenaAgent(serena_config=serena_config)
 
@@ -184,35 +184,159 @@ def create_mcp_server_and_agent(
         """Manage server startup and shutdown lifecycle."""
         nonlocal process_agent
         import asyncio
+        import webbrowser
 
         mark_used(mcp_server)
 
+        dashboard: ProcessIsolatedDashboard | None = None
+        shutdown_event = asyncio.Event()
+
         async def monitor_worker_process() -> None:
             """Monitor the worker process and shutdown server if it exits."""
-            while True:
-                if process_agent.process is None or not process_agent.process.is_alive():
-                    log.info("Worker process has exited, shutting down MCP server")
-                    # Trigger server shutdown
-                    import os
+            while not shutdown_event.is_set():
+                try:
+                    if process_agent.process is None or not process_agent.process.is_alive():
+                        log.info("Worker process has exited, shutting down MCP server")
+                        shutdown_event.set()
+                        break
+                    await asyncio.sleep(1)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    log.error(f"Error monitoring worker process: {e}")
+                    await asyncio.sleep(1)
 
-                    os._exit(0)
-                await asyncio.sleep(1)
+        async def monitor_dashboard_shutdown() -> None:
+            """Monitor the dashboard shutdown queue."""
+            if dashboard is None or dashboard.shutdown_queue is None:
+                return
+
+            while not shutdown_event.is_set():
+                try:
+                    # Check if dashboard sent shutdown signal
+                    if not dashboard.shutdown_queue.empty():
+                        dashboard.shutdown_queue.get_nowait()
+                        log.info("Dashboard shutdown signal received via queue")
+                        shutdown_event.set()
+                        # Force immediate exit since MCP server doesn't respond properly
+                        import os
+                        import sys
+
+                        log.info("Forcing immediate process exit from dashboard signal")
+                        sys.stdout.flush()
+                        sys.stderr.flush()
+                        os._exit(0)
+                    await asyncio.sleep(0.1)  # Check more frequently
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    log.error(f"Error monitoring dashboard shutdown: {e}")
+                    await asyncio.sleep(1)
+
+        def shutdown_server() -> None:
+            """Shutdown the server."""
+            log.info("Shutdown initiated by dashboard")
+            shutdown_event.set()
+            # Force immediate exit since the MCP server doesn't respond to shutdown events
+            import os
+            import sys
+
+            log.info("Dashboard shutdown - forcing process exit immediately")
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(0)
 
         try:
             process_agent.start()
+
+            # Set up global shutdown function for dashboard
+            from serena.process_isolated_agent import set_global_shutdown_func
+
+            set_global_shutdown_func(shutdown_server)
+
             # Update tools now that the process agent is running
             update_tools()
-            # Start monitoring task
-            monitor_task = asyncio.create_task(monitor_worker_process())
-            yield
-        finally:
-            if "monitor_task" in locals():
-                monitor_task.cancel()
-                import contextlib
 
-                with contextlib.suppress(asyncio.CancelledError):
-                    await monitor_task
-            process_agent.stop()
+            # Start process-isolated dashboard if enabled
+            if serena_config.web_dashboard:
+                try:
+                    tool_names = process_agent.get_exposed_tool_names()
+                    dashboard = ProcessIsolatedDashboard(tool_names)
+                    port = dashboard.start()
+                    webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
+                    log.info(f"Dashboard started on port {port}")
+                except Exception as e:
+                    log.error(f"Failed to start dashboard: {e}")
+                    dashboard = None
+
+            # Start monitoring tasks
+            tasks = []
+            monitor_task = asyncio.create_task(monitor_worker_process())
+            tasks.append(monitor_task)
+
+            # Start dashboard shutdown monitor if dashboard is running
+            if dashboard is not None:
+                dashboard_monitor_task = asyncio.create_task(monitor_dashboard_shutdown())
+                tasks.append(dashboard_monitor_task)
+
+            # Set up signal handlers in main process
+            def signal_handler(signum: int, frame: Any) -> None:
+                log.info(f"Received signal {signum} in main process")
+                shutdown_event.set()
+                # Give a short delay for graceful shutdown, then force exit
+                import os
+                import threading
+
+                def force_exit() -> None:
+                    import time
+
+                    time.sleep(2.0)  # Wait 2 seconds for graceful shutdown
+                    log.warning("Forcing exit after timeout")
+                    os._exit(1)
+
+                threading.Thread(target=force_exit, daemon=True).start()
+
+            import signal
+
+            signal.signal(signal.SIGTERM, signal_handler)
+            signal.signal(signal.SIGINT, signal_handler)
+
+            try:
+                # Start the server and wait for shutdown
+                yield
+            except (KeyboardInterrupt, SystemExit):
+                log.info("Received shutdown signal")
+                shutdown_event.set()
+
+        except Exception as e:
+            log.error(f"Error in server lifespan: {e}")
+            shutdown_event.set()
+        finally:
+            log.info("Starting server shutdown cleanup")
+
+            # Cancel monitoring tasks
+            import contextlib
+
+            if "tasks" in locals():
+                for task in tasks:
+                    task.cancel()
+                    with contextlib.suppress(TimeoutError, asyncio.CancelledError):
+                        await asyncio.wait_for(task, timeout=1.0)
+
+            # Stop dashboard first
+            if dashboard is not None:
+                try:
+                    dashboard.stop()
+                except Exception as e:
+                    log.error(f"Error stopping dashboard: {e}")
+
+            # Stop process agent
+            try:
+                process_agent.stop()
+            except Exception as e:
+                log.error(f"Error stopping process agent: {e}")
+
+            log.info("Server shutdown cleanup completed")
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
     mcp = FastMCP(**mcp_settings.model_dump())

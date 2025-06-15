@@ -7,8 +7,10 @@ This module provides:
 3. JSON-RPC based IPC for communication between processes
 """
 
+import asyncio
 import logging
 import multiprocessing
+import signal
 import traceback
 from collections.abc import Callable
 from enum import StrEnum
@@ -19,6 +21,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
 
 from serena.agent import SerenaAgent, SerenaConfig, SerenaConfigBase, Tool, ToolInterface, ToolRegistry
 from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 
 log = logging.getLogger(__name__)
 
@@ -53,49 +56,337 @@ def call_global_shutdown() -> None:
     _shutdown_registry.call_shutdown()
 
 
+class ProcessIsolatedDashboard:
+    """Process-isolated dashboard to prevent asyncio contamination with MCP server and worker."""
+
+    def __init__(self, tool_names: list[str]):
+        self.tool_names = tool_names
+        self.process: multiprocessing.Process | None = None
+        self.log_queue: multiprocessing.Queue[str] | None = None
+        self.shutdown_queue: multiprocessing.Queue[bool] | None = None
+        self.port_queue: multiprocessing.Queue[int] | None = None
+        self._log_handler: ProcessDashboardLogHandler | None = None
+
+    def start(self) -> int:
+        """Start the dashboard process and return the port number."""
+        if self.process is not None:
+            raise RuntimeError("Dashboard process already started")
+
+        log.info("Starting process-isolated dashboard")
+
+        # Create communication queues
+        self.log_queue = multiprocessing.Queue()
+        self.shutdown_queue = multiprocessing.Queue()
+        self.port_queue = multiprocessing.Queue()
+
+        # Create and start dashboard process
+        dashboard_worker = DashboardWorker(
+            log_queue=self.log_queue, shutdown_queue=self.shutdown_queue, port_queue=self.port_queue, tool_names=self.tool_names
+        )
+        self.process = multiprocessing.Process(target=dashboard_worker.run)
+        self.process.start()
+
+        # Set up log handler to send logs to dashboard process
+        self._log_handler = ProcessDashboardLogHandler(self.log_queue)
+        logging.getLogger().addHandler(self._log_handler)
+
+        # Wait for dashboard to start and return port
+        try:
+            port = self.port_queue.get(timeout=10)  # Wait up to 10 seconds for startup
+            log.info(f"Dashboard started on port {port}")
+            return port
+        except Exception as e:
+            self.stop()
+            raise RuntimeError(f"Failed to start dashboard: {e}") from e
+
+    def stop(self) -> None:
+        """Stop the dashboard process."""
+        if self.process is None:
+            return
+
+        log.info("Stopping process-isolated dashboard")
+
+        try:
+            # Remove log handler
+            if self._log_handler is not None:
+                logging.getLogger().removeHandler(self._log_handler)
+                self._log_handler = None
+
+            # Signal shutdown
+            if self.shutdown_queue is not None:
+                import contextlib
+
+                with contextlib.suppress(Exception):
+                    self.shutdown_queue.put_nowait(True)
+
+            # Wait for process to terminate
+            if self.process.is_alive():
+                self.process.join(timeout=5.0)
+
+                if self.process.is_alive():
+                    log.warning("Dashboard process did not terminate gracefully, forcing termination")
+                    self.process.terminate()
+                    self.process.join(timeout=3.0)
+
+                    if self.process.is_alive():
+                        log.error("Dashboard process could not be terminated, killing it")
+                        self.process.kill()
+                        self.process.join()
+
+        except Exception as e:
+            log.error(f"Error stopping dashboard process: {e}")
+
+        finally:
+            self.process = None
+            self.log_queue = None
+            self.shutdown_queue = None
+            self.port_queue = None
+
+        log.info("Process-isolated dashboard stopped")
+
+    def update_tool_names(self, tool_names: list[str]) -> None:
+        """Update tool names (for future enhancement)."""
+        self.tool_names = tool_names
+        # TODO: Could send update to dashboard process if needed
+
+
+class ProcessDashboardLogHandler(logging.Handler):
+    """Log handler that sends log messages to dashboard process via queue."""
+
+    def __init__(self, log_queue: "multiprocessing.Queue[str]", level: int = logging.NOTSET):
+        super().__init__(level=level)
+        self.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+        self.log_queue = log_queue
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            # Non-blocking put to avoid deadlocks
+            self.log_queue.put_nowait(msg)
+        except Exception:
+            # Silently ignore queue errors to avoid recursive logging
+            pass
+
+
+class DashboardWorker:
+    """Worker process that hosts the dashboard with its own asyncio loop."""
+
+    def __init__(
+        self,
+        log_queue: "multiprocessing.Queue[str]",
+        shutdown_queue: "multiprocessing.Queue[bool]",
+        port_queue: "multiprocessing.Queue[int]",
+        tool_names: list[str],
+    ):
+        self.log_queue = log_queue
+        self.shutdown_queue = shutdown_queue
+        self.port_queue = port_queue
+        self.tool_names = tool_names
+        self.memory_log_handler: MemoryLogHandler | None = None
+        self.dashboard_api: SerenaDashboardAPI | None = None
+        self.log_processor_task: asyncio.Task | None = None
+
+    def run(self) -> None:
+        """Main dashboard worker loop - runs in separate process."""
+        try:
+            log.info("Dashboard worker process started")
+            asyncio.run(self._async_main())
+        except Exception as e:
+            log.error(f"Fatal error in dashboard worker process: {e}")
+        finally:
+            log.info("Dashboard worker process stopped")
+
+    async def _async_main(self) -> None:
+        """Main async loop for dashboard process."""
+        try:
+            # Set up memory log handler
+            self.memory_log_handler = MemoryLogHandler()
+
+            # Set up dashboard API with shutdown callback
+            self.dashboard_api = SerenaDashboardAPI(
+                memory_log_handler=self.memory_log_handler, tool_names=self.tool_names, shutdown_callback=self._handle_shutdown
+            )
+
+            # Start log processor task
+            self.log_processor_task = asyncio.create_task(self._process_log_queue())
+
+            # Find free port and signal to parent
+            port = self.dashboard_api._find_first_free_port(0x5EDA)
+            self.port_queue.put(port)
+
+            # Start dashboard server
+            import uvicorn
+
+            config = uvicorn.Config(
+                app=self.dashboard_api._app, host="0.0.0.0", port=port, workers=1, log_config=None, log_level="critical"
+            )
+            server = uvicorn.Server(config)
+
+            # Start server and shutdown monitor concurrently
+            shutdown_task = asyncio.create_task(self._monitor_shutdown())
+            server_task = asyncio.create_task(server.serve())
+
+            # Wait for either server to complete or shutdown signal
+            done, pending = await asyncio.wait([server_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED)
+
+            # Cancel pending tasks
+            for task in pending:
+                task.cancel()
+                import contextlib
+
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+        except Exception as e:
+            log.error(f"Error in dashboard worker: {e}")
+        finally:
+            # Clean up
+            if self.log_processor_task and not self.log_processor_task.done():
+                self.log_processor_task.cancel()
+                import contextlib
+
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self.log_processor_task
+
+    async def _process_log_queue(self) -> None:
+        """Process log messages from the queue and forward to memory handler."""
+        while True:
+            try:
+                # Check for log messages
+                while not self.log_queue.empty():
+                    try:
+                        log_msg = self.log_queue.get_nowait()
+                        if self.memory_log_handler:
+                            # Create a dummy log record and emit it
+                            record = logging.LogRecord(
+                                name="forwarded", level=logging.INFO, pathname="", lineno=0, msg=log_msg, args=(), exc_info=None
+                            )
+                            self.memory_log_handler.emit(record)
+                    except Exception:
+                        break
+
+                # Small delay to avoid busy waiting
+                await asyncio.sleep(0.1)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f"Error processing log queue: {e}")
+                await asyncio.sleep(1)
+
+    async def _monitor_shutdown(self) -> None:
+        """Monitor for shutdown signals."""
+        while True:
+            try:
+                # Check for shutdown signal
+                if not self.shutdown_queue.empty():
+                    self.shutdown_queue.get_nowait()
+                    log.info("Dashboard shutdown signal received")
+                    break
+
+                await asyncio.sleep(0.5)
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                log.error(f"Error monitoring shutdown: {e}")
+                await asyncio.sleep(1)
+
+    def _handle_shutdown(self) -> None:
+        """Handle shutdown request from dashboard UI."""
+        log.info("Dashboard UI shutdown requested")
+        # Signal shutdown to the main process through the parent dashboard
+        if self.shutdown_queue is not None:
+            try:
+                self.shutdown_queue.put_nowait(True)
+                log.info("Sent shutdown signal to main process via queue")
+            except Exception as e:
+                log.error(f"Failed to send shutdown signal: {e}")
+
+        # Also try the global shutdown as fallback
+        try:
+            call_global_shutdown()
+        except Exception as e:
+            log.error(f"Global shutdown failed: {e}")
+
+        # Force exit this dashboard process
+        import os
+        import threading
+
+        def delayed_exit() -> None:
+            import time
+
+            time.sleep(0.5)  # Give time for shutdown signal to be sent
+            log.info("Dashboard process forcing exit")
+            os._exit(0)
+
+        threading.Thread(target=delayed_exit, daemon=True).start()
+
+
 class SerenaAgentWorker:
     """Worker process that hosts the actual SerenaAgent."""
 
     def __init__(self, conn: Connection):
         self.conn = conn
         self.agent: SerenaAgent | None = None
+        self._shutdown_requested = False
 
     def run(self) -> None:
         """Main worker loop - runs in separate process."""
         try:
+            # Set up signal handler for clean shutdown
+            signal.signal(signal.SIGTERM, self._signal_handler)
+            signal.signal(signal.SIGINT, self._signal_handler)
+
             log.info("SerenaAgent worker process started")
 
-            while True:
+            while not self._shutdown_requested:
                 try:
-                    # Block until request received or connection closed
-                    request = self.conn.recv()
-                    if request is None:  # Shutdown signal
-                        break
+                    # Use polling to avoid blocking indefinitely
+                    if self.conn.poll(timeout=0.5):  # Poll every 500ms
+                        try:
+                            request = self.conn.recv()
+                            if request is None:  # Explicit shutdown signal
+                                break
 
-                    response = self._handle_request(request)
-                    self.conn.send(response)
+                            response = self._handle_request(request)
+                            self.conn.send(response)
+                        except EOFError:
+                            # Connection closed - parent process terminated
+                            log.info("Connection closed, worker shutting down")
+                            break
+                        except (BrokenPipeError, ConnectionResetError):
+                            # Connection broken, can't communicate
+                            log.info("Connection broken, worker shutting down")
+                            break
+                        except Exception as e:
+                            log.error(f"Error processing request: {e}")
+                            try:
+                                response = {
+                                    "error": f"Worker process error: {e!s}",
+                                    "traceback": traceback.format_exc(),
+                                }
+                                self.conn.send(response)
+                            except (EOFError, BrokenPipeError, ConnectionResetError):
+                                # Connection is broken, can't send error response
+                                log.info("Connection broken during error response, shutting down")
+                                break
+                    # Continue polling if no data available
 
-                except EOFError:
-                    # Connection closed - parent process terminated
-                    log.info("Connection closed, worker shutting down")
-                    break
                 except Exception as e:
-                    log.error(f"Error in worker process: {e}")
-                    try:
-                        response = {
-                            "error": f"Worker process error: {e!s}",
-                            "traceback": traceback.format_exc(),
-                        }
-                        self.conn.send(response)
-                    except (EOFError, BrokenPipeError):
-                        # Connection is broken, can't send error response
-                        break
+                    log.error(f"Error in worker main loop: {e}")
+                    break
 
         except Exception as e:
             log.error(f"Fatal error in worker process: {e}")
         finally:
             self._cleanup()
             log.info("SerenaAgent worker process stopped")
+
+    def _signal_handler(self, signum: int, frame: Any) -> None:
+        """Handle shutdown signals gracefully."""
+        log.info(f"Received signal {signum}, initiating shutdown")
+        self._shutdown_requested = True
 
     def _handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
         """Handle a single request."""
@@ -351,6 +642,8 @@ class ProcessIsolatedSerenaAgent:
             init_params["modes"] = None
             # project_activation_callback cannot be serialized across processes
             init_params["project_activation_callback"] = None
+            # Disable web dashboard in worker process - it will run in MCP process instead
+            init_params["enable_web_dashboard"] = False
 
             self._make_request_with_result(SerenaAgentWorker.RequestMethod.INITIALIZE, init_params)
         except Exception as e:
@@ -371,20 +664,28 @@ class ProcessIsolatedSerenaAgent:
             if self.conn is not None:
                 self.conn.close()
 
-            # Wait for process to terminate
+            # Wait for process to terminate with shorter timeout
             if self.process.is_alive():
-                self.process.join(timeout=10.0)
+                self.process.join(timeout=3.0)  # Reduced from 10s to 3s
 
                 if self.process.is_alive():
-                    log.warning("Worker process did not terminate gracefully, forcing termination")
+                    log.warning("Worker process did not terminate gracefully, sending SIGTERM")
                     self.process.terminate()
-                    self.process.join(timeout=5.0)
+                    self.process.join(timeout=2.0)  # Reduced from 5s to 2s
 
                     if self.process.is_alive():
-                        log.error("Worker process could not be terminated, killing it")
+                        log.error("Worker process did not respond to SIGTERM, sending SIGKILL")
                         self.process.kill()
-                        self.process.join()
+                        self.process.join(timeout=1.0)  # Add timeout for kill as well
 
+                        if self.process.is_alive():
+                            log.error("Worker process could not be killed - forcing cleanup")
+
+        except KeyboardInterrupt:
+            log.warning("Keyboard interrupt during shutdown - forcing termination")
+            if self.process and self.process.is_alive():
+                self.process.kill()
+                self.process.join(timeout=1.0)
         except Exception as e:
             log.error(f"Error stopping worker process: {e}")
 
