@@ -13,6 +13,7 @@ import queue
 import threading
 import time
 import traceback
+from enum import StrEnum
 from typing import Any, Self
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
@@ -70,20 +71,21 @@ class SerenaAgentWorker:
             params = request.get("params", {})
             request_id = request["id"]
 
-            if method == "initialize":
-                return self._initialize(request_id, params)
-            elif method == "tool_call":
-                return self._tool_call(request_id, params)
-            elif method == "get_active_tool_names":
-                return self._get_active_tool_names(request_id)
-            elif method == "is_language_server_running":
-                return self._is_language_server_running(request_id)
-            elif method == "reset_language_server":
-                return self._reset_language_server(request_id)
-            elif method == "get_exposed_tool_names":
-                return self._get_exposed_tool_names(request_id)
-            else:
-                return {"id": request_id, "error": f"Unknown method: {method}"}
+            match method:
+                case self.RequestMethod.INITIALIZE:
+                    return self._initialize(request_id, params)
+                case self.RequestMethod.TOOL_CALL:
+                    return self._tool_call(request_id, params)
+                case self.RequestMethod.GET_ACTIVE_TOOL_NAMES:
+                    return self._get_active_tool_names(request_id)
+                case self.RequestMethod.IS_LANGUAGE_SERVER_RUNNING:
+                    return self._is_language_server_running(request_id)
+                case self.RequestMethod.RESET_LANGUAGE_SERVER:
+                    return self._reset_language_server(request_id)
+                case self.RequestMethod.GET_EXPOSED_TOOL_NAMES:
+                    return self._get_exposed_tool_names(request_id)
+                case _:
+                    return {"id": request_id, "error": f"Unknown method: {method}"}
 
         except Exception as e:
             return {"id": request.get("id"), "error": str(e), "traceback": traceback.format_exc()}
@@ -183,6 +185,16 @@ class SerenaAgentWorker:
                 log.error(f"Error stopping language server: {e}")
             self.agent = None
 
+    class RequestMethod(StrEnum):
+        """Enumeration of available request methods for type-safe IPC."""
+
+        INITIALIZE = "initialize"
+        TOOL_CALL = "tool_call"
+        GET_ACTIVE_TOOL_NAMES = "get_active_tool_names"
+        IS_LANGUAGE_SERVER_RUNNING = "is_language_server_running"
+        RESET_LANGUAGE_SERVER = "reset_language_server"
+        GET_EXPOSED_TOOL_NAMES = "get_exposed_tool_names"
+
 
 class ProcessIsolatedSerenaAgent:
     """Process-isolated wrapper for SerenaAgent that prevents asyncio contamination."""
@@ -213,7 +225,7 @@ class ProcessIsolatedSerenaAgent:
 
         # Initialize the agent in the worker process
         try:
-            self._make_request_with_result("initialize", {"config": self.serena_config.to_dict()})
+            self._make_request_with_result(SerenaAgentWorker.RequestMethod.INITIALIZE, {"config": self.serena_config.to_dict()})
         except Exception as e:
             self.stop()
             raise RuntimeError(f"Failed to initialize SerenaAgent: {e}") from e
@@ -256,7 +268,7 @@ class ProcessIsolatedSerenaAgent:
 
         log.info("Process-isolated SerenaAgent stopped")
 
-    def _make_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _make_request(self, method: SerenaAgentWorker.RequestMethod, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Make a request to the worker process."""
         if self.process is None or not self.process.is_alive():
             raise RuntimeError("Worker process is not running")
@@ -291,7 +303,7 @@ class ProcessIsolatedSerenaAgent:
 
         raise TimeoutError(f"Request {request_id} timed out after {timeout} seconds")
 
-    def _make_request_with_result(self, method: str, params: dict[str, Any] | None = None) -> Any:
+    def _make_request_with_result(self, method: SerenaAgentWorker.RequestMethod, params: dict[str, Any] | None = None) -> Any:
         """Make a request and return the result, raising an exception if there's an error."""
         response = self._make_request(method, params)
         if "error" in response:
@@ -300,28 +312,25 @@ class ProcessIsolatedSerenaAgent:
 
     def tool_call(self, tool_name: str, **tool_params: Any) -> str:
         """Call a tool in the worker process."""
-        return self._make_request_with_result("tool_call", {"tool_name": tool_name, "tool_params": tool_params})
+        return self._make_request_with_result(
+            SerenaAgentWorker.RequestMethod.TOOL_CALL, {"tool_name": tool_name, "tool_params": tool_params}
+        )
 
     def get_active_tool_names(self) -> list[str]:
         """Get list of active tool names."""
-        return self._make_request_with_result("get_active_tool_names")
+        return self._make_request_with_result(SerenaAgentWorker.RequestMethod.GET_ACTIVE_TOOL_NAMES)
 
     def is_language_server_running(self) -> bool:
         """Check if language server is running."""
-        return self._make_request_with_result("is_language_server_running")
+        return self._make_request_with_result(SerenaAgentWorker.RequestMethod.IS_LANGUAGE_SERVER_RUNNING)
 
     def reset_language_server(self) -> None:
         """Reset the language server."""
-        self._make_request_with_result("reset_language_server")
+        self._make_request_with_result(SerenaAgentWorker.RequestMethod.RESET_LANGUAGE_SERVER)
 
     def get_exposed_tool_names(self) -> list[str]:
         """Get tool names for MCP tool creation."""
-        return self._make_request_with_result("get_exposed_tool_names")
-
-    def get_exposed_tool_instances(self) -> list[ToolInterface]:
-        """Get exposed tool instances for MCP tool creation."""
-        tool_names = self.get_exposed_tool_names()
-        return [ProcessIsolatedTool(self, tool_name) for tool_name in tool_names]
+        return self._make_request_with_result(SerenaAgentWorker.RequestMethod.GET_EXPOSED_TOOL_NAMES)
 
     def __enter__(self) -> Self:
         self.start()
