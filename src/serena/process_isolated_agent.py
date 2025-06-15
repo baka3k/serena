@@ -80,8 +80,8 @@ class SerenaAgentWorker:
                 return self._is_language_server_running(request_id)
             elif method == "reset_language_server":
                 return self._reset_language_server(request_id)
-            elif method == "get_tool_instances":
-                return self._get_tool_instances(request_id)
+            elif method == "get_exposed_tool_names":
+                return self._get_exposed_tool_names(request_id)
             else:
                 return {"id": request_id, "error": f"Unknown method: {method}"}
 
@@ -160,7 +160,7 @@ class SerenaAgentWorker:
         except Exception as e:
             return {"id": request_id, "error": str(e), "traceback": traceback.format_exc()}
 
-    def _get_tool_instances(self, request_id: str) -> dict[str, Any]:
+    def _get_exposed_tool_names(self, request_id: str) -> dict[str, Any]:
         """Get exposed tool names for MCP tool creation."""
         if self.agent is None:
             return {"id": request_id, "error": "SerenaAgent not initialized"}
@@ -314,9 +314,14 @@ class ProcessIsolatedSerenaAgent:
         """Reset the language server."""
         self._make_request_with_result("reset_language_server")
 
-    def get_tool_instances(self) -> list[str]:
+    def get_exposed_tool_names(self) -> list[str]:
         """Get tool names for MCP tool creation."""
-        return self._make_request_with_result("get_tool_instances")
+        return self._make_request_with_result("get_exposed_tool_names")
+
+    def get_exposed_tool_instances(self) -> list[ToolInterface]:
+        """Get exposed tool instances for MCP tool creation."""
+        tool_names = self.get_exposed_tool_names()
+        return [ProcessIsolatedTool(self, tool_name) for tool_name in tool_names]
 
     def __enter__(self) -> Self:
         self.start()

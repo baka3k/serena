@@ -160,8 +160,12 @@ def create_mcp_server_and_agent(
             return
 
         # Get tool names from process-isolated agent
+        # Tools may change as a result of project activation.
+        # NOTE: While we could pass updated tool information on to the MCP server via the callback, Claude Desktop does not,
+        # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
+        # so we need to register all tools at startup, unfortunately.
         try:
-            tool_names = process_agent.get_tool_instances()
+            tool_names = process_agent.get_exposed_tool_names()
         except Exception as e:
             log.error(f"Failed to get tool names from process agent: {e}")
             return

@@ -141,7 +141,7 @@ class TestMakeToolProcessIsolation:
         # Get tool names from both agents
         regular_active_tools = set(regular_agent.get_active_tool_names())
         regular_all_tools = set(tool.get_name_from_cls() for tool in regular_agent.get_exposed_tool_instances())
-        isolated_tool_names = set(process_isolated_agent.get_tool_instances())
+        isolated_tool_names = set(process_isolated_agent.get_exposed_tool_names())
 
         # The process isolated agent should have all tools (exposed, not just active)
         assert regular_all_tools == isolated_tool_names, (
