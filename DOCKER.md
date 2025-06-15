@@ -156,6 +156,4 @@ We're working on:
 - Automatic config migration between environments
 - Better project path handling
 - Dynamic port allocation
-- Windows line-ending handling
-
-For updates and issues, please check the [GitHub repository](https://github.com/diazoxide/serena).
+- Windows line-ending handling.
