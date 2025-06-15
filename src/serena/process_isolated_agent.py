@@ -23,6 +23,36 @@ from serena.config import SerenaAgentContext, SerenaAgentMode
 log = logging.getLogger(__name__)
 
 
+# Global shutdown function that can be called by the dashboard
+class _GlobalShutdownRegistry:
+    """Registry for global shutdown function."""
+
+    def __init__(self) -> None:
+        self.shutdown_func: Callable[[], None] | None = None
+
+    def set_shutdown_func(self, func: Callable[[], None]) -> None:
+        """Set the global shutdown function."""
+        self.shutdown_func = func
+
+    def call_shutdown(self) -> None:
+        """Call the global shutdown function if it exists."""
+        if self.shutdown_func:
+            self.shutdown_func()
+
+
+_shutdown_registry = _GlobalShutdownRegistry()
+
+
+def set_global_shutdown_func(func: Callable[[], None]) -> None:
+    """Set the global shutdown function."""
+    _shutdown_registry.set_shutdown_func(func)
+
+
+def call_global_shutdown() -> None:
+    """Call the global shutdown function if it exists."""
+    _shutdown_registry.call_shutdown()
+
+
 class SerenaAgentWorker:
     """Worker process that hosts the actual SerenaAgent."""
 
@@ -86,6 +116,8 @@ class SerenaAgentWorker:
                     return self._reset_language_server()
                 case self.RequestMethod.GET_EXPOSED_TOOL_NAMES:
                     return self._get_exposed_tool_names()
+                case self.RequestMethod.SHUTDOWN:
+                    return self._shutdown()
                 case _:
                     return {"error": f"Unknown method: {method}"}
 
@@ -126,6 +158,16 @@ class SerenaAgentWorker:
                 trace_lsp_communication=trace_lsp_communication,
                 tool_timeout=tool_timeout,
             )
+
+            # Set up global shutdown function for dashboard
+            def shutdown_worker() -> None:
+                log.info("Global shutdown function called")
+                self._cleanup()
+                import sys
+
+                sys.exit(0)
+
+            set_global_shutdown_func(shutdown_worker)
 
             return {"result": "SerenaAgent initialized successfully"}
         except Exception as e:
@@ -204,6 +246,20 @@ class SerenaAgentWorker:
         except Exception as e:
             return {"error": str(e), "traceback": traceback.format_exc()}
 
+    def _shutdown(self) -> dict[str, Any]:
+        """Handle shutdown request from dashboard."""
+        try:
+            log.info("Shutdown requested from dashboard")
+            # Clean up resources before exiting
+            self._cleanup()
+            # Exit the worker process - this will cause the main process to detect the termination
+            # and shut down gracefully through the server lifespan manager
+            import sys
+
+            sys.exit(0)
+        except Exception as e:
+            return {"error": str(e), "traceback": traceback.format_exc()}
+
     def _cleanup(self) -> None:
         """Clean up resources."""
         if self.agent is not None:
@@ -223,6 +279,7 @@ class SerenaAgentWorker:
         IS_LANGUAGE_SERVER_RUNNING = "is_language_server_running"
         RESET_LANGUAGE_SERVER = "reset_language_server"
         GET_EXPOSED_TOOL_NAMES = "get_exposed_tool_names"
+        SHUTDOWN = "shutdown"
 
 
 class ProcessIsolatedSerenaAgent:
@@ -393,6 +450,10 @@ class ProcessIsolatedSerenaAgent:
     def reset_language_server(self) -> None:
         """Reset the language server."""
         self._make_request_with_result(SerenaAgentWorker.RequestMethod.RESET_LANGUAGE_SERVER)
+
+    def shutdown_from_dashboard(self) -> None:
+        """Request shutdown from dashboard."""
+        self._make_request_with_result(SerenaAgentWorker.RequestMethod.SHUTDOWN)
 
     def get_exposed_tool_names(self) -> list[str]:
         """Get tool names for MCP tool creation."""

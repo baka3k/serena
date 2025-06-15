@@ -24,7 +24,7 @@ def regular_agent(in_memory_config):
 @pytest.fixture
 def process_isolated_agent(in_memory_config):
     """Create a ProcessIsolatedSerenaAgent for comparison."""
-    agent = ProcessIsolatedSerenaAgent(in_memory_config)
+    agent = ProcessIsolatedSerenaAgent(serena_config=in_memory_config)
     agent.start()
     yield agent
     agent.stop()

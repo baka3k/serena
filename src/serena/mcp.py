@@ -183,14 +183,35 @@ def create_mcp_server_and_agent(
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
         nonlocal process_agent
+        import asyncio
+
         mark_used(mcp_server)
+
+        async def monitor_worker_process() -> None:
+            """Monitor the worker process and shutdown server if it exits."""
+            while True:
+                if process_agent.process is None or not process_agent.process.is_alive():
+                    log.info("Worker process has exited, shutting down MCP server")
+                    # Trigger server shutdown
+                    import os
+
+                    os._exit(0)
+                await asyncio.sleep(1)
 
         try:
             process_agent.start()
             # Update tools now that the process agent is running
             update_tools()
+            # Start monitoring task
+            monitor_task = asyncio.create_task(monitor_worker_process())
             yield
         finally:
+            if "monitor_task" in locals():
+                monitor_task.cancel()
+                import contextlib
+
+                with contextlib.suppress(asyncio.CancelledError):
+                    await monitor_task
             process_agent.stop()
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
