@@ -7,7 +7,8 @@ import pytest
 
 from multilspy.multilspy_config import Language
 from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfigBase
-from test.conftest import LanguageParamRequest, get_repo_path
+from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
+from test.conftest import get_repo_path
 
 
 @dataclass
@@ -55,13 +56,35 @@ def serena_config():
 
 
 @pytest.fixture
-def serena_agent(request: LanguageParamRequest, serena_config) -> SerenaAgent:
+def serena_agent(request: pytest.FixtureRequest, serena_config):
     language = Language(request.param)
     project_name = f"test_repo_{language}"
-    return SerenaAgent(project=project_name, serena_config=serena_config)
+
+    # Check if this test should use process isolation by looking at the test parameters
+    isolated_process = False
+    if hasattr(request, "node") and hasattr(request.node, "callspec"):
+        # Get the isolated_process parameter value from the test
+        params = request.node.callspec.params
+        isolated_process = params.get("isolated_process", False)
+
+    if isolated_process:
+        agent = ProcessIsolatedSerenaAgent(project=project_name, serena_config=serena_config)
+        agent.start()
+
+        # Add cleanup to stop the process
+        def cleanup():
+            agent.stop()
+
+        request.addfinalizer(cleanup)
+        return agent
+    else:
+        return SerenaAgent(project=project_name, serena_config=serena_config)
 
 
 class TestSerenaAgent:
+    @pytest.mark.parametrize(
+        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
+    )
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
         [
@@ -74,16 +97,20 @@ class TestSerenaAgent:
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str):
+    def test_find_symbol(self, serena_agent, symbol_name: str, expected_kind: str, expected_file: str, isolated_process: bool):
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(symbol_name)
+        result = find_symbol_tool.apply_ex(name_path=symbol_name)
+
         symbols = json.loads(result)
         assert any(
             symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
             for s in symbols
-        ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file} for {agent.get_active_project().language.name}"
+        ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}"
 
+    @pytest.mark.parametrize(
+        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
+    )
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,def_file,ref_file",
         [
@@ -108,23 +135,30 @@ class TestSerenaAgent:
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol_references(self, serena_agent: SerenaAgent, symbol_name: str, def_file: str, ref_file: str) -> None:
+    def test_find_symbol_references(self, serena_agent, symbol_name: str, def_file: str, ref_file: str, isolated_process: bool) -> None:
         agent = serena_agent
+
         # Find the symbol location first
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(symbol_name, relative_path=def_file)
+        result = find_symbol_tool.apply_ex(name_path=symbol_name, relative_path=def_file)
+
         time.sleep(1)
         symbols = json.loads(result)
         # Find the definition
         def_symbol = symbols[0]
+
         # Now find references
         find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
+        result = find_refs_tool.apply_ex(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
+
         refs = json.loads(result)
         assert any(
             ref["relative_path"] == ref_file for ref in refs
-        ), f"Expected to find reference to {symbol_name} in {ref_file} for {agent._active_project.language.name}. refs={refs}"
+        ), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
 
+    @pytest.mark.parametrize(
+        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
+    )
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",
         [
@@ -193,16 +227,18 @@ class TestSerenaAgent:
     )
     def test_find_symbol_name_path(
         self,
-        serena_agent: SerenaAgent,
+        serena_agent,
         name_path: str,
         substring_matching: bool,
         expected_symbol_name: str,
         expected_kind: str,
         expected_file: str,
+        isolated_process: bool,
     ):
         agent = serena_agent
+
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(
+        result = find_symbol_tool.apply_ex(
             name_path=name_path,
             depth=0,
             relative_path=None,
@@ -211,6 +247,7 @@ class TestSerenaAgent:
             exclude_kinds=None,
             substring_matching=substring_matching,
         )
+
         symbols = json.loads(result)
         assert any(
             expected_symbol_name == s["name_path"].split("/")[-1]
@@ -219,6 +256,9 @@ class TestSerenaAgent:
             for s in symbols
         ), f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent._active_project.language.name}. Symbols: {symbols}"
 
+    @pytest.mark.parametrize(
+        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
+    )
     @pytest.mark.parametrize(
         "serena_agent,name_path",
         [
@@ -239,17 +279,18 @@ class TestSerenaAgent:
     )
     def test_find_symbol_name_path_no_match(
         self,
-        serena_agent: SerenaAgent,
+        serena_agent,
         name_path: str,
+        isolated_process: bool,
     ):
         agent = serena_agent
+
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(
+        result = find_symbol_tool.apply_ex(
             name_path=name_path,
             depth=0,
             substring_matching=True,
         )
+
         symbols = json.loads(result)
-        assert (
-            not symbols
-        ), f"Expected to find no symbols for {name_path} for {agent._active_project.language.name}. Symbols found: {symbols}"
+        assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"

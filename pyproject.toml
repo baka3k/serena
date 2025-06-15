@@ -260,4 +260,5 @@ markers = [
     "typescript: language server running for TypeScript",
     "php: language server running for PHP",
     "snapshot: snapshot tests",
+    "isolated_process: test runs with process isolated agent",
 ]
