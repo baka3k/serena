@@ -8,22 +8,28 @@ This module provides:
 """
 
 import asyncio
+import contextlib
 import logging
 import multiprocessing
 import signal
 import traceback
 from collections.abc import Callable
 from enum import StrEnum
+from logging.handlers import QueueHandler
 from multiprocessing.connection import Connection
 from typing import Any, Literal, Self
 
+import uvicorn
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
+from sensai.util.logging import LOG_DEFAULT_FORMAT
 
 from serena.agent import SerenaAgent, SerenaConfig, SerenaConfigBase, Tool, ToolInterface, ToolRegistry
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 
 log = logging.getLogger(__name__)
+
+_global_log_q: "multiprocessing.Queue[str]" = multiprocessing.Queue()
 
 
 # Global shutdown function that can be called by the dashboard
@@ -62,7 +68,6 @@ class ProcessIsolatedDashboard:
     def __init__(self, tool_names: list[str]):
         self.tool_names = tool_names
         self.process: multiprocessing.Process | None = None
-        self.log_queue: multiprocessing.Queue[str] | None = None
         self.shutdown_queue: multiprocessing.Queue[bool] | None = None
         self.port_queue: multiprocessing.Queue[int] | None = None
         self._log_handler: ProcessDashboardLogHandler | None = None
@@ -75,25 +80,21 @@ class ProcessIsolatedDashboard:
         log.info("Starting process-isolated dashboard")
 
         # Create communication queues
-        self.log_queue = multiprocessing.Queue()
         self.shutdown_queue = multiprocessing.Queue()
         self.port_queue = multiprocessing.Queue()
 
         # Create and start dashboard process
-        dashboard_worker = DashboardWorker(
-            log_queue=self.log_queue, shutdown_queue=self.shutdown_queue, port_queue=self.port_queue, tool_names=self.tool_names
-        )
+        dashboard_worker = DashboardWorker(shutdown_queue=self.shutdown_queue, port_queue=self.port_queue, tool_names=self.tool_names)
         self.process = multiprocessing.Process(target=dashboard_worker.run)
         self.process.start()
 
         # Set up log handler to send logs to dashboard process
-        self._log_handler = ProcessDashboardLogHandler(self.log_queue)
-        logging.getLogger().addHandler(self._log_handler)
+        logging.Logger.root.addHandler(ProcessDashboardLogHandler())
 
         # Wait for dashboard to start and return port
         try:
             port = self.port_queue.get(timeout=10)  # Wait up to 10 seconds for startup
-            log.info(f"Dashboard started on port {port}")
+            log.debug(f"Dashboard started on port {port}")
             return port
         except Exception as e:
             self.stop()
@@ -107,11 +108,6 @@ class ProcessIsolatedDashboard:
         log.info("Stopping process-isolated dashboard")
 
         try:
-            # Remove log handler
-            if self._log_handler is not None:
-                logging.getLogger().removeHandler(self._log_handler)
-                self._log_handler = None
-
             # Signal shutdown
             if self.shutdown_queue is not None:
                 import contextlib
@@ -138,7 +134,6 @@ class ProcessIsolatedDashboard:
 
         finally:
             self.process = None
-            self.log_queue = None
             self.shutdown_queue = None
             self.port_queue = None
 
@@ -153,19 +148,14 @@ class ProcessIsolatedDashboard:
 class ProcessDashboardLogHandler(logging.Handler):
     """Log handler that sends log messages to dashboard process via queue."""
 
-    def __init__(self, log_queue: "multiprocessing.Queue[str]", level: int = logging.NOTSET):
+    def __init__(self, level: int = logging.NOTSET):
         super().__init__(level=level)
-        self.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
-        self.log_queue = log_queue
+        self.setFormatter(logging.Formatter(LOG_DEFAULT_FORMAT))
 
     def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            # Non-blocking put to avoid deadlocks
-            self.log_queue.put_nowait(msg)
-        except Exception:
-            # Silently ignore queue errors to avoid recursive logging
-            pass
+        msg = self.format(record)
+        # Non-blocking put to avoid deadlocks
+        _global_log_q.put_nowait(msg)
 
 
 class DashboardWorker:
@@ -173,18 +163,13 @@ class DashboardWorker:
 
     def __init__(
         self,
-        log_queue: "multiprocessing.Queue[str]",
         shutdown_queue: "multiprocessing.Queue[bool]",
         port_queue: "multiprocessing.Queue[int]",
         tool_names: list[str],
     ):
-        self.log_queue = log_queue
         self.shutdown_queue = shutdown_queue
         self.port_queue = port_queue
         self.tool_names = tool_names
-        self.memory_log_handler: MemoryLogHandler | None = None
-        self.dashboard_api: SerenaDashboardAPI | None = None
-        self.log_processor_task: asyncio.Task | None = None
 
     def run(self) -> None:
         """Main dashboard worker loop - runs in separate process."""
@@ -198,28 +183,21 @@ class DashboardWorker:
 
     async def _async_main(self) -> None:
         """Main async loop for dashboard process."""
+        log_processor_task = None
         try:
-            # Set up memory log handler
-            self.memory_log_handler = MemoryLogHandler()
-
             # Set up dashboard API with shutdown callback
-            self.dashboard_api = SerenaDashboardAPI(
-                memory_log_handler=self.memory_log_handler, tool_names=self.tool_names, shutdown_callback=self._handle_shutdown
+            dashboard_api = SerenaDashboardAPI(
+                memory_log_handler=MemoryLogHandler(), tool_names=self.tool_names, shutdown_callback=self._handle_shutdown
             )
 
             # Start log processor task
-            self.log_processor_task = asyncio.create_task(self._process_log_queue())
+            log_processor_task = asyncio.create_task(self._process_log_queue(dashboard_api))
 
             # Find free port and signal to parent
-            port = self.dashboard_api._find_first_free_port(0x5EDA)
+            port = dashboard_api._find_first_free_port(0x5EDA)
             self.port_queue.put(port)
 
-            # Start dashboard server
-            import uvicorn
-
-            config = uvicorn.Config(
-                app=self.dashboard_api._app, host="0.0.0.0", port=port, workers=1, log_config=None, log_level="critical"
-            )
+            config = uvicorn.Config(app=dashboard_api._app, host="0.0.0.0", port=port, workers=1, log_config=None, log_level="critical")
             server = uvicorn.Server(config)
 
             # Start server and shutdown monitor concurrently
@@ -228,12 +206,9 @@ class DashboardWorker:
 
             # Wait for either server to complete or shutdown signal
             done, pending = await asyncio.wait([server_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED)
-
             # Cancel pending tasks
             for task in pending:
                 task.cancel()
-                import contextlib
-
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
 
@@ -241,33 +216,31 @@ class DashboardWorker:
             log.error(f"Error in dashboard worker: {e}")
         finally:
             # Clean up
-            if self.log_processor_task and not self.log_processor_task.done():
-                self.log_processor_task.cancel()
-                import contextlib
+            if log_processor_task and not log_processor_task.done():
+                log_processor_task.cancel()
 
                 with contextlib.suppress(asyncio.CancelledError):
-                    await self.log_processor_task
+                    await log_processor_task
 
-    async def _process_log_queue(self) -> None:
+    @staticmethod
+    async def _process_log_queue(dashboard_api: SerenaDashboardAPI) -> None:
         """Process log messages from the queue and forward to memory handler."""
         while True:
             try:
                 # Check for log messages
-                while not self.log_queue.empty():
+                while not _global_log_q.empty():
                     try:
-                        log_msg = self.log_queue.get_nowait()
-                        if self.memory_log_handler:
-                            # Create a dummy log record and emit it
-                            record = logging.LogRecord(
-                                name="forwarded", level=logging.INFO, pathname="", lineno=0, msg=log_msg, args=(), exc_info=None
-                            )
-                            self.memory_log_handler.emit(record)
-                    except Exception:
-                        break
+                        log_msg = _global_log_q.get_nowait()
+                        record = logging.LogRecord(
+                            name="forwarded", level=logging.INFO, pathname="", lineno=0, msg=log_msg, args=(), exc_info=None
+                        )
+                        dashboard_api.memory_log_handler.emit(record)
+                    except Exception as e:
+                        log.error(f"Error processing log message: {e}")
+                        await asyncio.sleep(1)
 
                 # Small delay to avoid busy waiting
                 await asyncio.sleep(0.1)
-
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -331,8 +304,13 @@ class SerenaAgentWorker:
         self.agent: SerenaAgent | None = None
         self._shutdown_requested = False
 
-    def run(self) -> None:
+    def run(self, q: "multiprocessing.Queue[str]") -> None:
         """Main worker loop - runs in separate process."""
+        qh = QueueHandler(q)
+        root = logging.getLogger()
+        root.setLevel(logging.DEBUG)
+        root.addHandler(qh)
+
         try:
             # Set up signal handler for clean shutdown
             signal.signal(signal.SIGTERM, self._signal_handler)
@@ -623,9 +601,9 @@ class ProcessIsolatedSerenaAgent:
         parent_conn, child_conn = multiprocessing.Pipe()
         self.conn = parent_conn
 
-        # Create and start worker process
+        # Create and start worker process, passing along the dashboard's queue if available
         worker = SerenaAgentWorker(child_conn)
-        self.process = multiprocessing.Process(target=worker.run)
+        self.process = multiprocessing.Process(target=worker.run, args=[_global_log_q])
         self.process.start()
 
         # Initialize the agent in the worker process

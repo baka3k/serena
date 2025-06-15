@@ -78,6 +78,10 @@ class SerenaDashboardAPI:
         self._app = FastAPI(title="Serena Dashboard")
         self._setup_routes()
 
+    @property
+    def memory_log_handler(self) -> MemoryLogHandler:
+        return self._memory_log_handler
+
     def _setup_routes(self) -> None:
         self._app.mount("/dashboard", StaticFiles(directory=SERENA_DASHBOARD_DIR), name="dashboard")
 

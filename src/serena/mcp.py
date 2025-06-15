@@ -2,13 +2,14 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import contextlib
 import sys
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import click  # Add click import
 import docstring_parser
@@ -21,10 +22,7 @@ from sensai.util.helper import mark_used
 from serena.agent import SerenaAgent, ToolInterface, create_serena_config, show_fatal_exception_safe
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
-
-# Import for type annotations
-if TYPE_CHECKING:
-    from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
+from serena.process_isolated_agent import ProcessIsolatedDashboard, ProcessIsolatedSerenaAgent
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -141,10 +139,7 @@ def create_mcp_server_and_agent(
             tool_timeout=tool_timeout,
         )
 
-        # Create process-isolated agent with the configuration
-        from serena.process_isolated_agent import ProcessIsolatedDashboard, ProcessIsolatedSerenaAgent
-
-        process_agent = ProcessIsolatedSerenaAgent(serena_config=serena_config)
+        serena_agent_process = ProcessIsolatedSerenaAgent(serena_config=serena_config)
 
     except Exception as e:
         show_fatal_exception_safe(e)
@@ -152,10 +147,10 @@ def create_mcp_server_and_agent(
 
     def update_tools() -> None:
         """Update the tools in the MCP server - adapted for process isolation."""
-        nonlocal mcp, process_agent
+        nonlocal mcp, serena_agent_process
 
         # Check if process agent is running
-        if process_agent.process is None or not process_agent.process.is_alive():
+        if serena_agent_process.process is None or not serena_agent_process.process.is_alive():
             log.debug("Process agent not running yet, skipping tool update")
             return
 
@@ -165,7 +160,7 @@ def create_mcp_server_and_agent(
         # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
         # so we need to register all tools at startup, unfortunately.
         try:
-            tool_names = process_agent.get_exposed_tool_names()
+            tool_names = serena_agent_process.get_exposed_tool_names()
         except Exception as e:
             log.error(f"Failed to get tool names from process agent: {e}")
             return
@@ -175,27 +170,27 @@ def create_mcp_server_and_agent(
 
             mcp._tool_manager._tools = {}
             for tool_name in tool_names:
-                process_isolated_tool = ProcessIsolatedTool(process_agent=process_agent, tool_name=tool_name)
+                process_isolated_tool = ProcessIsolatedTool(process_agent=serena_agent_process, tool_name=tool_name)
                 mcp_tool = make_tool(process_isolated_tool)
                 mcp._tool_manager._tools[tool_name] = mcp_tool
 
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        nonlocal process_agent
+        nonlocal serena_agent_process
         import asyncio
         import webbrowser
 
         mark_used(mcp_server)
 
-        dashboard: ProcessIsolatedDashboard | None = None
+        serena_dashboard_process: ProcessIsolatedDashboard | None = None
         shutdown_event = asyncio.Event()
 
         async def monitor_worker_process() -> None:
             """Monitor the worker process and shutdown server if it exits."""
             while not shutdown_event.is_set():
                 try:
-                    if process_agent.process is None or not process_agent.process.is_alive():
+                    if serena_agent_process.process is None or not serena_agent_process.process.is_alive():
                         log.info("Worker process has exited, shutting down MCP server")
                         shutdown_event.set()
                         break
@@ -208,14 +203,14 @@ def create_mcp_server_and_agent(
 
         async def monitor_dashboard_shutdown() -> None:
             """Monitor the dashboard shutdown queue."""
-            if dashboard is None or dashboard.shutdown_queue is None:
+            if serena_dashboard_process is None or serena_dashboard_process.shutdown_queue is None:
                 return
 
             while not shutdown_event.is_set():
                 try:
                     # Check if dashboard sent shutdown signal
-                    if not dashboard.shutdown_queue.empty():
-                        dashboard.shutdown_queue.get_nowait()
+                    if not serena_dashboard_process.shutdown_queue.empty():
+                        serena_dashboard_process.shutdown_queue.get_nowait()
                         log.info("Dashboard shutdown signal received via queue")
                         shutdown_event.set()
                         # Force immediate exit since MCP server doesn't respond properly
@@ -247,27 +242,26 @@ def create_mcp_server_and_agent(
             os._exit(0)
 
         try:
-            process_agent.start()
 
             # Set up global shutdown function for dashboard
             from serena.process_isolated_agent import set_global_shutdown_func
 
             set_global_shutdown_func(shutdown_server)
 
-            # Update tools now that the process agent is running
-            update_tools()
-
             # Start process-isolated dashboard if enabled
             if serena_config.web_dashboard:
                 try:
-                    tool_names = process_agent.get_exposed_tool_names()
-                    dashboard = ProcessIsolatedDashboard(tool_names)
-                    port = dashboard.start()
+                    serena_dashboard_process = ProcessIsolatedDashboard(tool_names=[])
+                    port = serena_dashboard_process.start()
                     webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
                     log.info(f"Dashboard started on port {port}")
                 except Exception as e:
                     log.error(f"Failed to start dashboard: {e}")
-                    dashboard = None
+                    serena_dashboard_process = None
+
+            serena_agent_process.start()
+            # Update tools now that the process agent is running
+            update_tools()
 
             # Start monitoring tasks
             tasks = []
@@ -275,7 +269,7 @@ def create_mcp_server_and_agent(
             tasks.append(monitor_task)
 
             # Start dashboard shutdown monitor if dashboard is running
-            if dashboard is not None:
+            if serena_dashboard_process is not None:
                 dashboard_monitor_task = asyncio.create_task(monitor_dashboard_shutdown())
                 tasks.append(dashboard_monitor_task)
 
@@ -314,9 +308,6 @@ def create_mcp_server_and_agent(
         finally:
             log.info("Starting server shutdown cleanup")
 
-            # Cancel monitoring tasks
-            import contextlib
-
             if "tasks" in locals():
                 for task in tasks:
                     task.cancel()
@@ -324,15 +315,15 @@ def create_mcp_server_and_agent(
                         await asyncio.wait_for(task, timeout=1.0)
 
             # Stop dashboard first
-            if dashboard is not None:
+            if serena_dashboard_process is not None:
                 try:
-                    dashboard.stop()
+                    serena_dashboard_process.stop()
                 except Exception as e:
                     log.error(f"Error stopping dashboard: {e}")
 
             # Stop process agent
             try:
-                process_agent.stop()
+                serena_agent_process.stop()
             except Exception as e:
                 log.error(f"Error stopping process agent: {e}")
 
@@ -343,7 +334,7 @@ def create_mcp_server_and_agent(
 
     update_tools()
 
-    return mcp, process_agent
+    return mcp, serena_agent_process
 
 
 class ProjectType(click.ParamType):
