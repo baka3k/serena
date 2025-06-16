@@ -1596,7 +1596,7 @@ class LanguageServer:
 
     @property
     def _cache_path(self) -> Path:
-        return Path(self.repository_root_path) / ".serena" / "cache" / "document_symbols_cache_v20-05-25.pkl"
+        return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v20-05-25.pkl"
 
     def save_cache(self):
         with self._cache_lock:
