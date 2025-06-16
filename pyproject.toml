@@ -35,6 +35,7 @@ dependencies = [
   "psutil>=7.0.0",
   "docstring_parser>=0.16",
   "joblib>=1.5.1",
+  "tqdm>=4.67.1",
 ]
 
 [project.scripts]
@@ -109,7 +110,7 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 # Uses PYTEST_MARKERS env var for default markers
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
-test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not isolated process}\""
+test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not isolated_process}\""
 _black_check = "black --check --exclude src/multilspy/ src scripts test"
 _ruff_check = "ruff check --exclude .venv/ --exclude src/multilspy/ src scripts test"
 _black_format = "black --exclude .venv/|src/multilspy/ src scripts test"
