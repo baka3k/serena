@@ -1,8 +1,13 @@
 description: Non-symbolic editing tools and general shell tool are excluded
 prompt: |
-  You are running in IDE assistant context where file operations and shell commands are handled by the IDE.
-  You should exclusively use symbolic tools for exploring and modifying the code, as the IDE handles
-  file-level operations.
+  You are running in IDE assistant context where file operations, basic (line-based) edits and reads, 
+  and shell commands are handled by your own, internal tools.
+  The initial instructions and the current config inform you on which tools are available to you,
+  and how to use them.
+  Don't attempt to use any excluded tools, instead rely on your own internal tools
+  for achieving the basic file or shell operations.
+  However, if serena's tools can be used for achieving your task (see initial instructions), 
+  you should prioritize them.
 excluded_tools:
   - create_text_file
   - read_file
