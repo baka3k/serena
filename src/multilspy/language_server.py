@@ -1607,7 +1607,7 @@ class LanguageServer:
         """
         parsed_files = await self.request_parsed_files()
         files_processed = 0
-        for relative_file_path in tqdm.tqdm(parsed_files, disable=not progress_bar):
+        for relative_file_path in tqdm.tqdm(parsed_files, disable=not progress_bar, desc="Indexing (files)"):
             await self.request_document_symbols(relative_file_path, include_body=False)
             await self.request_document_symbols(relative_file_path, include_body=True)
             files_processed += 1
@@ -2205,7 +2205,7 @@ class SyncLanguageServer:
                 self.language_server.logger.log("Async shutdown tasks completed, returning to main thread", logging.DEBUG)
                 # Note: NOT calling loop.stop() here - let main thread do it
 
-    def stop(self, shutdown_timeout: float = 5.0) -> None:
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
         """
         Stops the language server and robustly cleans up all associated resources,
         including the asyncio event loop, to prevent hangs on process exit.
@@ -2230,26 +2230,30 @@ class SyncLanguageServer:
         
         if not is_windows:
             # 2. Graceful shutdown for Linux/Unix - try proper async cleanup first
+            self.language_server.logger.log("Starting graceful shutdown", logging.INFO)
             shutdown_future = None
             if self.loop and self.loop.is_running():
                 shutdown_future = asyncio.run_coroutine_threadsafe(self._shutdown_and_stop_loop(), self.loop)
             
             # 3. Wait for the background thread to exit
             if self.loop_thread:
+                self.language_server.logger.log("Waiting for event loop thread to exit", logging.INFO)
                 self.loop_thread.join(timeout=shutdown_timeout)
                 if self.loop_thread.is_alive():
                     self.language_server.logger.log("Event loop thread did not terminate within timeout", logging.WARNING)
             
             # 4. Wait for the shutdown coroutine to complete if it was scheduled
             if shutdown_future:
+                self.language_server.logger.log("Waiting for async shutdown to complete", logging.INFO)
                 try:
-                    shutdown_future.result(timeout=2.0)
+                    shutdown_future.result(timeout=shutdown_timeout)
                     self.language_server.logger.log("Graceful async shutdown completed", logging.DEBUG)
                 except Exception as e:
                     self.language_server.logger.log(f"Async shutdown failed: {e}", logging.WARNING)
             
             # 5. Close the loop properly after graceful shutdown
             if self.loop and not self.loop.is_closed():
+                self.language_server.logger.log("Closing event loop", logging.INFO)
                 try:
                     self.loop.close()
                     self.language_server.logger.log("Event loop closed successfully", logging.DEBUG)

@@ -40,6 +40,7 @@ dependencies = [
 
 [project.scripts]
 serena-mcp-server = "serena.mcp:start_mcp_server"
+index-project = "serena.agent:index_project"
 
 [project.license]
 text = "MIT"

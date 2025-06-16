@@ -23,6 +23,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 
+import click
 import yaml
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from overrides import override
@@ -656,6 +657,7 @@ def create_ls_for_project(
         trace_lsp_communication=trace_lsp_communication,
     )
     ls_logger = MultilspyLogger(log_level=log_level)
+    logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=log_level, force=True)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
     return SyncLanguageServer.create(
         multilspy_config,
@@ -663,6 +665,23 @@ def create_ls_for_project(
         project_instance.project_root,
         timeout=ls_timeout,
     )
+
+
+@click.command()
+@click.argument("project", type=click.Path(exists=True))
+@click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
+def index_project(project: str, log_level: str = "INFO") -> None:
+    """
+    Index a project by saving the symbols of files to Serena's language server cache.
+
+    :param project: the project to index
+    """
+    log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
+    project = os.path.abspath(project)
+    log.info(f"Indexing project {project}")
+    ls = create_ls_for_project(project, log_level=log_level_int)
+    with ls.start_server():
+        ls.index_repository()
 
 
 class SerenaAgent:
