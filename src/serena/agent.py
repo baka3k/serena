@@ -1056,11 +1056,15 @@ class SerenaAgent:
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
         )
+        log.info(f"Starting the language server for {self._active_project.project_name}")
         self.language_server.start()
         if not self.language_server.is_running():
             raise RuntimeError(
                 f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
             )
+        assert self.symbol_manager is not None, "Should never be None with an active project"
+        log.debug("Setting the language server in the agent's symbol manager")
+        self.symbol_manager.set_language_server(self.language_server)
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
