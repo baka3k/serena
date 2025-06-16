@@ -3,7 +3,8 @@ Context and Mode configuration loader
 """
 
 import os
-from dataclasses import dataclass, field
+from copy import copy
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -29,6 +30,17 @@ class SerenaAgentMode:
     prompt: str
     description: str = ""
     excluded_tools: set[str] = field(default_factory=set)
+
+    def to_json_dict(self) -> dict[str, str | list[str]]:
+        result = asdict(self)
+        result["excluded_tools"] = list(result["excluded_tools"])
+        return result
+
+    @classmethod
+    def from_json_dict(cls, data: dict) -> Self:
+        data = copy(data)
+        data["excluded_tools"] = set(data["excluded_tools"])
+        return cls(**data)
 
     def print_overview(self) -> None:
         """Print an overview of the mode."""
@@ -90,6 +102,17 @@ class SerenaAgentContext:
     prompt: str
     description: str = ""
     excluded_tools: set[str] = field(default_factory=set)
+
+    def to_json_dict(self) -> dict[str, str | list[str]]:
+        result = asdict(self)
+        result["excluded_tools"] = list(result["excluded_tools"])
+        return result
+
+    @classmethod
+    def from_json_dict(cls, data: dict) -> Self:
+        data = copy(data)
+        data["excluded_tools"] = set(data["excluded_tools"])
+        return cls(**data)
 
     def get_excluded_tool_classes(self) -> list[type["Tool"]]:
         """Get the list of tool classes that are excluded from the context."""

@@ -5,7 +5,6 @@ import multiprocessing
 import os
 import traceback
 import webbrowser
-from collections.abc import Callable
 from enum import StrEnum
 from logging.handlers import QueueHandler
 from multiprocessing.connection import Connection
@@ -270,27 +269,19 @@ class SerenaAgentWorker:
         """Initialize the SerenaAgent."""
         try:
             # Extract all possible initialization parameters
+            context_param = params.get("context")
             project = params.get("project")
-            project_activation_callback = params.get("project_activation_callback")
-            serena_config = params.get("serena_config")
-            context = params.get("context")
-            modes = params.get("modes")
+            serena_config = SerenaConfig.from_json_dict(params["serena_config"])
+            context = SerenaAgentContext.from_json_dict(context_param) if context_param is not None else None
+            modes = [SerenaAgentMode.from_json_dict(m) for m in params["modes"]]
             enable_web_dashboard = params.get("enable_web_dashboard")
             enable_gui_log_window = params.get("enable_gui_log_window")
             log_level = params.get("log_level")
             trace_lsp_communication = params.get("trace_lsp_communication")
             tool_timeout = params.get("tool_timeout")
 
-            # Handle legacy config_dict parameter for backward compatibility
-            if "config" in params and serena_config is None:
-                config_dict = params["config"]
-                serena_config = SerenaConfig.from_dict(config_dict)
-            elif serena_config is not None and isinstance(serena_config, dict):
-                serena_config = SerenaConfig.from_dict(serena_config)
-
             self.agent = SerenaAgent(
                 project=project,
-                project_activation_callback=project_activation_callback,
                 serena_config=serena_config,
                 context=context,
                 modes=modes,
@@ -405,7 +396,6 @@ class ProcessIsolatedSerenaAgent:
     def __init__(
         self,
         project: str | None = None,
-        project_activation_callback: Callable[[], None] | None = None,
         serena_config: SerenaConfigBase | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
@@ -415,28 +405,17 @@ class ProcessIsolatedSerenaAgent:
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
     ):
-        # Store all initialization parameters to pass to worker
-        self._init_params = {
-            "project": project,
-            "project_activation_callback": project_activation_callback,
-            "serena_config": serena_config,
-            "context": context,
-            "modes": modes,
-            "enable_web_dashboard": enable_web_dashboard,
-            "enable_gui_log_window": enable_gui_log_window,
-            "log_level": log_level,
-            "trace_lsp_communication": trace_lsp_communication,
-            "tool_timeout": tool_timeout,
-        }
-
-        # Keep serena_config for compatibility
-        if serena_config is not None:
-            self.serena_config = serena_config
-        else:
-            # Use the default config loader
-            self.serena_config = SerenaConfig.from_config_file()
-        self.process: multiprocessing.Process | None = None
         self.project = project
+        self.serena_config = serena_config or SerenaConfig.from_config_file()
+        self.context = context
+        self.modes = modes or []
+        self.enable_web_dashboard = enable_web_dashboard
+        self.enable_gui_log_window = enable_gui_log_window
+        self.log_level = log_level
+        self.trace_lsp_communication = trace_lsp_communication
+        self.tool_timeout = tool_timeout
+
+        self.process: multiprocessing.Process | None = None
         self.conn: Connection | None = None
 
     def start(self) -> None:
@@ -455,25 +434,20 @@ class ProcessIsolatedSerenaAgent:
         self.process = multiprocessing.Process(target=worker.run, args=[_global_log_queue])
         self.process.start()
 
+        # Prepare initialization parameters, converting complex objects to dict if present
+        init_params = {
+            "project": self.project,
+            "serena_config": self.serena_config.to_json_dict(),
+            "context": self.context.to_json_dict() if self.context is not None else None,
+            "modes": [m.to_json_dict() for m in self.modes],
+            "enable_web_dashboard": self.enable_web_dashboard,
+            "enable_gui_log_window": self.enable_gui_log_window,
+            "log_level": self.log_level,
+            "trace_lsp_communication": self.trace_lsp_communication,
+            "tool_timeout": self.tool_timeout,
+        }
         # Initialize the agent in the worker process
         try:
-            # TODO: instead pass config and project to worker, use at startup of agent there
-            # Prepare initialization parameters, converting complex objects to dict if present
-            init_params = self._init_params.copy()
-            if init_params["serena_config"] is not None and hasattr(init_params["serena_config"], "to_dict"):
-                # Convert SerenaConfigBase to dict for serialization
-                serena_config_obj = init_params["serena_config"]
-                init_params["serena_config"] = serena_config_obj.to_dict()  # type: ignore
-            # init_params["project"] = self.project
-            # Note: context and modes are not serializable across processes,
-            # so they will be None and SerenaAgent will use defaults
-            init_params["context"] = None
-            init_params["modes"] = None
-            # project_activation_callback cannot be serialized across processes
-            init_params["project_activation_callback"] = None
-            # Disable web dashboard in worker process - it will run in MCP process instead
-            init_params["enable_web_dashboard"] = False
-
             self._make_request_with_result(SerenaAgentWorker.RequestMethod.INITIALIZE, init_params)
         except Exception as e:
             self.stop()

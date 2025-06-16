@@ -99,6 +99,7 @@ def make_tool(
         fn_metadata=func_arg_metadata,
         is_async=is_async,
         context_kwarg=None,
+        annotations=None,
     )
 
 
@@ -141,15 +142,15 @@ def create_mcp_server_and_agent(
 
     try:
         serena_config = create_serena_config(
-            context=context_instance,
-            modes=modes_instances,
             enable_web_dashboard=enable_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
         )
-        serena_agent_process = ProcessIsolatedSerenaAgent(project=project, serena_config=serena_config)
+        serena_agent_process = ProcessIsolatedSerenaAgent(
+            project=project, serena_config=serena_config, modes=modes_instances, context=context_instance
+        )
 
         # Start process-isolated dashboard if enabled
         serena_dashboard_process = None
@@ -261,7 +262,7 @@ PROJECT_TYPE = ProjectType()
 @click.command()
 @click.option(
     "--project",
-    "project_file_opt",
+    "project",
     type=PROJECT_TYPE,
     default=None,
     help="Either an absolute path to the project directory or a name of an already registered project. "
@@ -270,7 +271,7 @@ PROJECT_TYPE = ProjectType()
 # Keep --project-file for backwards compatibility
 @click.option(
     "--project-file",
-    "project_file_opt",  # Use same destination variable to avoid conflicts
+    "project",  # Use same destination variable to avoid conflicts
     type=PROJECT_TYPE,
     default=None,
     help="[DEPRECATED] Use --project instead.",
@@ -357,7 +358,7 @@ PROJECT_TYPE = ProjectType()
     help="Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.",
 )
 def start_mcp_server(
-    project_file_opt: str | None,
+    project: str | None,
     project_file_arg: str | None,
     context: str = DEFAULT_CONTEXT,
     modes: tuple[str, ...] = DEFAULT_MODES,
@@ -378,7 +379,7 @@ def start_mcp_server(
     """
     # Prioritize the positional argument if provided
     # This is for backward compatibility with the old CLI, should be removed in the future!
-    project_file = project_file_arg if project_file_arg is not None else project_file_opt
+    project_file = project_file_arg if project_file_arg is not None else project
 
     # Use process isolation by default to prevent asyncio event loop contamination
     mcp_server, agent = create_mcp_server_and_agent(
