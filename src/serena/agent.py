@@ -657,7 +657,6 @@ def create_ls_for_project(
         trace_lsp_communication=trace_lsp_communication,
     )
     ls_logger = MultilspyLogger(log_level=log_level)
-    logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=log_level, force=True)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
     return SyncLanguageServer.create(
         multilspy_config,

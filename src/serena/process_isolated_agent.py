@@ -43,7 +43,7 @@ def _dashboard_worker(
 ) -> None:
     """Entry point for the dashboard process."""
     # Route all logging to the shared queue
-    root = logging.Logger.root
+    root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(logging.DEBUG)
     root.addHandler(QueueHandler(log_q))
