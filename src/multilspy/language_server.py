@@ -23,6 +23,7 @@ import time
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
+import tqdm
 
 from . import multilspy_types
 from .lsp_protocol_handler import lsp_types as LSPTypes
@@ -211,6 +212,10 @@ class LanguageServer:
         self.repository_root_path: str = repository_root_path
         self.logger.log(f"Creating language server instance for {repository_root_path=} with {language_id=} and process launch info: {process_launch_info}", logging.DEBUG)
         
+        self.language_id = language_id
+        self.open_file_buffers: Dict[str, LSPFileBuffer] = {}
+        self.language = Language(language_id)
+        
         # load cache first to prevent any racing conditions due to asyncio stuff
         self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
@@ -236,10 +241,6 @@ class LanguageServer:
             start_independent_lsp_process=config.start_independent_lsp_process,
         )
 
-        self.language_id = language_id
-        self.open_file_buffers: Dict[str, LSPFileBuffer] = {}
-
-        self.language = Language(language_id)
 
         # Set up the pathspec matcher for the ignored paths
         # for all absolute paths in ignored_paths, convert them to relative paths
@@ -1598,6 +1599,22 @@ class LanguageServer:
     def _cache_path(self) -> Path:
         return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v20-05-25.pkl"
 
+    async def index_repository(self, progress_bar: bool = True, save_after_n_files: int = 10) -> None:
+        """Will go through the entire repository and "index" all files, meaning save their symbols to the cache.
+
+        :param progress_bar: Whether to show a progress bar while indexing the repository.
+        :param save_after_n_files: How many files to process before saving a checkpoint of the cache.
+        """
+        parsed_files = await self.request_parsed_files()
+        files_processed = 0
+        for relative_file_path in tqdm.tqdm(parsed_files, disable=not progress_bar):
+            await self.request_document_symbols(relative_file_path, include_body=False)
+            await self.request_document_symbols(relative_file_path, include_body=True)
+            files_processed += 1
+            if files_processed % save_after_n_files == 0:
+                self.save_cache()
+        self.save_cache()
+
     def save_cache(self):
         with self._cache_lock:
             if not self._cache_has_changed:
@@ -2122,6 +2139,21 @@ class SyncLanguageServer:
             self.language_server.search_files_for_pattern(pattern, context_lines_before, context_lines_after, paths_include_glob, paths_exclude_glob), self.loop
         ).result(timeout=self.timeout)
         return result
+
+    def index_repository(self, progress_bar: bool = True, timeout: float | None = None, save_after_n_files: int = 10) -> None:
+        """
+        Will go through the entire repository and "index" all files, meaning save their symbols to the cache.
+
+        :param progress_bar: Whether to show a progress bar while indexing the repository.
+        :param save_after_n_files: How many files to process before saving a checkpoint of the cache.
+        :param timeout: since this operation can take a long time, the default timeout (the attribute of the LS instance) is not used.
+            If you want to provide a timeout for indexing, you can pass it here explicitly.
+        :return:
+        """
+        assert self.loop
+        asyncio.run_coroutine_threadsafe(
+            self.language_server.index_repository(progress_bar=progress_bar, save_after_n_files=save_after_n_files), self.loop
+        ).result(timeout=timeout)
 
     def start(self) -> "SyncLanguageServer":
         """
