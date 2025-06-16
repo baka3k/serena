@@ -55,9 +55,4 @@ jobs:
         run: uv pip install -e ".[dev]"
       - name: Test with pytest
         shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            uv run pytest -vv -m "not java and not rust"
-          else
-            uv run pytest -vv
-          fi
+        run: uv run poe test

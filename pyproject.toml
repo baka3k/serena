@@ -106,9 +106,10 @@ exclude = "^build/|^docs/"
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
 
 [tool.poe.tasks]
-# Uses PYTEST_MARKERS env var for default markers (defaults to "not java and not rust")
-# Set PYTEST_MARKERS="" to run all tests
-test = "pytest test --color=yes -m \"${PYTEST_MARKERS:-not java and not rust}\""
+# Uses PYTEST_MARKERS env var for default markers
+# For custom markers, one can either adjust the env var or just use -m option in the command line,
+# as the second -m option will override the first one.
+test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not isolated process}\""
 _black_check = "black --check --exclude src/multilspy/ src scripts test"
 _ruff_check = "ruff check --exclude .venv/ --exclude src/multilspy/ src scripts test"
 _black_format = "black --exclude .venv/|src/multilspy/ src scripts test"
@@ -259,6 +260,6 @@ markers = [
     "rust: language server running for Rust",
     "typescript: language server running for TypeScript",
     "php: language server running for PHP",
-    "snapshot: snapshot tests",
+    "snapshot: snapshot tests for symbolic editing operations",
     "isolated_process: test runs with process isolated agent",
 ]
