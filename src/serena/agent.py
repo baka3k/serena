@@ -922,6 +922,7 @@ class SerenaAgent:
         self.ignore_spec = self.language_server.get_ignore_spec()
 
         # initialize project-specific instances
+        log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")
         self.symbol_manager = SymbolManager(self.language_server, self)
         self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
         self.lines_read = LinesRead()
@@ -1062,9 +1063,11 @@ class SerenaAgent:
             raise RuntimeError(
                 f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
             )
-        assert self.symbol_manager is not None, "Should never be None with an active project"
-        log.debug("Setting the language server in the agent's symbol manager")
-        self.symbol_manager.set_language_server(self.language_server)
+        if self.symbol_manager is not None:
+            log.debug("Setting the language server in the agent's symbol manager")
+            self.symbol_manager.set_language_server(self.language_server)
+        else:
+            log.debug("No symbol manager available yet, skipping setting the language server")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
