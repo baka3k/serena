@@ -271,6 +271,8 @@ def glob_match(pattern: str, path: str) -> bool:
     :param path: File path to match against
     :return: True if path matches pattern
     """
+    pattern = pattern.replace("\\", "/")  # Normalize backslashes to forward slashes
+
     # Handle ** patterns that should match zero or more directories
     if "**" in pattern:
         # Method 1: Standard fnmatch (matches one or more directories)

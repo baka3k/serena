@@ -667,20 +667,21 @@ def create_ls_for_project(
 
 
 @click.command()
-@click.argument("project", type=click.Path(exists=True))
+@click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
 @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
 def index_project(project: str, log_level: str = "INFO") -> None:
     """
     Index a project by saving the symbols of files to Serena's language server cache.
 
-    :param project: the project to index
+    :param project: the project to index. By default, the current working directory is used.
     """
     log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
     project = os.path.abspath(project)
-    log.info(f"Indexing project {project}")
+    print(f"Indexing symbols in project {project}")
     ls = create_ls_for_project(project, log_level=log_level_int)
     with ls.start_server():
         ls.index_repository()
+    print(f"Symbols saved to {ls.cache_path}")
 
 
 class SerenaAgent:
@@ -2138,21 +2139,19 @@ class SearchForPatternTool(Tool):
             )
         else:
             # we walk through all files in the project starting from the root
-            files_to_search = []
-            for root, dirs, files in os.walk(self.get_project_root()):
-                # Don't go into directories that are ignored by modifying dirs inplace
-                # Explanation for the  + "/" part:
-                # pathspec can't handle the matching of directories if they don't end with a slash!
-                # see https://github.com/cpburnz/python-pathspec/issues/89
+            project_root = self.get_project_root()
+            rel_paths_to_search = []
+            for root, dirs, files in os.walk(project_root):
                 dirs[:] = [d for d in dirs if not self.agent.path_is_gitignored(os.path.join(root, d))]
                 for file in files:
                     file_path = os.path.join(root, file)
                     if not self.agent.path_is_gitignored(file_path):
-                        files_to_search.append(file_path)
+                        relative_path = os.path.relpath(file_path, project_root)
+                        rel_paths_to_search.append(relative_path)
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
             #   but it probably never matters and this version required no further refactoring
             matches = search_files(
-                files_to_search,
+                rel_paths_to_search,
                 pattern,
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,

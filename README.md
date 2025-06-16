@@ -192,7 +192,8 @@ on how to use Serena's tools.
 We also recommend that you index your code once before starting (especially for larger projects), it will accelerate the symbolic operations.
 
 ```shell
-uvx --from git+https://github.com/oraios/serena index-project $(pwd)
+# from the project directory, or pass the path to the project as argument
+uvx --from git+https://github.com/oraios/serena index-project
 ```
 
 

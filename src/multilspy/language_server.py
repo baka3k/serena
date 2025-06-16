@@ -1210,7 +1210,6 @@ class LanguageServer:
         symbol_body = symbol_body[symbol_start_column:]
         return symbol_body
 
-
     async def request_parsed_files(self) -> list[str]:
         """Retrieves relative paths of all files analyzed by the Language Server."""
         if not self.server_started:
@@ -1221,13 +1220,9 @@ class LanguageServer:
             raise MultilspyException("Language Server not started")
         rel_file_paths = []
         for root, dirs, files in os.walk(self.repository_root_path):
-            # Don't go into directories that are ignored by modifying dirs inplace
-            # Explanation for the  + "/" part:
-            # pathspec can't handle the matching of directories if they don't end with a slash!
-            # see https://github.com/cpburnz/python-pathspec/issues/89
-            dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d) + "/")]
+            dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
             for file in files:
-                rel_file_path = os.path.join(root, file)
+                rel_file_path = os.path.relpath(os.path.join(root, file), start=self.repository_root_path)
                 if not self.is_ignored_path(rel_file_path):
                     rel_file_paths.append(rel_file_path)
         return rel_file_paths
@@ -1596,7 +1591,10 @@ class LanguageServer:
         return defining_symbol
 
     @property
-    def _cache_path(self) -> Path:
+    def cache_path(self) -> Path:
+        """
+        The path to the cache file for the document symbols.
+        """
         return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v20-05-25.pkl"
 
     async def index_repository(self, progress_bar: bool = True, save_after_n_files: int = 10) -> None:
@@ -1623,33 +1621,33 @@ class LanguageServer:
                 self.logger.log("No changes to document symbols cache, skipping save", logging.DEBUG)
                 return
 
-            self.logger.log(f"Saving updated document symbols cache to {self._cache_path}", logging.INFO)
-            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self.logger.log(f"Saving updated document symbols cache to {self.cache_path}", logging.INFO)
+            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
             try:
-                with open(self._cache_path, "wb") as f:
+                with open(self.cache_path, "wb") as f:
                     pickle.dump(self._document_symbols_cache, f)
                 self._cache_has_changed = False
             except Exception as e:
                 self.logger.log(
-                    f"Failed to save document symbols cache to {self._cache_path}: {e}. "
+                    f"Failed to save document symbols cache to {self.cache_path}: {e}. "
                     "Note: this may have resulted in a corrupted cache file.",
                     logging.ERROR,
                 )
 
     def load_cache(self):
-        if not self._cache_path.exists():
+        if not self.cache_path.exists():
             return
 
         with self._cache_lock:
-            self.logger.log(f"Loading document symbols cache from {self._cache_path}", logging.INFO)
+            self.logger.log(f"Loading document symbols cache from {self.cache_path}", logging.INFO)
             try:
-                with open(self._cache_path, "rb") as f:
+                with open(self.cache_path, "rb") as f:
                     self._document_symbols_cache = pickle.load(f)
                 self.logger.log(f"Loaded {len(self._document_symbols_cache)} document symbols from cache.", logging.INFO)   
             except Exception as e:
                 # cache often becomes corrupt, so just skip loading it
                 self.logger.log(
-                    f"Failed to load document symbols cache from {self._cache_path}: {e}. Possible cause: the cache file is corrupted. "
+                    f"Failed to load document symbols cache from {self.cache_path}: {e}. Possible cause: the cache file is corrupted. "
                     "Check for any errors related to saving the cache in the logs.",
                     logging.ERROR,
                 )
@@ -1703,6 +1701,13 @@ class SyncLanguageServer:
         
         self._shutdown_lock = threading.Lock()
         self._is_shutting_down = False
+
+    @property
+    def cache_path(self) -> Path:
+        """
+        The path to the cache file for the document symbols.
+        """
+        return self.language_server.cache_path
 
     @classmethod
     def create(
