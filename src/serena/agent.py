@@ -569,7 +569,6 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
 
 
 def create_serena_config(
-    project: str | None = None,
     serena_config: SerenaConfigBase | None = None,
     context: SerenaAgentContext | None = None,
     modes: list[SerenaAgentMode] | None = None,
@@ -585,7 +584,6 @@ def create_serena_config(
     This function extracts the configuration creation logic from SerenaAgent.__init__
     to allow creating configurations independently for process isolation and other use cases.
 
-    :param project: the project to register/activate or None
     :param serena_config: the base Serena configuration or None to read from default location
     :param context: the context in which the agent will operate
     :param modes: list of modes in which the agent will operate
@@ -670,7 +668,6 @@ class SerenaAgent:
         """
         # obtain serena configuration using the decoupled factory function
         self.serena_config = create_serena_config(
-            project=None,  # Don't pass project here, handle activation separately
             serena_config=serena_config,
             context=context,
             modes=modes,

@@ -137,9 +137,11 @@ def create_mcp_server_and_agent(
     context_instance = SerenaAgentContext.load(context)
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
+    if project is not None:
+        log.info(f"Will use project at mcp server startup: {project}")
+
     try:
         serena_config = create_serena_config(
-            project=project,
             context=context_instance,
             modes=modes_instances,
             enable_web_dashboard=enable_web_dashboard,
@@ -148,7 +150,7 @@ def create_mcp_server_and_agent(
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
         )
-        serena_agent_process = ProcessIsolatedSerenaAgent(serena_config=serena_config)
+        serena_agent_process = ProcessIsolatedSerenaAgent(project=project, serena_config=serena_config)
 
         # Start process-isolated dashboard if enabled
         serena_dashboard_process = None

@@ -436,6 +436,7 @@ class ProcessIsolatedSerenaAgent:
             # Use the default config loader
             self.serena_config = SerenaConfig.from_config_file()
         self.process: multiprocessing.Process | None = None
+        self.project = project
         self.conn: Connection | None = None
 
     def start(self) -> None:
@@ -456,12 +457,14 @@ class ProcessIsolatedSerenaAgent:
 
         # Initialize the agent in the worker process
         try:
+            # TODO: instead pass config and project to worker, use at startup of agent there
             # Prepare initialization parameters, converting complex objects to dict if present
             init_params = self._init_params.copy()
             if init_params["serena_config"] is not None and hasattr(init_params["serena_config"], "to_dict"):
                 # Convert SerenaConfigBase to dict for serialization
                 serena_config_obj = init_params["serena_config"]
                 init_params["serena_config"] = serena_config_obj.to_dict()  # type: ignore
+            # init_params["project"] = self.project
             # Note: context and modes are not serializable across processes,
             # so they will be None and SerenaAgent will use defaults
             init_params["context"] = None
