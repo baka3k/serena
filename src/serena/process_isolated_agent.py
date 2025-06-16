@@ -267,6 +267,8 @@ class SerenaAgentWorker:
 
     def _initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         """Initialize the SerenaAgent."""
+        if self.agent is not None:
+            return {"result": "SerenaAgent already initialized"}
         try:
             # Extract all possible initialization parameters
             context_param = params.get("context")
@@ -274,8 +276,6 @@ class SerenaAgentWorker:
             serena_config = SerenaConfig.from_json_dict(params["serena_config"])
             context = SerenaAgentContext.from_json_dict(context_param) if context_param is not None else None
             modes = [SerenaAgentMode.from_json_dict(m) for m in params["modes"]]
-            enable_web_dashboard = params.get("enable_web_dashboard")
-            enable_gui_log_window = params.get("enable_gui_log_window")
             log_level = params.get("log_level")
             trace_lsp_communication = params.get("trace_lsp_communication")
             tool_timeout = params.get("tool_timeout")
@@ -285,8 +285,8 @@ class SerenaAgentWorker:
                 serena_config=serena_config,
                 context=context,
                 modes=modes,
-                enable_web_dashboard=enable_web_dashboard,
-                enable_gui_log_window=enable_gui_log_window,
+                enable_web_dashboard=False,
+                enable_gui_log_window=False,
                 log_level=log_level,
                 trace_lsp_communication=trace_lsp_communication,
                 tool_timeout=tool_timeout,
@@ -399,8 +399,6 @@ class ProcessIsolatedSerenaAgent:
         serena_config: SerenaConfigBase | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
-        enable_web_dashboard: bool | None = None,
-        enable_gui_log_window: bool | None = None,
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
@@ -409,8 +407,6 @@ class ProcessIsolatedSerenaAgent:
         self.serena_config = serena_config or SerenaConfig.from_config_file()
         self.context = context
         self.modes = modes or []
-        self.enable_web_dashboard = enable_web_dashboard
-        self.enable_gui_log_window = enable_gui_log_window
         self.log_level = log_level
         self.trace_lsp_communication = trace_lsp_communication
         self.tool_timeout = tool_timeout
@@ -440,8 +436,6 @@ class ProcessIsolatedSerenaAgent:
             "serena_config": self.serena_config.to_json_dict(),
             "context": self.context.to_json_dict() if self.context is not None else None,
             "modes": [m.to_json_dict() for m in self.modes],
-            "enable_web_dashboard": self.enable_web_dashboard,
-            "enable_gui_log_window": self.enable_gui_log_window,
             "log_level": self.log_level,
             "trace_lsp_communication": self.trace_lsp_communication,
             "tool_timeout": self.tool_timeout,
