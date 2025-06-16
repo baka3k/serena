@@ -187,7 +187,9 @@ add serena with (from the project dir)
 claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-mcp-server --context ide-assistant --project $(pwd)
 ```
 
-We recommend that you index your code once before starting (especially for larger projects), it will accelerate the symbolic operations.
+You should ask claude to read the initial instructions as the first prompt, where it will receive information
+on how to use Serena's tools.
+We also recommend that you index your code once before starting (especially for larger projects), it will accelerate the symbolic operations.
 
 ```shell
 uvx --from git+https://github.com/oraios/serena index-project $(pwd)
