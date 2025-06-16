@@ -14,8 +14,10 @@ Status of the main branch. Changes prior to the next official version change wil
   create `project.yaml` for each project. Project activation is now always available. 
   Any project can now be activated by just asking the LLM to do so and passing the path to a repo.
 * Dashboard as web app and possibility to shut down Serena from it (or the old log GUI).
+* Possibility to index your project beforehand, accelerating Serena's tools.
 * Initial prompt for project supported (has to be added manually for the moment)
 * Massive performance improvement of pattern search tool
+* Fixed stability issues and deadlocks (see #170)
 
 # 2025-05-24
 
