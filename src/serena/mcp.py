@@ -99,7 +99,6 @@ def make_tool(
         fn_metadata=func_arg_metadata,
         is_async=is_async,
         context_kwarg=None,
-        annotations=None,
     )
 
 
