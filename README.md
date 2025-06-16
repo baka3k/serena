@@ -37,7 +37,7 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 Serena provides the necessary [tools](#full-list-of-tools) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.
 
-For example, supercharge the performance of Claude Code with a [one-line shell command]((#claude-code).
+For example, **supercharge the performance of Claude Code** with a [one-line shell command](#claude-code).
 
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
