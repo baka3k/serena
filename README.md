@@ -37,10 +37,12 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 Serena provides the necessary [tools](#full-list-of-tools) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.
 
+For example, supercharge the performance of Claude Code with a [one-line shell command]((#claude-code).
+
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
    Serena provides an MCP server which integrates with 
-     * Claude Desktop, 
+     * Claude Code and Claude Desktop, 
      * IDEs like VSCode, Cursor or IntelliJ,
      * Extensions like Cline or Roo Code
      * Goose (for a nice CLI experience)
@@ -87,7 +89,7 @@ implementation.
 
 ## Table of Contents
 
-<!-- Created with  markdown-toc -i README.md -->
+<!-- Created with markdown-toc -i README.md -->
 <!-- Install it with npm install -g markdown-toc -->
 
 <!-- toc -->
@@ -95,12 +97,14 @@ implementation.
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
 - [Free Coding Agents with Serena](#free-coding-agents-with-serena)
 - [Quick Start](#quick-start)
-  * [Setup](#setup)
+  * [Claude Code](#claude-code)
+  * [General Setup](#general-setup)
   * [Configuration](#configuration)
   * [Project Activation](#project-activation)
   * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
+    + [Local Installation](#local-installation)
+    + [Docker Installation (Experimental)](#docker-installation-experimental)
     + [Troubleshooting](#troubleshooting)
-  * [Claude Code](#claude-code)
   * [Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#other-mcp-clients-cline-roo-code-cursor-windsurf-etc)
   * [Goose](#goose)
   * [Agno Agent](#agno-agent)
@@ -171,11 +175,28 @@ Serena can be used in various ways, below you will find instructions for selecte
 - If you prefer using Serena through a CLI, you can use [goose](#goose). There again almost any model is possible.
 - If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
 
-### Setup
-
 Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/)).
 
-Then you can either
+### Claude Code
+
+Serena is a great way to make Claude Code both cheaper and more powerful! We are collecting
+several examples for that and have heard very positive feedback so far. Claude Code users can
+add serena with (from the project dir)
+
+```shell
+claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-mcp-server --context ide-assistant --project $(pwd)
+```
+
+We recommend that you index your code once before starting (especially for larger projects), it will accelerate the symbolic operations.
+
+```shell
+uvx --from git+https://github.com/oraios/serena index-project $(pwd)
+```
+
+
+### General Setup
+
+You can either
 
 1. Clone the repository and cd into it.
 2. Optionally create a config file from the template and adjust it according to your preferences.
@@ -193,7 +214,13 @@ uvx --from git+https://github.com/oraios/serena serena-mcp-server.exe
 in your MCP config (delete the `.exe` on macOS or Linux).
 
 You can now add Serena to your MCP client as described below for various clients and
-[activate your first project](#project-activation).
+[activate your first project](#project-activation). For larger projects, we recommend that you first index them
+to accelerate Serena's tools on the first usage.
+
+```shell
+uvx --from git+https://github.com/oraios/serena index-project /path/to/project
+```
+
 
 > In the default configuration, Serena will start a small dashboard on localhost that will display logs and allow shutting down the 
 > MCP server (since many clients fail to cleanup processes, leaving zombies behind). If you don't want that, simply set `web_dashboard` to `False`
@@ -337,17 +364,6 @@ In other words, you do not need to start the server yourself. The client applica
 therefore needs to be configured with a launch command. In SSE transport you control the lifetime of the server yourself.
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
-
-### Claude Code
-
-Serena is a great way to make Claude Code both cheaper and more powerful! We are collecting
-several examples for that and have heard very positive feedback so far. Claude Code users can
-add serena with
-
-```shell
-claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --context ide-assistant
-```
-
 
 ### Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
 

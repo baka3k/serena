@@ -1607,7 +1607,9 @@ class LanguageServer:
         """
         parsed_files = await self.request_parsed_files()
         files_processed = 0
-        for relative_file_path in tqdm.tqdm(parsed_files, disable=not progress_bar, desc="Indexing (files)"):
+        pbar = tqdm.tqdm(parsed_files, disable=not progress_bar)
+        for relative_file_path in pbar:
+            pbar.set_description(f"Indexing ({os.path.basename(relative_file_path)})")
             await self.request_document_symbols(relative_file_path, include_body=False)
             await self.request_document_symbols(relative_file_path, include_body=True)
             files_processed += 1
