@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from sensai.util.logging import LOG_DEFAULT_FORMAT, configure
+from sensai.util.logging import configure
 
 from multilspy.language_server import SyncLanguageServer
 from multilspy.multilspy_config import Language, MultilspyConfig
@@ -27,18 +27,21 @@ def get_repo_path(language: Language) -> Path:
     return Path(__file__).parent / "resources" / "repos" / language / "test_repo"
 
 
-def create_ls(language: Language, repo_path: str | None = None, ignored_paths: list[str] | None = None) -> SyncLanguageServer:
+def create_ls(
+    language: Language,
+    repo_path: str | None = None,
+    ignored_paths: list[str] | None = None,
+    trace_lsp_communication: bool = False,
+    log_level: int = logging.INFO,
+) -> SyncLanguageServer:
     ignored_paths = ignored_paths or []
     if repo_path is None:
         repo_path = str(get_repo_path(language))
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
-    config = MultilspyConfig(code_language=language, ignored_paths=ignored_paths)
-    logger = MultilspyLogger(log_level=logging.DEBUG)
-
-    # Simple way: Use basicConfig to set format for all handlers
-    logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=logging.DEBUG, force=True)  # Override existing configuration
+    config = MultilspyConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
+    logger = MultilspyLogger(log_level=log_level)
 
     return SyncLanguageServer.create(config, logger, repo_path)
 

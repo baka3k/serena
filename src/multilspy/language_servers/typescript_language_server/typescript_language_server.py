@@ -186,12 +186,22 @@ class TypeScriptLanguageServer(LanguageServer):
 
         async def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            
+        
+        async def check_experimental_status(params):
+            """
+            Also listen for experimental/serverStatus as a backup signal
+            """
+            if params.get("quiescent") == True:
+                self.server_ready.set()
+                self.completions_available.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
         async with super().start_server():
             self.logger.log("Starting TypeScript server process", logging.INFO)
@@ -213,11 +223,13 @@ class TypeScriptLanguageServer(LanguageServer):
             }
 
             self.server.notify.initialized({})
-            self.completions_available.set()
-
-            # TypeScript server is typically ready immediately after initialization
-            self.server_ready.set()
-            await self.server_ready.wait()
+            try:
+                await asyncio.wait_for(self.server_ready.wait(), timeout=1.0)
+            except asyncio.TimeoutError:
+                self.logger.log("Timeout waiting for TypeScript server to become ready, proceeding anyway", logging.INFO)
+                # Fallback: assume server is ready after timeout
+                self.server_ready.set()
+                self.completions_available.set()
 
             yield self
 

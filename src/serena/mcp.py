@@ -2,7 +2,13 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import asyncio
+import contextlib
+import os
+import signal
 import sys
+import threading
+import time
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -10,18 +16,24 @@ from logging import Formatter, Logger, StreamHandler
 from pathlib import Path
 from typing import Any, Literal
 
-import click  # Add click import
+import click
 import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
-from mcp.server.fastmcp.utilities.func_metadata import func_metadata
 from sensai.util import logging
 from sensai.util.helper import mark_used
 
-from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
+from serena.agent import SerenaAgent, ToolInterface, create_serena_config, show_fatal_exception_safe
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
+from serena.process_isolated_agent import (
+    ProcessIsolatedDashboard,
+    ProcessIsolatedSerenaAgent,
+    ProcessIsolatedTool,
+    global_shutdown_event,
+    request_global_shutdown,
+)
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
@@ -46,18 +58,12 @@ class SerenaMCPRequestContext:
 
 
 def make_tool(
-    tool: Tool,
+    tool: ToolInterface,
 ) -> MCPTool:
     func_name = tool.get_name()
-
-    apply_fn = getattr(tool, "apply")
-    if apply_fn is None:
-        raise ValueError(f"Tool does not have an apply method: {tool}")
-
-    func_doc = apply_fn.__doc__ or ""
+    func_doc = tool.get_apply_docstring() or ""
+    func_arg_metadata = tool.get_apply_fn_metadata()
     is_async = False
-
-    func_arg_metadata = func_metadata(apply_fn)
     parameters = func_arg_metadata.arg_model.model_json_schema()
 
     docstring = docstring_parser.parse(func_doc)
@@ -68,17 +74,17 @@ def make_tool(
         func_doc = f"{docstring.description.strip().strip('.')}."
     else:
         func_doc = ""
-    if (docstring.returns) and (docstring_returns := docstring.returns.description):
+    if docstring.returns and (docstring_returns_descr := docstring.returns.description):
         # Only add a space before "Returns" if func_doc is not empty
         prefix = " " if func_doc else ""
-        func_doc = f"{func_doc}{prefix}Returns {docstring_returns.strip().strip('.')}."
+        func_doc = f"{func_doc}{prefix}Returns {docstring_returns_descr.strip().strip('.')}."
 
     # Parse the parameter descriptions from the docstring and add pass its description
     # to the parameters schema.
     docstring_params = {param.arg_name: param for param in docstring.params}
     parameters_properties: dict[str, dict[str, Any]] = parameters["properties"]
     for parameter, properties in parameters_properties.items():
-        if (param_doc := docstring_params.get(parameter)) and (param_doc.description):
+        if (param_doc := docstring_params.get(parameter)) and param_doc.description:
             param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
             properties["description"] = param_desc[0].upper() + param_desc[1:]
 
@@ -93,6 +99,7 @@ def make_tool(
         fn_metadata=func_arg_metadata,
         is_async=is_async,
         context_kwarg=None,
+        annotations=None,
     )
 
 
@@ -107,9 +114,9 @@ def create_mcp_server_and_agent(
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
     trace_lsp_communication: bool | None = None,
     tool_timeout: float | None = None,
-) -> tuple[FastMCP, SerenaAgent]:
+) -> tuple[FastMCP, ProcessIsolatedSerenaAgent]:
     """
-    Create an MCP server.
+    Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
     :param project: "Either an absolute path to the project directory or a name of an already registered project. "
         "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name "
@@ -130,11 +137,11 @@ def create_mcp_server_and_agent(
     context_instance = SerenaAgentContext.load(context)
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
+    if project is not None:
+        log.info(f"Will use project at mcp server startup: {project}")
+
     try:
-        agent = SerenaAgent(
-            project=project,
-            # Callback disabled for the time being (see above)
-            # project_activation_callback=update_tools
+        serena_config = create_serena_config(
             context=context_instance,
             modes=modes_instances,
             enable_web_dashboard=enable_web_dashboard,
@@ -143,39 +150,100 @@ def create_mcp_server_and_agent(
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
         )
+        serena_agent_process = ProcessIsolatedSerenaAgent(project=project, serena_config=serena_config)
+
+        # Start process-isolated dashboard if enabled
+        serena_dashboard_process = None
+        if serena_config.web_dashboard:
+            serena_dashboard_process = ProcessIsolatedDashboard(tool_names=[])
     except Exception as e:
         show_fatal_exception_safe(e)
         raise
 
     def update_tools() -> None:
-        """Update the tools in the MCP server."""
+        """Update the tools in the MCP server - adapted for process isolation."""
+        nonlocal mcp, serena_agent_process
+
+        # Get tool names from process-isolated agent
         # Tools may change as a result of project activation.
         # NOTE: While we could pass updated tool information on to the MCP server via the callback, Claude Desktop does not,
         # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
         # so we need to register all tools at startup, unfortunately.
-        nonlocal mcp, agent
-        tools = agent.get_exposed_tool_instances()
+        tool_names = serena_agent_process.get_exposed_tool_names()
         if mcp is not None:
             mcp._tool_manager._tools = {}
-            for tool in tools:
-                # noinspection PyProtectedMember
-                mcp._tool_manager._tools[tool.get_name()] = make_tool(tool)
+            for tool_name in tool_names:
+                process_isolated_tool = ProcessIsolatedTool(process_agent=serena_agent_process, tool_name=tool_name)
+                mcp_tool = make_tool(process_isolated_tool)
+                mcp._tool_manager._tools[tool_name] = mcp_tool
 
     @asynccontextmanager
     async def server_lifespan(mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
-        nonlocal agent
         mark_used(mcp_server)
-        yield
-        if agent.language_server is not None:
-            agent.language_server.stop()
+
+        def signal_handler(signum: int, frame: Any) -> None:
+            log.info(f"Received signal {signum} in main process")
+            request_global_shutdown()
+
+            def force_exit() -> None:
+                time.sleep(2.0)  # Wait 2 seconds for graceful shutdown
+                log.warning("Forcing exit after timeout")
+                os._exit(1)
+
+            threading.Thread(target=force_exit, daemon=True).start()
+
+        # Install signal handlers
+        sigint_singal = signal.signal(signal.SIGINT, signal_handler)
+        sigterm_signal = signal.signal(signal.SIGTERM, signal_handler)
+
+        if serena_dashboard_process is not None:
+            log.info("Starting dashboard process")
+            serena_dashboard_process.start()
+        log.info("Starting serena agent process")
+        serena_agent_process.start()
+        update_tools()
+
+        async def monitor_global_shutdown() -> None:
+            """Monitor the global shutdown event and trigger local shutdown."""
+            while not global_shutdown_event.is_set():
+                # Poll the multiprocessing Event in async context
+                await asyncio.sleep(0.1)
+                continue
+            log.info("Global shutdown event detected, initiating server shutdown")
+            request_global_shutdown()
+            # Send SIGTERM to self to trigger graceful shutdown
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        # Start monitoring task
+        monitor_task = asyncio.create_task(monitor_global_shutdown())
+
+        try:
+            yield
+        except (KeyboardInterrupt, SystemExit):
+            log.info("Received shutdown signal")
+            request_global_shutdown()
+        except Exception as e:
+            log.error(f"Error in server lifespan: {e}")
+            request_global_shutdown()
+        finally:
+            # Cancel monitor task
+            monitor_task.cancel()
+
+            with contextlib.suppress(asyncio.CancelledError):
+                await monitor_task
+
+            serena_agent_process.stop()
+            if serena_dashboard_process is not None:
+                serena_dashboard_process.stop()
+            request_global_shutdown()
+            log.info("Shutting down all processes")
+            signal.signal(signal.SIGINT, sigint_singal)
+            signal.signal(signal.SIGTERM, sigterm_signal)
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
     mcp = FastMCP(**mcp_settings.model_dump())
-
-    update_tools()
-
-    return mcp, agent
+    return mcp, serena_agent_process
 
 
 class ProjectType(click.ParamType):
@@ -313,6 +381,7 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project_file_opt
 
+    # Use process isolation by default to prevent asyncio event loop contamination
     mcp_server, agent = create_mcp_server_and_agent(
         project=project_file,
         host=host,
@@ -334,9 +403,6 @@ def start_mcp_server(
             f"Used path: {project_file}"
         )
 
-    log.info(
-        f"Starting serena agent in MCP server with config:\n{agent.get_current_config_overview()}."
-        f"\n Log level: {agent.serena_config.log_level}"
-    )
+    log.info(f"Starting MCP server with config:\n{agent.serena_config}.\n Log level: {agent.serena_config.log_level}")
 
     mcp_server.run(transport=transport)

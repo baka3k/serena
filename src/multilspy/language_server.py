@@ -317,7 +317,7 @@ class LanguageServer:
 
         return False
     
-    async def _shutdown(self, timeout: float = 10.0):
+    async def _shutdown(self, timeout: float = 5.0):
         """
         A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
         by explicitly closing all I/O pipes.
@@ -946,7 +946,7 @@ class LanguageServer:
             self._document_symbols_cache[cache_key] = (file_data.content_hash, result)
             self._cache_has_changed = True
         return result
-    
+
     async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols. 
@@ -1750,12 +1750,9 @@ class SyncLanguageServer:
 
         :return: None
         """
-        self.loop = asyncio.new_event_loop()
-        self.loop_thread = threading.Thread(target=self.loop.run_forever, daemon=True)
-        self.loop_thread.start()
-        ctx = self.language_server.start_server()
-        asyncio.run_coroutine_threadsafe(ctx.__aenter__(), loop=self.loop).result()
+        self.start()
         yield self
+        self.language_server.logger.log("SyncLS Startup: exiting LS context", logging.DEBUG)
         self.stop()
 
     def request_definition(self, file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
@@ -1763,12 +1760,15 @@ class SyncLanguageServer:
         Raise a [textDocument/definition](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition) request to the Language Server
         for the symbol at the given line and column in the given file. Wait for the response and return the result.
 
-        :param relative_file_path: The relative path of the file that has the symbol for which definition should be looked up
-        :param line: The line number of the symbol
-        :param column: The column number of the symbol
+        :param file_path: The path of the file relative to the repository root.
+        :param line: The line number (zero-indexed).
+        :param column: The column number (zero-indexed).
 
-        :return List[multilspy_types.Location]: A list of locations where the symbol is defined
+        :return: A list of Locations defining the symbol.
         """
+        if not self.is_running():
+            raise RuntimeError("Language server is not running. Cannot make requests to a stopped language server.")
+            
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_definition(file_path, line, column), self.loop
         ).result(timeout=self.timeout)
@@ -1776,15 +1776,18 @@ class SyncLanguageServer:
 
     def request_references(self, file_path: str, line: int, column: int) -> List[multilspy_types.Location]:
         """
-        Raise a [textDocument/references](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references) request to the Language Server
-        to find references to the symbol at the given line and column in the given file. Wait for the response and return the result.
+        Raises a [textDocument/references](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references) request to the Language Server
+        for the symbol at the given line and column in the given file. Wait for the response and return the result.
 
-        :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
-        :param line: The line number of the symbol
-        :param column: The column number of the symbol
+        :param file_path: The path of the file relative to the repository root.
+        :param line: The line number (zero-indexed).
+        :param column: The column number (zero-indexed).
 
-        :return List[multilspy_types.Location]: A list of locations where the symbol is referenced
+        :return: A list of Locations referencing the symbol.
         """
+        if not self.is_running():
+            raise RuntimeError("Language server is not running. Cannot make requests to a stopped language server.")
+            
         try:
             result = asyncio.run_coroutine_threadsafe(
                 self.language_server.request_references(file_path, line, column), self.loop
@@ -1870,6 +1873,9 @@ class SyncLanguageServer:
 
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
+        if not self.is_running():
+            raise RuntimeError("Language server is not running. Cannot make requests to a stopped language server.")
+        
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_full_symbol_tree(within_relative_path, include_body), self.loop
         ).result(timeout=self.timeout)
@@ -1882,7 +1888,9 @@ class SyncLanguageServer:
         Maps relative paths of all contained files to info about top-level symbols in the file
         (name, kind, line, column).
         """
-        assert self.loop
+        if not self.is_running():
+            raise RuntimeError("Language server is not running. Cannot make requests to a stopped language server.")
+            
         result = asyncio.run_coroutine_threadsafe(
             self.language_server.request_dir_overview(relative_dir_path), self.loop
         ).result(timeout=self.timeout)
@@ -2254,8 +2262,6 @@ class SyncLanguageServer:
         
         shutdown_type = "Nuclear" if is_windows else "Graceful"
         self.language_server.logger.log(f"{shutdown_type} shutdown complete - all references cleared", logging.INFO)
-
-
 
     def save_cache(self):
         """
