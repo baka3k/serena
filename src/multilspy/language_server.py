@@ -227,7 +227,7 @@ class LanguageServer:
         self.completions_available = asyncio.Event()
         if config.trace_lsp_communication:
             def logging_fn(source: str, target: str, msg: StringDict | str):
-                self.logger.log(f"LSP: {source} -> {target}: {str(msg)}", logging.DEBUG)
+                self.logger.log(f"LSP: {source} -> {target}: {str(msg)}", self.logger.logger.level)
         else:
             logging_fn = None
             
