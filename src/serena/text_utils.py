@@ -272,6 +272,7 @@ def glob_match(pattern: str, path: str) -> bool:
     :return: True if path matches pattern
     """
     pattern = pattern.replace("\\", "/")  # Normalize backslashes to forward slashes
+    path = path.replace("\\", "/")  # Normalize path backslashes to forward slashes
 
     # Handle ** patterns that should match zero or more directories
     if "**" in pattern:
