@@ -5,6 +5,7 @@ Context and Mode configuration loader
 import os
 from copy import copy
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -167,3 +168,35 @@ class SerenaAgentContext:
         print(f"{self.name}:\n {self.description}")
         if self.excluded_tools:
             print(" excluded tools:\n  " + ", ".join(sorted(self.excluded_tools)))
+
+
+class RegisteredContext(Enum):
+    """A registered context."""
+
+    IDE_ASSISTANT = "ide-assistant"
+    """For Serena running within an assistant that already has basic tools, like Claude Code, Cline, Cursor, etc."""
+    DESKTOP_APP = "desktop-app"
+    """For Serena running within Claude Desktop or a similar app which does not have built-in tools for code editing."""
+    AGENT = "agent"
+    """For Serena running as a standalone agent, e.g. through agno."""
+
+    def load(self) -> SerenaAgentContext:
+        """Load the context."""
+        return SerenaAgentContext.from_name(self.value)
+
+
+class RegisteredMode(Enum):
+    """A registered mode."""
+
+    INTERACTIVE = "interactive"
+    """Interactive mode, for multi-turn interactions."""
+    EDITING = "editing"
+    """Editing tools are activated."""
+    PLANNING = "planning"
+    """Editing tools are deactivated."""
+    ONE_SHOT = "one-shot"
+    """Non-interactive mode, where the goal is to finish a task autonomously."""
+
+    def load(self) -> SerenaAgentMode:
+        """Load the mode."""
+        return SerenaAgentMode.from_name(self.value)

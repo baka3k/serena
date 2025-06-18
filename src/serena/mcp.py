@@ -24,8 +24,16 @@ from mcp.server.fastmcp.tools.base import Tool as MCPTool
 from sensai.util import logging
 from sensai.util.helper import mark_used
 
-from serena.agent import SerenaAgent, ToolInterface, create_serena_config, show_fatal_exception_safe
-from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.agent import (
+    ActivateProjectTool,
+    Project,
+    SerenaAgent,
+    ToolInterface,
+    ToolRegistry,
+    create_serena_config,
+    show_fatal_exception_safe,
+)
+from serena.config import RegisteredContext, SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
 from serena.process_isolated_agent import (
     ProcessIsolatedDashboard,
@@ -137,10 +145,35 @@ def create_mcp_server_and_agent(
     context_instance = SerenaAgentContext.load(context)
     modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
 
+    is_ide_assistant = context_instance.name == RegisteredContext.IDE_ASSISTANT.value
+
+    project_instance: Project | None = None
     if project is not None:
-        log.info(f"Will use project at mcp server startup: {project}")
+        # Fail early if the project cannot be loaded
+        log.info(f"Will activate project {project} at mcp server startup")
+        try:
+            project_instance = Project.load(project)
+        except Exception as e:
+            log.error(f"Failed to load or generate project config for {project}: {e}")
+            raise
+    else:
+        log.warning("No project passed at startup, you will have to activate a project yourself (by asking the agent to do so).")
+
+    tools_excluded_in_this_session = context_instance.get_excluded_tool_classes()
+    if is_ide_assistant and project_instance is not None:
+        tools_excluded_in_this_session.extend(project_instance.project_config.get_excluded_tool_classes())
+        # if a project has been loaded, it will be activated at startup and in ide-assistant context,
+        # we assume that no other project will be activated in this session.
+        # Therefore, we exclude the activate project tool
+        tools_excluded_in_this_session.append(ActivateProjectTool)
+    tool_names_excluded_in_this_session = {tool.get_name_from_cls() for tool in tools_excluded_in_this_session}
+
+    all_tool_names = set(ToolRegistry.get_tool_names())
+    tool_names_included_in_this_session = all_tool_names - tool_names_excluded_in_this_session
 
     try:
+        # Start agent and dashboard processes (the latter only if enabled)
+        serena_dashboard_process = None
         serena_config = create_serena_config(
             enable_web_dashboard=enable_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
@@ -148,14 +181,12 @@ def create_mcp_server_and_agent(
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
         )
+        if serena_config.web_dashboard:
+            serena_dashboard_process = ProcessIsolatedDashboard(tool_names=sorted(tool_names_included_in_this_session))
         serena_agent_process = ProcessIsolatedSerenaAgent(
             project=project, serena_config=serena_config, modes=modes_instances, context=context_instance
         )
 
-        # Start process-isolated dashboard if enabled
-        serena_dashboard_process = None
-        if serena_config.web_dashboard:
-            serena_dashboard_process = ProcessIsolatedDashboard(tool_names=[])
     except Exception as e:
         show_fatal_exception_safe(e)
         raise
@@ -164,15 +195,14 @@ def create_mcp_server_and_agent(
         """Update the tools in the MCP server - adapted for process isolation."""
         nonlocal mcp, serena_agent_process
 
-        # Get tool names from process-isolated agent
-        # Tools may change as a result of project activation.
+        # Get tool names from agent
+        # Tools may change as a result of project or mode activation.
         # NOTE: While we could pass updated tool information on to the MCP server via the callback, Claude Desktop does not,
         # unfortunately, query for changed tools. It only queries for changed resources and prompts regularly,
-        # so we need to register all tools at startup, unfortunately.
-        tool_names = serena_agent_process.get_exposed_tool_names()
+        # so we need to register all potentially active tools at startup, unfortunately.
         if mcp is not None:
             mcp._tool_manager._tools = {}
-            for tool_name in tool_names:
+            for tool_name in tool_names_included_in_this_session:
                 process_isolated_tool = ProcessIsolatedTool(process_agent=serena_agent_process, tool_name=tool_name)
                 mcp_tool = make_tool(process_isolated_tool)
                 mcp._tool_manager._tools[tool_name] = mcp_tool
