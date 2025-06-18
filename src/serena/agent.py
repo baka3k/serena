@@ -894,12 +894,27 @@ class SerenaAgent:
         excluded_tool_classes: set[type[Tool]] = set()
         # modes
         for mode in self._modes:
-            excluded_tool_classes.update(mode.get_excluded_tool_classes())
+            mode_excluded_tool_classes = mode.get_excluded_tool_classes()
+            if len(mode_excluded_tool_classes) > 0:
+                log.info(
+                    f"Mode {mode.name} excluded {len(mode_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in mode_excluded_tool_classes])}"
+                )
+                excluded_tool_classes.update(mode_excluded_tool_classes)
         # context
-        excluded_tool_classes.update(self._context.get_excluded_tool_classes())
+        context_excluded_tool_classes = self._context.get_excluded_tool_classes()
+        if len(context_excluded_tool_classes) > 0:
+            log.info(
+                f"Context {self._context.name} excluded {len(context_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in context_excluded_tool_classes])}"
+            )
+            excluded_tool_classes.update(context_excluded_tool_classes)
         # project config
         if self._active_project is not None:
-            excluded_tool_classes.update(self._active_project.project_config.get_excluded_tool_classes())
+            project_excluded_tool_classes = self._active_project.project_config.get_excluded_tool_classes()
+            if len(project_excluded_tool_classes) > 0:
+                log.info(
+                    f"Project {self._active_project.project_name} excluded {len(project_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in project_excluded_tool_classes])}"
+                )
+                excluded_tool_classes.update(project_excluded_tool_classes)
             if self._active_project.project_config.read_only:
                 for tool_class in self._all_tools:
                     if tool_class.can_edit():
