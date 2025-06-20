@@ -21,6 +21,7 @@ import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.server import FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 from sensai.util.helper import mark_used
 
@@ -270,6 +271,11 @@ def create_mcp_server_and_agent(
             log.info("Shutting down all processes")
             signal.signal(signal.SIGINT, sigint_singal)
             signal.signal(signal.SIGTERM, sigterm_signal)
+
+    # Override model_config to disable the use of `.env` files for reading settings, because user projects are likely to contain
+    # `.env` files (e.g. containing LOG_LEVEL) that are not supposed to override the MCP settings;
+    # retain only FASTMCP_ prefix for already set environment variables.
+    Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
 
     mcp_settings = Settings(lifespan=server_lifespan, host=host, port=port)
     mcp = FastMCP(**mcp_settings.model_dump())
