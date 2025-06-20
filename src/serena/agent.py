@@ -39,7 +39,7 @@ from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.constants import DEFAULT_ENCODING, PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
@@ -127,7 +127,7 @@ class ProjectConfig(ToStringMixin):
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
-    encoding: str = "utf-8"
+    encoding: str = DEFAULT_ENCODING
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
 
@@ -171,12 +171,20 @@ class ProjectConfig(ToStringMixin):
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
-        data = copy(data)
         try:
-            data["language"] = Language(data["language"].lower())
+            language = Language(data["language"].lower())
         except ValueError as e:
             raise ValueError(f"Invalid language: {data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
-        return cls(**data)
+        return cls(
+            project_name=data["project_name"],
+            language=language,
+            ignored_paths=data.get("ignored_paths", []),
+            excluded_tools=set(data.get("excluded_tools", [])),
+            read_only=data.get("read_only", False),
+            ignore_all_files_in_gitignore=data.get("ignore_all_files_in_gitignore", True),
+            initial_prompt=data.get("initial_prompt", ""),
+            encoding=data.get("encoding", DEFAULT_ENCODING),
+        )
 
     def to_json_dict(self) -> dict[str, Any]:
         result = asdict(self)

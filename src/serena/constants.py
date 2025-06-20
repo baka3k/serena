@@ -12,6 +12,7 @@ SERENA_ICON_DIR = str(_serena_pkg_path / "resources" / "icons")
 
 SERENA_MANAGED_DIR_NAME = ".serena"
 
+DEFAULT_ENCODING = "utf-8"
 DEFAULT_CONTEXT = "desktop-app"
 DEFAULT_MODES = ("interactive", "editing")
 
