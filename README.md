@@ -98,15 +98,16 @@ implementation.
 - [Free Coding Agents with Serena](#free-coding-agents-with-serena)
 - [Quick Start](#quick-start)
   * [Running the Serena MCP Server](#running-the-serena-mcp-server)
-    + [Local Installation](#local-installation)
-    + [Using uvx](#using-uvx)
-    + [Using Docker (Experimental)](#using-docker-experimental)
+    + [Usage](#usage)
+        * [Local Installation](#local-installation)
+      - [Using uvx](#using-uvx)
+      - [Using Docker (Experimental)](#using-docker-experimental)
+    + [SSE Mode](#sse-mode)
     + [Command-Line Arguments](#command-line-arguments)
   * [Configuration](#configuration)
   * [Project Activation & Indexing](#project-activation--indexing)
   * [Claude Code](#claude-code)
   * [Claude Desktop](#claude-desktop)
-    + [Troubleshooting](#troubleshooting)
   * [Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#other-mcp-clients-cline-roo-code-cursor-windsurf-etc)
   * [Agno Agent](#agno-agent)
   * [Other Agent Frameworks](#other-agent-frameworks)
@@ -127,7 +128,7 @@ implementation.
   * [Running Out of Context](#running-out-of-context)
   * [Combining Serena with Other MCP Servers](#combining-serena-with-other-mcp-servers)
   * [Serena's Logs: The Dashboard and GUI Tool](#serenas-logs-the-dashboard-and-gui-tool)
-  * [Troubleshooting](#troubleshooting-1)
+  * [Troubleshooting](#troubleshooting)
 - [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
@@ -181,6 +182,8 @@ Serena is managed by `uv`, so you will need to [install it](https://docs.astral.
 
 You have several options for running the MCP server, which are explained in the subsections below.
 
+#### Usage
+
 The typical usage involves the client (Claude Code, Claude Desktop, etc.) running
 the MCP server as a subprocess (using stdio communication), 
 so the client needs to be provided with the command to run the MCP server.
@@ -191,7 +194,7 @@ Note that no matter how you run the MCP server, Serena will, by default, start a
 MCP server (since many clients fail to clean up processes correctly).
 This and other settings can be adjusted in the [configuration](#configuration) and/or by providing [command-line arguments](#command-line-arguments).
 
-#### Local Installation
+###### Local Installation
 
 1. Clone the repository and change into it.
    ```shell
@@ -212,7 +215,7 @@ This and other settings can be adjusted in the [configuration](#configuration) a
     uv run --directory /abs/path/to/serena serena-mcp-server
     ```
 
-#### Using uvx
+##### Using uvx
 
 `uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
 
@@ -225,7 +228,7 @@ This and other settings can be adjusted in the [configuration](#configuration) a
   uvx --from git+https://github.com/oraios/serena serena-mcp-server
   ```
 
-#### Using Docker (Experimental)
+##### Using Docker (Experimental)
 
 ⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using it.
 
@@ -243,9 +246,30 @@ Replace `/path/to/your/projects` with the absolute path to your projects directo
 
 See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
+#### SSE Mode
+
+ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
+necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
+In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and
+therefore needs to be configured with a launch command. 
+
+When using instead the SSE mode, which uses HTTP-based communication, you control the server lifecycle yourself,
+i.e. you start the server and provide the client with the URL to connect to it.
+
+Simply provide `serena-mcp-server` with the `--transport sse` option and optionally provide the port.
+For example, to run the Serena MCP server in SSE mode on port 9121 using a local installation,
+you would run this command from the Serena directory, 
+
+```shell
+uv run serena-mcp-server --transport sse --port 9121
+```
+
+and then configure your client to connect to `http://localhost:9121`.
+
+
 #### Command-Line Arguments
 
-The Serena MCP server supports a wide range of command-line options, including the option to run in SSE mode
+The Serena MCP server supports a wide range of additional command-line options, including the option to run in SSE mode
 and to adapt Serena to various [contexts and modes of operation](#modes-and-contexts).
 
 Run with parameter `--help` to get a list of available options.
@@ -372,18 +396,6 @@ That's it! Save the config and then restart Claude Desktop. You are ready for ac
 
 ℹ️ You can further customize the run command using additional arguments (see [above](#command-line-arguments)).
 
-
-#### Troubleshooting
-
-Some client/OS/setup configurations were reported to cause issues when using Serena with the standard `stdio` protocol, where the MCP server is started by the client application. 
-If you experience such problems, you can start Serena in `sse` mode by running, e.g.,
-
-```shell
-uv run serena-mcp-server --transport sse --port 9121
-```
-
-Then configure your client to connect to `http://localhost:9121`.
-
 Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
 
@@ -394,11 +406,6 @@ community version](https://github.com/aaddrick/claude-desktop-debian).
     for shutting down Serena.
 
 After restarting, you should see Serena's tools in your chat interface (notice the small hammer icon).
-
-ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
-necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
-In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and 
-therefore needs to be configured with a launch command. In SSE transport you control the lifetime of the server yourself.
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
