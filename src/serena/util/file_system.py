@@ -1,3 +1,4 @@
+import glob
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -134,18 +135,7 @@ class GitignoreParser:
 
         :return: List of absolute paths to .gitignore files
         """
-        gitignore_files = []
-
-        for root, dirs, files in os.walk(self.repo_root):
-            # Skip .git directory
-            if ".git" in dirs:
-                dirs.remove(".git")
-
-            if ".gitignore" in files:
-                gitignore_path = os.path.join(root, ".gitignore")
-                gitignore_files.append(gitignore_path)
-
-        return gitignore_files
+        return glob.glob(self.repo_root + "/.gitignore") + glob.glob(self.repo_root + "/**/.gitignore")
 
     def _create_ignore_spec(self, gitignore_file_path: str) -> GitignoreSpec:
         """
