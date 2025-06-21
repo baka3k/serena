@@ -2,25 +2,23 @@
 Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
 """
 
-import asyncio
 import json
 import logging
 import os
-import stat
 import pathlib
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
+import stat
+import threading
 
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
+from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_utils import FileUtils
 from multilspy.multilspy_utils import PlatformUtils
+from solidlsp.ls import SolidLanguageServer
 
 
-class ClangdLanguageServer(LanguageServer):
+class ClangdLanguageServer(SolidLanguageServer):
     """
     Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
     As the project gets bigger in size, building index will take time. Try running clangd multiple times to ensure index is built properly.
@@ -39,7 +37,10 @@ class ClangdLanguageServer(LanguageServer):
             ProcessLaunchInfo(cmd=clangd_executable_path, cwd=repository_root_path),
             "cpp",
         )
-        self.server_ready = asyncio.Event()
+        self.server_ready = threading.Event()
+        self.service_ready_event = threading.Event()
+        self.initialize_searcher_command_available = threading.Event()
+        self.resolve_main_method_available = threading.Event()
 
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
         """
@@ -112,8 +113,7 @@ class ClangdLanguageServer(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["ClangdLanguageServer"]:
+    def _start_server(self):
         """
         Starts the Clangd Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -126,7 +126,7 @@ class ClangdLanguageServer(LanguageServer):
             # Shutdown the LanguageServer on exit from scope
         # LanguageServer has been shutdown
         """
-        async def register_capability_handler(params):
+        def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -134,24 +134,24 @@ class ClangdLanguageServer(LanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        async def lang_status_handler(params):
+        def lang_status_handler(params):
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def check_experimental_status(params):
+        def check_experimental_status(params):
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -163,28 +163,26 @@ class ClangdLanguageServer(LanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        async with super().start_server():
-            self.logger.log("Starting Clangd server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting Clangd server process", logging.INFO)
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
-            assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
-            assert "completionProvider" in init_response["capabilities"]          
-            assert init_response["capabilities"]["completionProvider"] == {
-                "triggerCharacters": ['.', '<', '>', ':', '"', '/', '*'],
-                "resolveProvider": False,
-            }
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert "completionProvider" in init_response["capabilities"]
+        assert init_response["capabilities"]["completionProvider"] == {
+            "triggerCharacters": ['.', '<', '>', ':', '"', '/', '*'],
+            "resolveProvider": False,
+        }
 
-            self.server.notify.initialized({})
+        self.server.notify.initialized({})
 
-            self.completions_available.set()
-            # set ready flag
-            self.server_ready.set()
-            await self.server_ready.wait()
+        self.completions_available.set()
+        # set ready flag
+        self.server_ready.set()
+        self.server_ready.wait()
 
-            yield self
