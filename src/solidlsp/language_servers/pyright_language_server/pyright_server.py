@@ -2,25 +2,22 @@
 Provides Python specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Python.
 """
 
-import asyncio
-import json
 import logging
 import os
 import pathlib
 import re
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, Tuple
+import threading
 
 from overrides import override
 
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
+from multilspy.multilspy_logger import MultilspyLogger
+from solidlsp.ls import SolidLanguageServer
 
 
-class PyrightServer(LanguageServer):
+class PyrightServer(SolidLanguageServer):
     """
     Provides Python specific instantiation of the LanguageServer class using Pyright.
     Contains various configurations and settings specific to Python.
@@ -39,9 +36,9 @@ class PyrightServer(LanguageServer):
             ProcessLaunchInfo(cmd="python -m pyright.langserver --stdio", cwd=repository_root_path),
             "python",
         )
-        
+
         # Event to signal when initial workspace analysis is complete
-        self.analysis_complete = asyncio.Event()
+        self.analysis_complete = threading.Event()
         self.found_source_files = False
 
     @override
@@ -148,11 +145,10 @@ class PyrightServer(LanguageServer):
 
         return initialize_params
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["PyrightServer"]:
+    def _start_server(self):
         """
         Starts the Pyright Language Server and waits for initial workspace analysis to complete.
-        
+
         This prevents zombie processes by ensuring Pyright has finished its initial background
         tasks before we consider the server ready.
 
@@ -167,20 +163,20 @@ class PyrightServer(LanguageServer):
         ```
         """
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             """
             Monitor Pyright's log messages to detect when initial analysis is complete.
             Pyright logs "Found X source files" when it finishes scanning the workspace.
             """
             message_text = msg.get("message", "")
             self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
-            
+
             # Look for "Found X source files" which indicates workspace scanning is complete
             # Unfortunately, pyright is unreliable and there seems to be no better way
             if re.search(r"Found \d+ source files?", message_text):
@@ -189,7 +185,7 @@ class PyrightServer(LanguageServer):
                 self.analysis_complete.set()
                 self.completions_available.set()
 
-        async def check_experimental_status(params):
+        def check_experimental_status(params):
             """
             Also listen for experimental/serverStatus as a backup signal
             """
@@ -209,38 +205,34 @@ class PyrightServer(LanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        async with super().start_server():
-            self.logger.log("Starting pyright-langserver server process", logging.INFO)
-            await self.server.start()
+        self.logger.log("Starting pyright-langserver server process", logging.INFO)
+        self.server.start()
 
-            # Send proper initialization parameters
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        # Send proper initialization parameters
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to pyright server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
-            self.logger.log(f"Received initialize response from pyright server: {init_response}", logging.INFO)
+        self.logger.log(
+            "Sending initialize request from LSP client to pyright server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
+        self.logger.log(f"Received initialize response from pyright server: {init_response}", logging.INFO)
 
-            # Verify that the server supports our required features
-            assert "textDocumentSync" in init_response["capabilities"]
-            assert "completionProvider" in init_response["capabilities"]
-            assert "definitionProvider" in init_response["capabilities"]
+        # Verify that the server supports our required features
+        assert "textDocumentSync" in init_response["capabilities"]
+        assert "completionProvider" in init_response["capabilities"]
+        assert "definitionProvider" in init_response["capabilities"]
 
-            # Complete the initialization handshake
-            self.server.notify.initialized({})
-            
-            # Wait for Pyright to complete its initial workspace analysis
-            # This prevents zombie processes by ensuring background tasks finish
-            self.logger.log("Waiting for Pyright to complete initial workspace analysis...", logging.INFO)
-            try:
-                await asyncio.wait_for(self.analysis_complete.wait(), timeout=1.0)
-                self.logger.log("Pyright initial analysis complete, server ready", logging.INFO)
-            except asyncio.TimeoutError:
-                self.logger.log("Timeout waiting for Pyright analysis completion, proceeding anyway", logging.WARNING)
-                # Fallback: assume analysis is complete after timeout
-                self.analysis_complete.set()
-                self.completions_available.set()
+        # Complete the initialization handshake
+        self.server.notify.initialized({})
 
-            yield self
+        # Wait for Pyright to complete its initial workspace analysis
+        # This prevents zombie processes by ensuring background tasks finish
+        self.logger.log("Waiting for Pyright to complete initial workspace analysis...", logging.INFO)
+        if self.analysis_complete.wait(timeout=5.0):
+            self.logger.log("Pyright initial analysis complete, server ready", logging.INFO)
+        else:
+            self.logger.log("Timeout waiting for Pyright analysis completion, proceeding anyway", logging.WARNING)
+            # Fallback: assume analysis is complete after timeout
+            self.analysis_complete.set()
+            self.completions_available.set()
