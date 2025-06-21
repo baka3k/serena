@@ -9,7 +9,7 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
@@ -75,24 +75,9 @@ class SerenaMCPFactory:
             afterward.
         """
         self.context = SerenaAgentContext.load(context)
-
-        # load project (if any)
-        project_instance: Project | None = None
-        if project is not None:
-            # Fail early if the project cannot be loaded
-            log.info(f"Will activate project {project} at mcp server startup")
-            try:
-                project_instance = Project.load(project)
-            except Exception as e:
-                log.error(f"Failed to load or generate project config for {project}: {e}")
-                raise
-        else:
-            log.warning("No project passed at startup, you will have to activate a project yourself (by asking the agent to do so).")
-        self.project_instance = project_instance
         self.project = project
 
-        self.active_tool_names = self._determine_active_tool_names(self.context, self.project_instance)
-
+        self.active_tool_names: list[str] | None = None
         self.serena_agent_process: ProcessIsolatedSerenaAgent | None = None
         self.serena_dashboard_process: ProcessIsolatedDashboard | None = None
 
@@ -117,7 +102,8 @@ class SerenaMCPFactory:
         tool_names_included_in_this_session = all_tool_names - tool_names_excluded_in_this_session
         return tool_names_included_in_this_session
 
-    def _make_tool(self, tool: ToolInterface) -> MCPTool:
+    @staticmethod
+    def _make_mcp_tool(tool: ToolInterface) -> MCPTool:
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
         func_arg_metadata = tool.get_apply_fn_metadata()
@@ -160,21 +146,27 @@ class SerenaMCPFactory:
             annotations=None,
         )
 
+    def _iter_tools(self) -> Iterator[ToolInterface]:
+        for tool_name in self.active_tool_names:
+            yield ProcessIsolatedTool(process_agent=self.serena_agent_process, tool_name=tool_name)
+
+    # noinspection PyProtectedMember
     def _set_mcp_tools(self, mcp: FastMCP) -> None:
         """Update the tools in the MCP server"""
         if mcp is not None:
             mcp._tool_manager._tools = {}
-            for tool_name in self.active_tool_names:
-                process_isolated_tool = ProcessIsolatedTool(process_agent=self.serena_agent_process, tool_name=tool_name)
-                mcp_tool = self._make_tool(process_isolated_tool)
-                mcp._tool_manager._tools[tool_name] = mcp_tool
+            for tool in self._iter_tools():
+                mcp_tool = self._make_mcp_tool(tool)
+                mcp._tool_manager._tools[tool.get_name()] = mcp_tool
 
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
-        if serena_config.web_dashboard:
-            self.serena_dashboard_process = ProcessIsolatedDashboard(tool_names=sorted(self.active_tool_names))
+        self.project_instance = serena_config.get_project(self.project)
         self.serena_agent_process = ProcessIsolatedSerenaAgent(
             project=self.project, serena_config=serena_config, modes=modes, context=self.context
         )
+        self.active_tool_names = self._determine_active_tool_names(self.context, self.project_instance)
+        if serena_config.web_dashboard:
+            self.serena_dashboard_process = ProcessIsolatedDashboard(tool_names=sorted(self.active_tool_names))
 
     def create_mcp_server(
         self,
@@ -202,7 +194,6 @@ class SerenaMCPFactory:
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
         """
         try:
-            # Start agent and dashboard processes (the latter only if enabled)
             serena_config = create_serena_config(
                 enable_web_dashboard=enable_web_dashboard,
                 enable_gui_log_window=enable_gui_log_window,
