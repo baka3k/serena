@@ -12,6 +12,9 @@ from serena.constants import SERENA_DASHBOARD_DIR
 
 log = logging.getLogger(__name__)
 
+# disable Werkzeug's logging to avoid cluttering the output
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
 
 class MemoryLogHandler(logging.Handler):
     def __init__(self, level: int = logging.NOTSET) -> None:
