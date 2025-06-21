@@ -2,25 +2,23 @@
 Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
 """
 
-import asyncio
 import json
 import logging
 import os
 import pathlib
 import shutil
 import subprocess
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+import threading
 from time import sleep
 
 from overrides import override
 
-from multilspy.language_server import LanguageServer
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_utils import PlatformId, PlatformUtils
+from solidlsp.ls import SolidLanguageServer
 
 # Platform-specific imports
 if os.name != 'nt':  # Unix-like systems
@@ -38,7 +36,7 @@ if not PlatformUtils.get_platform_id().value.startswith("win"):
     import pwd
 
 
-class TypeScriptLanguageServer(LanguageServer):
+class TypeScriptLanguageServer(SolidLanguageServer):
     """
     Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
     """
@@ -55,7 +53,8 @@ class TypeScriptLanguageServer(LanguageServer):
             ProcessLaunchInfo(cmd=ts_lsp_executable_path, cwd=repository_root_path),
             "typescript",
         )
-        self.server_ready = asyncio.Event()
+        self.server_ready = threading.Event()
+        self.initialize_searcher_command_available = threading.Event()
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -153,8 +152,7 @@ class TypeScriptLanguageServer(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["TypeScriptLanguageServer"]:
+    def _start_server(self):
         """
         Starts the TypeScript Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
@@ -168,7 +166,7 @@ class TypeScriptLanguageServer(LanguageServer):
         # LanguageServer has been shutdown
         """
 
-        async def register_capability_handler(params):
+        def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -178,17 +176,17 @@ class TypeScriptLanguageServer(LanguageServer):
                     # self.resolve_main_method_available.set()
             return
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
             
         
-        async def check_experimental_status(params):
+        def check_experimental_status(params):
             """
             Also listen for experimental/serverStatus as a backup signal
             """
@@ -203,43 +201,40 @@ class TypeScriptLanguageServer(LanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        async with super().start_server():
-            self.logger.log("Starting TypeScript server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting TypeScript server process", logging.INFO)
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
 
-            # TypeScript-specific capability checks
-            assert init_response["capabilities"]["textDocumentSync"] == 2
-            assert "completionProvider" in init_response["capabilities"]
-            assert init_response["capabilities"]["completionProvider"] == {
-                "triggerCharacters": ['.', '"', "'", '/', '@', '<'],
-                "resolveProvider": True
-            }
+        # TypeScript-specific capability checks
+        assert init_response["capabilities"]["textDocumentSync"] == 2
+        assert "completionProvider" in init_response["capabilities"]
+        assert init_response["capabilities"]["completionProvider"] == {
+            "triggerCharacters": ['.', '"', "'", '/', '@', '<'],
+            "resolveProvider": True
+        }
 
-            self.server.notify.initialized({})
-            try:
-                await asyncio.wait_for(self.server_ready.wait(), timeout=1.0)
-            except asyncio.TimeoutError:
-                self.logger.log("Timeout waiting for TypeScript server to become ready, proceeding anyway", logging.INFO)
-                # Fallback: assume server is ready after timeout
-                self.server_ready.set()
-                self.completions_available.set()
-
-            yield self
+        self.server.notify.initialized({})
+        if self.server_ready.wait(timeout=1.0):
+            self.logger.log("TypeScript server is ready", logging.INFO)
+        else:
+            self.logger.log("Timeout waiting for TypeScript server to become ready, proceeding anyway", logging.INFO)
+            # Fallback: assume server is ready after timeout
+            self.server_ready.set()
+        self.completions_available.set()
 
     @override
     # For some reason, the LS may need longer to process this, so we just retry
-    async def _send_references_request(self, relative_file_path: str, line: int, column: int):
+    def _send_references_request(self, relative_file_path: str, line: int, column: int):
         # TODO: The LS doesn't return references contained in other files if it doesn't sleep. This is
         #   despite the LS having processed requests already. I don't know what causes this, but sleeping
         #   one second helps. It may be that sleeping only once is enough but that's hard to reliably test.
         #   It may be that even this 1sec is not enough in larger TS projects, at some point we should find what
         #   causes this and solve it.
         sleep(1)
-        return await super()._send_references_request(relative_file_path, line, column)
+        return super()._send_references_request(relative_file_path, line, column)
