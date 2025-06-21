@@ -39,7 +39,14 @@ from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_types import SymbolKind
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
-from serena.constants import DEFAULT_ENCODING, PROJECT_TEMPLATE_FILE, REPO_ROOT, SELENA_CONFIG_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.constants import (
+    DEFAULT_ENCODING,
+    PROJECT_TEMPLATE_FILE,
+    REPO_ROOT,
+    SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_MANAGED_DIR_NAME,
+    USE_SOLID_LSP,
+)
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
 from serena.symbol import SymbolManager
@@ -671,14 +678,14 @@ def create_ls_for_project(
     )
     ls_logger = MultilspyLogger(log_level=log_level)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
-    use_solid_ls = True
-    if use_solid_ls:
-        return SolidLanguageServer.create(
+    if USE_SOLID_LSP:
+        ls = SolidLanguageServer.create(
             multilspy_config,
             ls_logger,
             project_instance.project_root,
             timeout=ls_timeout,
         )
+        return cast(SyncLanguageServer, ls)  # TODO: Fix type
     else:
         return SyncLanguageServer.create(
             multilspy_config,
