@@ -1,25 +1,20 @@
-import asyncio
 import json
 import logging
 import os
 import pathlib
 import subprocess
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, List
+import threading
 
 from overrides import override
 
-from multilspy import multilspy_types
-from multilspy.lsp_protocol_handler import lsp_types
-from multilspy.multilspy_exceptions import MultilspyException
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import Error, ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
+from multilspy.multilspy_logger import MultilspyLogger
+from solidlsp.ls import SolidLanguageServer
 
 
-class Gopls(LanguageServer):
+class Gopls(SolidLanguageServer):
     """
     Provides Go specific instantiation of the LanguageServer class using gopls.
     """
@@ -84,7 +79,7 @@ class Gopls(LanguageServer):
             ProcessLaunchInfo(cmd="gopls", cwd=repository_root_path),
             "go",
         )
-        self.server_ready = asyncio.Event()
+        self.server_ready = threading.Event()
         self.request_id = 0
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
@@ -111,16 +106,15 @@ class Gopls(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["Gopls"]:
+    def _start_server(self):
         """Start gopls server process"""
-        async def register_capability_handler(params):
+        def register_capability_handler(params):
             return
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -128,27 +122,24 @@ class Gopls(LanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
-        async with super().start_server():
-            self.logger.log("Starting gopls server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting gopls server process", logging.INFO)
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
-            
-            # Verify server capabilities
-            assert "textDocumentSync" in init_response["capabilities"]
-            assert "completionProvider" in init_response["capabilities"]
-            assert "definitionProvider" in init_response["capabilities"]
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
 
-            self.server.notify.initialized({})
-            self.completions_available.set()
+        # Verify server capabilities
+        assert "textDocumentSync" in init_response["capabilities"]
+        assert "completionProvider" in init_response["capabilities"]
+        assert "definitionProvider" in init_response["capabilities"]
 
-            # gopls server is typically ready immediately after initialization
-            self.server_ready.set()
-            await self.server_ready.wait()
+        self.server.notify.initialized({})
+        self.completions_available.set()
 
-            yield self
+        # gopls server is typically ready immediately after initialization
+        self.server_ready.set()
+        self.server_ready.wait()
