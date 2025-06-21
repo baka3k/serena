@@ -151,6 +151,11 @@ class SerenaDashboardAPI:
         """
         Runs the dashboard on the given host and port and returns the port number.
         """
+        # patch flask.cli.show_server to avoid printing the server info
+        from flask import cli
+
+        cli.show_server_banner = lambda *args, **kwargs: None
+
         self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 
