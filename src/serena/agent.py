@@ -215,6 +215,10 @@ class ProjectConfig(ToStringMixin):
         return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
 
 
+class ProjectNotFoundError(Exception):
+    pass
+
+
 @dataclass
 class Project:
     project_root: str
@@ -812,7 +816,7 @@ class SerenaAgent:
         if project is not None:
             try:
                 self.activate_project_from_path_or_name(project)
-            except Exception as e:
+            except ProjectNotFoundError as e:
                 log.error(
                     f"Error activating project '{project}': {e}; Note that out-of-project configurations were migrated. "
                     "You should now pass either --project <project_name> or --project <project_root>."
@@ -979,7 +983,7 @@ class SerenaAgent:
             log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
         else:
             if not os.path.isdir(project_root_or_name):
-                raise ValueError(
+                raise ProjectNotFoundError(
                     f"Project '{project_root_or_name}' not found: Not a valid project name or directory. "
                     f"Existing project names: {self.serena_config.project_names}"
                 )
