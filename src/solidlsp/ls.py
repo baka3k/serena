@@ -6,6 +6,7 @@ import pathlib
 import pickle
 import re
 import threading
+from abc import abstractmethod, ABC
 from collections import defaultdict
 from contextlib import contextmanager
 from copy import copy
@@ -35,7 +36,7 @@ from serena.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp.ls_handler import SolidLanguageServerHandler
 
 
-class SolidLanguageServer:
+class SolidLanguageServer(ABC):
     """
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
@@ -63,7 +64,7 @@ class SolidLanguageServer:
         :return LanguageServer: A language specific LanguageServer instance.
         """
         if config.code_language == Language.PYTHON:
-            from multilspy.language_servers.pyright_language_server.pyright_server import (
+            from solidlsp.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
             )
 
@@ -76,50 +77,50 @@ class SolidLanguageServer:
 
             # return JediServer(config, logger, repository_root_path)
         elif config.code_language == Language.JAVA:
-            from multilspy.language_servers.eclipse_jdtls.eclipse_jdtls import (
+            from solidlsp.language_servers.eclipse_jdtls.eclipse_jdtls import (
                 EclipseJDTLS,
             )
 
             return EclipseJDTLS(config, logger, repository_root_path)
         elif config.code_language == Language.KOTLIN:
-            from multilspy.language_servers.kotlin_language_server.kotlin_language_server import (
+            from solidlsp.language_servers.kotlin_language_server.kotlin_language_server import (
                 KotlinLanguageServer,
             )
 
             return KotlinLanguageServer(config, logger, repository_root_path)
         elif config.code_language == Language.RUST:
-            from multilspy.language_servers.rust_analyzer.rust_analyzer import (
+            from solidlsp.language_servers.rust_analyzer.rust_analyzer import (
                 RustAnalyzer,
             )
 
             return RustAnalyzer(config, logger, repository_root_path)
         elif config.code_language == Language.CSHARP:
-            from multilspy.language_servers.omnisharp.omnisharp import OmniSharp
+            from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
 
             return OmniSharp(config, logger, repository_root_path)
         elif config.code_language in [Language.TYPESCRIPT, Language.JAVASCRIPT]:
-            from multilspy.language_servers.typescript_language_server.typescript_language_server import (
+            from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
             return TypeScriptLanguageServer(config, logger, repository_root_path)
         elif config.code_language == Language.GO:
-            from multilspy.language_servers.gopls.gopls import Gopls
+            from solidlsp.language_servers.gopls.gopls import Gopls
 
             return Gopls(config, logger, repository_root_path)
         elif config.code_language == Language.RUBY:
-            from multilspy.language_servers.solargraph.solargraph import Solargraph
+            from solidlsp.language_servers.solargraph.solargraph import Solargraph
 
             return Solargraph(config, logger, repository_root_path)
         elif config.code_language == Language.DART:
-            from multilspy.language_servers.dart_language_server.dart_language_server import DartLanguageServer
+            from solidlsp.language_servers.dart_language_server.dart_language_server import DartLanguageServer
 
             return DartLanguageServer(config, logger, repository_root_path)
         elif config.code_language == Language.CPP:
-            from multilspy.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
+            from solidlsp.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
 
             return ClangdLanguageServer(config, logger, repository_root_path)
         elif config.code_language == Language.PHP:
-            from multilspy.language_servers.intelephense.intelephense import Intelephense
+            from solidlsp.language_servers.intelephense.intelephense import Intelephense
 
             return Intelephense(config, logger, repository_root_path)
         else:
@@ -328,10 +329,15 @@ class SolidLanguageServer:
     def start_server(self) -> Iterator["SolidLanguageServer"]:
         self.start()
         yield self
-        self._shutdown()
+        self.stop()
 
-    def _start_server(self) -> None:
+    def _start_server_process(self) -> None:
         self.server_started = True
+        self._start_server()
+
+    @abstractmethod
+    def _start_server(self):
+        pass
 
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
@@ -1615,8 +1621,11 @@ class SolidLanguageServer:
         :return: self for method chaining
         """
         self.logger.log(f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}", logging.INFO)
-        self._server_context = self._start_server()
+        self._server_context = self._start_server_process()
         return self
+
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        self._shutdown(timeout=shutdown_timeout)
 
     @property
     def language_server(self) -> Self:
@@ -1814,7 +1823,6 @@ class SolidPyrightServer(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        super()._start_server()
         self.logger.log("Starting pyright-langserver server process", logging.INFO)
         self.server.start()
 
