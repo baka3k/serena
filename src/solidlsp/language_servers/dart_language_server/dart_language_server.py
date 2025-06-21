@@ -1,17 +1,16 @@
-from contextlib import asynccontextmanager
+import json
 import logging
 import os
 import pathlib
-import shutil
 import stat
-from typing import AsyncIterator
-from multilspy.language_server import LanguageServer
+
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-import json
+from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_utils import FileUtils, PlatformUtils
+from solidlsp.ls import SolidLanguageServer
 
 
-class DartLanguageServer(LanguageServer):
+class DartLanguageServer(SolidLanguageServer):
     """
     Provides Dart specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Dart.
     """
@@ -89,22 +88,21 @@ class DartLanguageServer(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["DartLanguageServer"]:
+    def _start_server(self):
         """
         Start the language server and yield when the server is ready.
         """
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def check_experimental_status(params):
+        def check_experimental_status(params):
             pass
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", do_nothing)
@@ -120,24 +118,21 @@ class DartLanguageServer(LanguageServer):
             "experimental/serverStatus", check_experimental_status
         )
 
-        async with super().start_server():
-            self.logger.log(
-                "Starting dart-language-server server process", logging.INFO
-            )
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
-            self.logger.log(
-                "Sending initialize request to dart-language-server",
-                logging.DEBUG,
-            )
-            init_response = await self.server.send_request(
-                "initialize", initialize_params
-            )
-            self.logger.log(
-                f"Received initialize response from dart-language-server: {init_response}",
-                logging.INFO,
-            )
+        self.logger.log(
+            "Starting dart-language-server server process", logging.INFO
+        )
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log(
+            "Sending initialize request to dart-language-server",
+            logging.DEBUG,
+        )
+        init_response = self.server.send_request(
+            "initialize", initialize_params
+        )
+        self.logger.log(
+            f"Received initialize response from dart-language-server: {init_response}",
+            logging.INFO,
+        )
 
-            self.server.notify.initialized({})
-
-            yield self
+        self.server.notify.initialized({})
