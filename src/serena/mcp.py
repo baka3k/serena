@@ -79,7 +79,7 @@ class SerenaMCPFactory:
         self.project = project
 
     @staticmethod
-    def _make_mcp_tool(tool: ToolInterface) -> MCPTool:
+    def make_mcp_tool(tool: ToolInterface) -> MCPTool:
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
         func_arg_metadata = tool.get_apply_fn_metadata()
@@ -132,7 +132,7 @@ class SerenaMCPFactory:
         if mcp is not None:
             mcp._tool_manager._tools = {}
             for tool in self._iter_tools():
-                mcp_tool = self._make_mcp_tool(tool)
+                mcp_tool = self.make_mcp_tool(tool)
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
 
     @abstractmethod
@@ -262,7 +262,7 @@ class SerenaMCPFactoryWithProcessIsolation(SerenaMCPFactory):
         return tool_names_included_in_this_session
 
     @staticmethod
-    def _make_mcp_tool(tool: ToolInterface) -> MCPTool:
+    def make_mcp_tool(tool: ToolInterface) -> MCPTool:
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
         func_arg_metadata = tool.get_apply_fn_metadata()
@@ -315,7 +315,7 @@ class SerenaMCPFactoryWithProcessIsolation(SerenaMCPFactory):
         if mcp is not None:
             mcp._tool_manager._tools = {}
             for tool in self._iter_tools():
-                mcp_tool = self._make_mcp_tool(tool)
+                mcp_tool = self.make_mcp_tool(tool)
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
 
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
