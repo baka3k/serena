@@ -2,24 +2,23 @@
 Provides C# specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C#.
 """
 
-import asyncio
 import json
 import logging
 import os
 import pathlib
 import stat
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, Iterable
+import threading
+from typing import Iterable
 
 from overrides import override
 
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
 from multilspy.multilspy_exceptions import MultilspyException
+from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_utils import FileUtils, PlatformUtils, PlatformId, DotnetVersion
+from solidlsp.ls import SolidLanguageServer
 
 
 def breadth_first_file_scan(root) -> Iterable[str]:
@@ -55,7 +54,7 @@ def find_least_depth_sln_file(root_dir) -> str | None:
     return None
 
 
-class OmniSharp(LanguageServer):
+class OmniSharp(SolidLanguageServer):
     """
     Provides C# specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C#.
     """
@@ -107,8 +106,9 @@ class OmniSharp(LanguageServer):
             config, logger, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp"
         )
 
-        self.definition_available = asyncio.Event()
-        self.references_available = asyncio.Event()
+        self.server_ready = threading.Event()
+        self.definition_available = threading.Event()
+        self.references_available = threading.Event()
         
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -205,22 +205,12 @@ class OmniSharp(LanguageServer):
 
         return omnisharp_executable_path, razor_omnisharp_dll_path
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["OmniSharp"]:
+    def _start_server(self):
         """
-        Starts the Omnisharp Language Server, waits for the server to be ready and yields the LanguageServer instance.
-
-        Usage:
-        ```
-        async with lsp.start_server():
-            # LanguageServer has been initialized and ready to serve requests
-            await lsp.request_definition(...)
-            await lsp.request_references(...)
-            # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
+        Starts the Omnisharp Language Server
         """
 
-        async def register_capability_handler(params):
+        def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "textDocument/definition":
@@ -230,7 +220,7 @@ class OmniSharp(LanguageServer):
                 if registration["method"] == "textDocument/completion":
                     self.completions_available.set()
 
-        async def lang_status_handler(params):
+        def lang_status_handler(params):
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
@@ -238,20 +228,20 @@ class OmniSharp(LanguageServer):
             #     self.service_ready_event.set()
             pass
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def check_experimental_status(params):
+        def check_experimental_status(params):
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        async def workspace_configuration_handler(params):
+        def workspace_configuration_handler(params):
             # TODO: We do not know the appropriate way to handle this request. Should ideally contact the OmniSharp dev team
             return [
                 {
@@ -373,34 +363,31 @@ class OmniSharp(LanguageServer):
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
 
-        async with super().start_server():
-            self.logger.log("Starting OmniSharp server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting OmniSharp server process", logging.INFO)
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
-            self.server.notify.initialized({})
-            with open(os.path.join(os.path.dirname(__file__), "workspace_did_change_configuration.json"), "r", encoding="utf-8") as f:
-                self.server.notify.workspace_did_change_configuration({
-                    "settings": json.load(f)
-                })
-            assert "capabilities" in init_response
-            if (
-                "definitionProvider" in init_response["capabilities"]
-                and init_response["capabilities"]["definitionProvider"]
-            ):
-                self.definition_available.set()
-            if (
-                "referencesProvider" in init_response["capabilities"]
-                and init_response["capabilities"]["referencesProvider"]
-            ):
-                self.references_available.set()
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
+        self.server.notify.initialized({})
+        with open(os.path.join(os.path.dirname(__file__), "workspace_did_change_configuration.json"), "r", encoding="utf-8") as f:
+            self.server.notify.workspace_did_change_configuration({
+                "settings": json.load(f)
+            })
+        assert "capabilities" in init_response
+        if (
+            "definitionProvider" in init_response["capabilities"]
+            and init_response["capabilities"]["definitionProvider"]
+        ):
+            self.definition_available.set()
+        if (
+            "referencesProvider" in init_response["capabilities"]
+            and init_response["capabilities"]["referencesProvider"]
+        ):
+            self.references_available.set()
 
-            await self.definition_available.wait()
-            await self.references_available.wait()
-
-            yield self
+        self.definition_available.wait()
+        self.references_available.wait()
