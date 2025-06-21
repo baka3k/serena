@@ -736,11 +736,10 @@ class SerenaAgent:
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
-        :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
-        :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
-            If not specified, will take the value from the serena configuration.
-        :param log_level: Log level for the GUI log window. If not specified, will take the value from the serena configuration.
-        :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+        :param enable_web_dashboard: whether to enable the web dashboard; If None, will take the value from the Serena configuration.
+        :param enable_gui_log_window: whether to enable the GUI log window; If None, will take the value from the Serena configuration.
+        :param log_level: the log level for the GUI log window; If None, will take the value from the serena configuration.
+        :param tool_timeout: the timeout in seconds for tool execution. If None, will take the value from the serena configuration.
         """
         # obtain serena configuration using the decoupled factory function
         self.serena_config = create_serena_config(
