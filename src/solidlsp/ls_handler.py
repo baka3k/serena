@@ -1,25 +1,51 @@
 import asyncio
-import dataclasses
 import json
 import logging
 import os
 import subprocess
 import threading
+import time
+from dataclasses import dataclass
+from queue import Queue
+from typing import Any, Callable, Dict, Optional
 
 import psutil
-from typing import Any, Callable, Dict, List, Optional, Union
 
-from multilspy.lsp_protocol_handler.lsp_requests import LspNotification, LspRequest
+from multilspy.lsp_protocol_handler.lsp_requests import LspNotification
 from multilspy.lsp_protocol_handler.lsp_types import ErrorCodes
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo, StringDict, Request, content_length, ENCODING, Error, MessageType, \
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo, StringDict, content_length, ENCODING, Error, MessageType, \
     make_notification, PayloadLike, make_response, make_error_response, make_request, create_message
 from multilspy.multilspy_exceptions import MultilspyException
-
+from solidlsp.lsp_request import SolidLspRequest
 
 log = logging.getLogger(__name__)
 
 
-class LanguageServerHandler:
+class Request:
+
+    @dataclass
+    class Result:
+        payload: Optional[PayloadLike] = None
+        error: Optional[Error] = None
+
+        def is_error(self) -> bool:
+            return self.error is not None
+
+    def __init__(self) -> None:
+        self._result_queue = Queue()
+
+    def on_result(self, params: PayloadLike) -> None:
+        self._result_queue.put(Request.Result(payload=params))
+
+    def on_error(self, err: Error) -> None:
+        self._result_queue.put(Request.Result(error=err))
+
+    def get_result(self) -> Result:
+        # TODO could add timeout
+        return self._result_queue.get()
+
+
+class SolidLanguageServerHandler:
     """
     This class provides the implementation of Python client for the Language Server Protocol.
     A class that launches the language server and communicates with it
@@ -69,7 +95,7 @@ class LanguageServerHandler:
             logger: An optional function that takes two strings (source and destination) and
                 a payload dictionary, and logs the communication between the client and the server.
         """
-        self.send = LspRequest(self.send_request)
+        self.send = SolidLspRequest(self.send_request)
         self.notify = LspNotification(self.send_notification)
 
         self.process_launch_info = process_launch_info
@@ -92,15 +118,13 @@ class LanguageServerHandler:
         self._response_handlers_lock = threading.Lock()
         self._tasks_lock = threading.Lock()
 
-
-
     def is_running(self) -> bool:
         """
         Checks if the language server process is currently running.
         """
         return self.process is not None and self.process.returncode is None
 
-    async def start(self) -> None:
+    def start(self) -> None:
         """
         Starts the language server process and creates a task to continuously read from its stdout to handle communications
         from the server to the client
@@ -109,73 +133,47 @@ class LanguageServerHandler:
         child_proc_env.update(self.process_launch_info.env)
 
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
-        self.process = await asyncio.create_subprocess_shell(
+        self.process = subprocess.Popen(
             self.process_launch_info.cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             env=child_proc_env,
             cwd=self.process_launch_info.cwd,
             start_new_session=self.start_independent_lsp_process,
+            shell=True
         )
 
         # Check if process terminated immediately
         if self.process.returncode is not None:
             log.error("Language server has already terminated/could not be started")
             # Process has already terminated
-            stderr_data = await self.process.stderr.read()
+            stderr_data = self.process.stderr.read()
             error_message = stderr_data.decode('utf-8', errors='replace')
             raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
 
-        self.loop = asyncio.get_event_loop()
+        # start threads to read stdout and stderr of the process
+        threading.Thread(
+            target=self.run_forever,
+            name="LSP stdout reader",
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=self.run_forever_stderr,
+            name="LSP stderr reader",
+            daemon=True,
+        ).start()
 
-        # Use lock to prevent race conditions on tasks and task_counter during startup
-        with self._tasks_lock:
-            self.tasks[self.task_counter] = self.loop.create_task(self.run_forever())
-            self.task_counter += 1
-            self.tasks[self.task_counter] = self.loop.create_task(self.run_forever_stderr())
-            self.task_counter += 1
-
-
-
-    async def stop(self) -> None:
+    def stop(self) -> None:
         """
         Sends the terminate signal to the language server process and waits for it to exit, with a timeout, killing it if necessary
         """
-        # First cancel all tasks
-        await self._cancel_pending_tasks()
-
         process = self.process
         self.process = None
+        if process:
+            self._cleanup_process(process)
 
-        if not process:
-            return
-
-        # Clean up the process
-        await self._cleanup_process(process)
-
-    async def _cancel_pending_tasks(self):
-        """Cancel all pending tasks and wait for them to complete or timeout."""
-        pending_tasks = []
-
-        # Use lock to safely access tasks dictionary
-        with self._tasks_lock:
-            for task in self.tasks.values():
-                if not task.done():
-                    task.cancel()
-                    pending_tasks.append(task)
-
-        if pending_tasks:
-            try:
-                await asyncio.wait_for(asyncio.gather(*pending_tasks, return_exceptions=True), timeout=5.0)
-            except (asyncio.TimeoutError, Exception):
-                pass
-
-        # Clear tasks dictionary under lock
-        with self._tasks_lock:
-            self.tasks = {}
-
-    async def _cleanup_process(self, process):
+    def _cleanup_process(self, process):
         """Clean up a process: close stdin, terminate/kill process, close stdout/stderr."""
         # Close stdin first to prevent deadlocks
         # See: https://bugs.python.org/issue35539
@@ -183,7 +181,7 @@ class LanguageServerHandler:
 
         # Terminate/kill the process if it's still running
         if process.returncode is None:
-            await self._terminate_or_kill_process(process)
+            self._terminate_or_kill_process(process)
 
         # Close stdout and stderr pipes after process has exited
         # This is essential to prevent "I/O operation on closed pipe" errors and
@@ -191,9 +189,6 @@ class LanguageServerHandler:
         # See: https://bugs.python.org/issue41320 and https://github.com/python/cpython/issues/88050
         self._safely_close_pipe(process.stdout)
         self._safely_close_pipe(process.stderr)
-
-        # Small delay to ensure OS has released file handles
-        await asyncio.sleep(0.5)
 
     def _safely_close_pipe(self, pipe):
         """Safely close a pipe, ignoring any exceptions."""
@@ -203,14 +198,16 @@ class LanguageServerHandler:
             except Exception:
                 pass
 
-    async def _terminate_or_kill_process(self, process):
+    def _terminate_or_kill_process(self, process):
         """Try to terminate the process gracefully, then forcefully if necessary."""
         # First try to terminate the process tree gracefully
         self._signal_process_tree(process, terminate=True)
 
+        # TODO
+        """
         # Wait for the process to exit (with timeout)
         try:
-            await asyncio.wait_for(process.wait(), timeout=10)
+            asyncio.wait_for(process.wait(), timeout=10)
         except (asyncio.TimeoutError, Exception):
             # If termination failed, forcefully kill the process tree
             self._signal_process_tree(process, terminate=False)
@@ -219,6 +216,7 @@ class LanguageServerHandler:
                 await asyncio.wait_for(process.wait(), timeout=2)
             except Exception:
                 pass
+        """
 
     def _signal_process_tree(self, process, terminate=True):
         """Send signal (terminate or kill) to the process and all its children."""
@@ -252,23 +250,25 @@ class LanguageServerHandler:
             except Exception:
                 pass
 
-
-    async def shutdown(self) -> None:
+    def shutdown(self) -> None:
         """
         Perform the shutdown sequence for the client, including sending the shutdown request to the server and notifying it of exit
         """
         self._log("Sending shutdown request to server")
-        await self.send.shutdown()
+        self.send.shutdown()
         self._log("Received shutdown response from server")
         self._received_shutdown = True
         self._log("Sending exit notification to server")
         self.notify.exit()
         self._log("Sent exit notification to server")
+        # TODO
+        """
         if self.process and self.process.stdout:
             self.process.stdout.set_exception(StopLoopException())
             # This yields the control to the event loop to allow the exception to be handled
             # in the run_forever and run_forever_stderr methods
             await asyncio.sleep(0)
+        """
 
     def _log(self, message: str | StringDict) -> None:
         """
@@ -277,14 +277,33 @@ class LanguageServerHandler:
         if self.logger is not None:
             self.logger("client", "logger", message)
 
-    async def run_forever(self) -> bool:
+    @staticmethod
+    def _read_bytes_from_process(process, stream, num_bytes):
+        """Read exactly num_bytes from process stdout"""
+        if process.poll() is not None:
+            # Process has terminated, check if we can still read
+            pass
+
+        data = b''
+        while len(data) < num_bytes:
+            chunk = stream.read(num_bytes - len(data))
+            if not chunk:
+                if process.poll() is not None:
+                    raise EOFError(f"Process terminated. Expected {num_bytes} bytes, got {len(data)}")
+                # Process still running but no data available yet
+                time.sleep(0.01)  # Small delay
+                continue
+            data += chunk
+        return data
+
+    def run_forever(self) -> bool:
         """
         Continuously read from the language server process stdout and handle the messages
         invoking the registered response and notification handlers
         """
         try:
-            while self.process and self.process.stdout and not self.process.stdout.at_eof():
-                line = await self.process.stdout.readline()
+            while self.process and self.process.stdout and self.process.stdout.readable():
+                line = self.process.stdout.readline()
                 if not line:
                     continue
                 try:
@@ -294,39 +313,35 @@ class LanguageServerHandler:
                 if num_bytes is None:
                     continue
                 while line and line.strip():
-                    line = await self.process.stdout.readline()
+                    line = self.process.stdout.readline()
                 if not line:
                     continue
-                body = await self.process.stdout.readexactly(num_bytes)
+                body = self._read_bytes_from_process(self.process, self.process.stdout, num_bytes)
 
-                # Use lock to prevent race conditions on tasks and task_counter
-                with self._tasks_lock:
-                    self.tasks[self.task_counter] = asyncio.get_event_loop().create_task(self._handle_body(body))
-                    self.task_counter += 1
-        except (BrokenPipeError, ConnectionResetError, StopLoopException):
+                self._handle_body(body)
+        except (BrokenPipeError, ConnectionResetError):
             pass
         return self._received_shutdown
 
-
-    async def run_forever_stderr(self) -> None:
+    def run_forever_stderr(self) -> None:
         """
         Continuously read from the language server process stderr and log the messages
         """
         try:
-            while self.process and self.process.stderr and not self.process.stderr.at_eof():
-                line = await self.process.stderr.readline()
+            while self.process and self.process.stderr and self.process.stderr.readable():
+                line = self.process.stderr.readline()
                 if not line:
                     continue
                 self._log("LSP stderr: " + line.decode(ENCODING, errors='replace'))
-        except (BrokenPipeError, ConnectionResetError, StopLoopException):
+        except (BrokenPipeError, ConnectionResetError):
             pass
 
-    async def _handle_body(self, body: bytes) -> None:
+    def _handle_body(self, body: bytes) -> None:
         """
         Parse the body text received from the language server process and invoke the appropriate handler
         """
         try:
-            await self._receive_payload(json.loads(body))
+            self._receive_payload(json.loads(body))
         except IOError as ex:
             self._log(f"malformed {ENCODING}: {ex}")
         except UnicodeDecodeError as ex:
@@ -334,7 +349,7 @@ class LanguageServerHandler:
         except json.JSONDecodeError as ex:
             self._log(f"malformed JSON: {ex}")
 
-    async def _receive_payload(self, payload: StringDict) -> None:
+    def _receive_payload(self, payload: StringDict) -> None:
         """
         Determine if the payload received from server is for a request, response, or notification and invoke the appropriate handler
         """
@@ -343,11 +358,11 @@ class LanguageServerHandler:
         try:
             if "method" in payload:
                 if "id" in payload:
-                    await self._request_handler(payload)
+                    self._request_handler(payload)
                 else:
-                    await self._notification_handler(payload)
+                    self._notification_handler(payload)
             elif "id" in payload:
-                await self._response_handler(payload)
+                self._response_handler(payload)
             else:
                 self._log(f"Unknown payload type: {payload}")
         except Exception as err:
@@ -357,33 +372,22 @@ class LanguageServerHandler:
         """
         Send notification pertaining to the given method to the server with the given parameters
         """
-        self._send_payload_sync(make_notification(method, params))
+        self._send_payload(make_notification(method, params))
 
     def send_response(self, request_id: Any, params: PayloadLike) -> None:
         """
         Send response to the given request id to the server with the given parameters
         """
-        # Use lock to prevent race conditions on tasks and task_counter
-        with self._tasks_lock:
-            self.tasks[self.task_counter] = asyncio.get_event_loop().create_task(
-                self._send_payload(make_response(request_id, params))
-            )
-            self.task_counter += 1
-
+        self._send_payload(make_response(request_id, params))
 
     def send_error_response(self, request_id: Any, err: Error) -> None:
         """
         Send error response to the given request id to the server with the given error
         """
         # Use lock to prevent race conditions on tasks and task_counter
-        with self._tasks_lock:
-            self.tasks[self.task_counter] = asyncio.get_event_loop().create_task(
-                self._send_payload(make_error_response(request_id, err))
-            )
-            self.task_counter += 1
+        self._send_payload(make_error_response(request_id, err))
 
-
-    async def send_request(self, method: str, params: Optional[dict] = None) -> PayloadLike:
+    def send_request(self, method: str, params: Optional[dict] = None) -> PayloadLike:
         """
         Send request to the server, register the request id, and wait for the response
         """
@@ -397,39 +401,19 @@ class LanguageServerHandler:
         with self._response_handlers_lock:
             self._response_handlers[request_id] = request
 
-        async with request.cv:
-            await self._send_payload(make_request(method, request_id, params))
-            self._log(f"Waiting for asyncio condition for request {method} with params:\n{params}")
-            await request.cv.wait()
-        self._log(f"Finished waiting, processing result")
-        if isinstance(request.error, Error):
-            raise MultilspyException(f"Could not process request {method} with params:\n{params}.\n  Language server error: {request.error}") from request.error
-        self._log(f"Returning non-error result, which is:\n{request.result}")
-        return request.result
+        self._send_payload(make_request(method, request_id, params))
 
+        self._log(f"Waiting for response to request {method} with params:\n{params}")
+        result = request.get_result()
 
-    def _send_payload_sync(self, payload: StringDict) -> None:
-        """
-        Send the payload to the server by writing to its stdin synchronously
-        """
-        if not self.process or not self.process.stdin:
-            return
-        msg = create_message(payload)
-        if self.logger:
-            self.logger("client", "server", payload)
+        self._log(f"Processing result")
+        if result.is_error():
+            raise MultilspyException(f"Could not process request {method} with params:\n{params}.\n  Language server error: {result.error}") from result.error
+        
+        self._log(f"Returning non-error result, which is:\n{result.payload}")
+        return result.payload
 
-        # Use lock to prevent concurrent writes to stdin that cause buffer corruption
-        with self._stdin_lock:
-            try:
-                self.process.stdin.writelines(msg)
-            except (BrokenPipeError, ConnectionResetError, OSError) as e:
-                # Log the error but don't raise to prevent cascading failures
-                if self.logger:
-                    self.logger("client", "logger", f"Failed to write to stdin: {e}")
-                return
-
-
-    async def _send_payload(self, payload: StringDict) -> None:
+    def _send_payload(self, payload: StringDict) -> None:
         """
         Send the payload to the server by writing to its stdin asynchronously.
         """
@@ -442,13 +426,12 @@ class LanguageServerHandler:
         with self._stdin_lock:
             try:
                 self.process.stdin.writelines(msg)
-                await self.process.stdin.drain()
+                self.process.stdin.flush()
             except (BrokenPipeError, ConnectionResetError, OSError) as e:
                 # Log the error but don't raise to prevent cascading failures
                 if self.logger:
                     self.logger("client", "logger", f"Failed to write to stdin: {e}")
                 return
-
 
     def on_request(self, method: str, cb) -> None:
         """
@@ -462,7 +445,7 @@ class LanguageServerHandler:
         """
         self.on_notification_handlers[method] = cb
 
-    async def _response_handler(self, response: StringDict) -> None:
+    def _response_handler(self, response: StringDict) -> None:
         """
         Handle the response received from the server for a request, using the id to determine the request
         """
@@ -470,14 +453,13 @@ class LanguageServerHandler:
             request = self._response_handlers.pop(response["id"])
 
         if "result" in response and "error" not in response:
-            await request.on_result(response["result"])
+            request.on_result(response["result"])
         elif "result" not in response and "error" in response:
-            await request.on_error(Error.from_lsp(response["error"]))
+            request.on_error(Error.from_lsp(response["error"]))
         else:
-            await request.on_error(Error(ErrorCodes.InvalidRequest, ""))
+            request.on_error(Error(ErrorCodes.InvalidRequest, ""))
 
-
-    async def _request_handler(self, response: StringDict) -> None:
+    def _request_handler(self, response: StringDict) -> None:
         """
         Handle the request received from the server: call the appropriate callback function and return the result
         """
@@ -495,13 +477,13 @@ class LanguageServerHandler:
             )
             return
         try:
-            self.send_response(request_id, await handler(params))
+            self.send_response(request_id, handler(params))
         except Error as ex:
             self.send_error_response(request_id, ex)
         except Exception as ex:
             self.send_error_response(request_id, Error(ErrorCodes.InternalError, str(ex)))
 
-    async def _notification_handler(self, response: StringDict) -> None:
+    def _notification_handler(self, response: StringDict) -> None:
         """
         Handle the notification received from the server: call the appropriate callback function
         """
@@ -512,7 +494,7 @@ class LanguageServerHandler:
             self._log(f"unhandled {method}")
             return
         try:
-            await handler(params)
+            handler(params)
         except asyncio.CancelledError:
             return
         except Exception as ex:

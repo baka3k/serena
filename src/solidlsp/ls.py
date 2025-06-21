@@ -24,7 +24,6 @@ from multilspy.lsp_protocol_handler.lsp_constants import LSPConstants
 from multilspy.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind, InitializeParams
 from multilspy.lsp_protocol_handler.server import (
     Error,
-    LanguageServerHandler,
     ProcessLaunchInfo,
     StringDict,
 )
@@ -33,9 +32,10 @@ from multilspy.multilspy_exceptions import MultilspyException
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_utils import FileUtils, PathUtils, TextUtils
 from serena.text_utils import MatchedConsecutiveLines, search_files
+from solidlsp.ls_handler import SolidLanguageServerHandler
 
 
-class LanguageServer:
+class SolidLanguageServer:
     """
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
     It is used to communicate with Language Servers of different programming languages.
@@ -50,7 +50,7 @@ class LanguageServer:
         return dirname.startswith('.')
 
     @classmethod
-    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str) -> "LanguageServer":
+    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, timeout) -> "SolidLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
 
@@ -67,7 +67,7 @@ class LanguageServer:
                 PyrightServer,
             )
 
-            return PyrightServer(config, logger, repository_root_path)
+            return SolidPyrightServer(config, logger, repository_root_path)
             # It used to be jedi, but pyright is a bit faster, and also more actively maintained
             # Keeping the previous code for reference
             # from multilspy.language_servers.jedi_language_server.jedi_server import (
@@ -147,11 +147,6 @@ class LanguageServer:
                     The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
-        if type(self) == LanguageServer:
-            raise MultilspyException(
-                "LanguageServer is an abstract class and cannot be instantiated directly. Use LanguageServer.create method instead."
-            )
-
         self.logger = logger
         self.repository_root_path: str = repository_root_path
         self.logger.log(f"Creating language server instance for {repository_root_path=} with {language_id=} and process launch info: {process_launch_info}", logging.DEBUG)
@@ -168,7 +163,7 @@ class LanguageServer:
         self.load_cache()
 
         self.server_started = False
-        self.completions_available = asyncio.Event()
+        self.completions_available = threading.Event()
         if config.trace_lsp_communication:
             def logging_fn(source: str, target: str, msg: StringDict | str):
                 self.logger.log(f"LSP: {source} -> {target}: {str(msg)[:90]}...", self.logger.logger.level)
@@ -179,7 +174,7 @@ class LanguageServer:
         # cmd is obtained from the child classes, which provide the language specific command to start the language server
         # LanguageServerHandler provides the functionality to start the language server and communicate with it
         self.logger.log(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}", logging.DEBUG)
-        self.server = LanguageServerHandler(
+        self.server = SolidLanguageServerHandler(
             process_launch_info,
             logger=logging_fn,
             start_independent_lsp_process=config.start_independent_lsp_process,
@@ -200,6 +195,8 @@ class LanguageServer:
             pathspec.patterns.GitWildMatchPattern,
             processed_patterns
         )
+
+        self._server_context = None
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """Returns the pathspec matcher for the paths that were configured to be ignored through
@@ -262,7 +259,7 @@ class LanguageServer:
 
         return False
 
-    async def _shutdown(self, timeout: float = 5.0):
+    def _shutdown(self, timeout: float = 5.0):
         """
         A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
         by explicitly closing all I/O pipes.
@@ -276,27 +273,19 @@ class LanguageServer:
         reader_tasks = list(self.server.tasks.values())
 
         # --- Main Shutdown Logic ---
+        # Stage 1: Graceful Termination Request
+        # Send LSP shutdown and close stdin to signal no more input.
         try:
-            # Stage 1: Graceful Termination Request
-            # Send LSP shutdown and close stdin to signal no more input.
-            try:
-                await asyncio.wait_for(self.server.shutdown(), timeout=2.0)
-                if process.stdin and not process.stdin.is_closing():
-                    process.stdin.close()
-            except Exception:
-                pass # Ignore errors here, we are proceeding to terminate anyway.
+            self.server.shutdown()
+            if process.stdin and not process.stdin.is_closing():
+                process.stdin.close()
+        except Exception:
+            pass # Ignore errors here, we are proceeding to terminate anyway.
 
-            # Stage 2: Terminate and Concurrently Drain stdout/stderr
-            process.terminate()
+        # Stage 2: Terminate and Concurrently Drain stdout/stderr
+        process.terminate()
 
-            # Wait for the process to exit AND for the output pipes to be drained.
-            # The reader tasks will exit when they hit EOF.
-            await asyncio.wait_for(
-                asyncio.gather(process.wait(), *reader_tasks),
-                timeout=timeout - 2.0
-            )
-            self.logger.log("Process terminated and output pipes drained.", logging.INFO)
-
+        """
         except asyncio.TimeoutError:
             # Stage 3: Forceful Kill
             self.logger.log("Graceful termination failed. Forcefully killing process...", logging.WARNING)
@@ -307,7 +296,6 @@ class LanguageServer:
                     await process.wait()
                 except Exception as e:
                     self.logger.log(f"Error during forceful kill: {e}", logging.ERROR)
-
         except Exception as e:
             self.logger.log(f"An unexpected error occurred during shutdown logic: {e}", logging.ERROR)
 
@@ -334,18 +322,16 @@ class LanguageServer:
             # 3. Null out the process object in the handler.
             self.server.process = None
             self.logger.log("Shutdown sequence fully finished.", logging.DEBUG)
+        """
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["LanguageServer"]:
-        """
-        Starts the Language Server and yields the LanguageServer instance.
-        """
+    @contextmanager
+    def start_server(self) -> Iterator["SolidLanguageServer"]:
+        self.start()
+        yield self
+        self._shutdown()
+
+    def _start_server(self) -> None:
         self.server_started = True
-        try:
-            yield self
-        finally:
-            self.server_started = False
-            await self._shutdown()
 
     @contextmanager
     def open_file(self, relative_file_path: str) -> Iterator[LSPFileBuffer]:
@@ -404,7 +390,7 @@ class LanguageServer:
             self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str
     ) -> multilspy_types.Position:
         """
-        Insert text at the given line and column in the given file and return
+        Insert text at the given line and column in the given file and return 
         the updated cursor position after inserting the text.
 
         :param relative_file_path: The relative path of the file to open.
@@ -486,10 +472,10 @@ class LanguageServer:
         )
         return deleted_text
 
-    async def _send_definition_request(self, definition_params: DefinitionParams) -> Union[Definition, List[LocationLink], None]:
-        return await self.server.send.definition(definition_params)
+    def _send_definition_request(self, definition_params: DefinitionParams) -> Union[Definition, List[LocationLink], None]:
+        return self.server.send.definition(definition_params)
 
-    async def request_definition(
+    def request_definition(
             self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
         """
@@ -523,7 +509,7 @@ class LanguageServer:
                     LSPConstants.CHARACTER: column,
                 },
             })
-            response = await self._send_definition_request(definition_params)
+            response = self._send_definition_request(definition_params)
 
         ret: List[multilspy_types.Location] = []
         if isinstance(response, list):
@@ -573,8 +559,8 @@ class LanguageServer:
         return ret
 
     # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
-    async def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[lsp_types.Location] | None:
-        return await self.server.send.references(
+    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[lsp_types.Location] | None:
+        return self.server.send.references(
             {
                 "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
                 "position": {"line": line, "character": column},
@@ -582,7 +568,7 @@ class LanguageServer:
             }
         )
 
-    async def request_references(
+    def request_references(
             self, relative_file_path: str, line: int, column: int
     ) -> List[multilspy_types.Location]:
         """
@@ -607,7 +593,7 @@ class LanguageServer:
 
         with self.open_file(relative_file_path):
             try:
-                response = await self._send_references_request(relative_file_path, line=line, column=column)
+                response = self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
                 # Catch LSP internal error (-32603) and raise a more informative exception
                 if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
@@ -640,7 +626,7 @@ class LanguageServer:
 
         return ret
 
-    async def request_references_with_content(
+    def request_references_with_content(
             self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
     ) -> List[MatchedConsecutiveLines]:
         """
@@ -654,7 +640,7 @@ class LanguageServer:
 
         :return: A list of MatchedConsecutiveLines objects, one for each reference.
         """
-        references = await self.request_references(relative_file_path, line, column)
+        references = self.request_references(relative_file_path, line, column)
         return [self.retrieve_content_around_line(ref["relativePath"], ref["range"]["start"]["line"], context_lines_before, context_lines_after) for ref in references]
 
     def retrieve_full_file_content(self, relative_file_path: str) -> str:
@@ -679,8 +665,7 @@ class LanguageServer:
             file_contents = file_data.contents
         return MatchedConsecutiveLines.from_file_contents(file_contents, line=line, context_lines_before=context_lines_before, context_lines_after=context_lines_after, source_file_path=relative_file_path)
 
-
-    async def request_completions(
+    def request_completions(
             self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
     ) -> List[multilspy_types.CompletionItem]:
         """
@@ -706,10 +691,10 @@ class LanguageServer:
 
             num_retries = 0
             while response is None or (response["isIncomplete"] and num_retries < 30):
-                await self.completions_available.wait()
+                self.completions_available.wait()
                 response: Union[
                     List[LSPTypes.CompletionItem], LSPTypes.CompletionList, None
-                ] = await self.server.send.completion(completion_params)
+                ] = self.server.send.completion(completion_params)
                 if isinstance(response, list):
                     response = {"items": response, "isIncomplete": False}
                 num_retries += 1
@@ -774,7 +759,7 @@ class LanguageServer:
                 for json_repr in set([json.dumps(item, sort_keys=True) for item in completions_list])
             ]
 
-    async def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
+    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
         """
         Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
         to find symbols in the given file. Wait for the response and return the result.
@@ -805,7 +790,7 @@ class LanguageServer:
                     self.logger.log(f"No cache hit for symbols with {include_body=} in {relative_file_path}", logging.DEBUG)
 
             self.logger.log(f"Requesting document symbols for {relative_file_path} from the Language Server", logging.DEBUG)
-            response = await self.server.send.document_symbol(
+            response = self.server.send.document_symbol(
                 {
                     "textDocument": {
                         "uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
@@ -892,9 +877,9 @@ class LanguageServer:
             self._cache_has_changed = True
         return result
 
-    async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
         """
-        Will go through all files in the project or within a relative path and build a tree of symbols.
+        Will go through all files in the project or within a relative path and build a tree of symbols. 
         Note: this may be slow the first time it is called, especially if `within_relative_path` is not used to restrict the search.
 
         For each file, a symbol of kind File (2) will be created. For directories, a symbol of kind Package (4) will be created.
@@ -921,11 +906,11 @@ class LanguageServer:
                     self.logger.log(f"You passed a file explicitly, but it is ignored. This is probably an error. File: {within_relative_path}", logging.ERROR)
                     return []
                 else:
-                    _, root_nodes = await self.request_document_symbols(within_relative_path, include_body=include_body)
+                    _, root_nodes = self.request_document_symbols(within_relative_path, include_body=include_body)
                     return root_nodes
 
         # Helper function to recursively process directories
-        async def process_directory(rel_dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
+        def process_directory(rel_dir_path: str) -> List[multilspy_types.UnifiedSymbolInformation]:
             abs_dir_path = self.repository_root_path if rel_dir_path == "." else os.path.join(self.repository_root_path, rel_dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
@@ -961,13 +946,13 @@ class LanguageServer:
                     continue
 
                 if os.path.isdir(contained_dir_or_file_abs_path):
-                    child_symbols = await process_directory(contained_dir_or_file_rel_path)
+                    child_symbols = process_directory(contained_dir_or_file_rel_path)
                     package_symbol["children"].extend(child_symbols)
                     for child in child_symbols:
                         child["parent"] = package_symbol
 
                 elif os.path.isfile(contained_dir_or_file_abs_path):
-                    _, file_root_nodes = await self.request_document_symbols(contained_dir_or_file_rel_path, include_body=include_body)
+                    _, file_root_nodes = self.request_document_symbols(contained_dir_or_file_rel_path, include_body=include_body)
 
                     # Create file symbol, link with children
                     file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
@@ -1013,7 +998,7 @@ class LanguageServer:
 
         # Start from the root or the specified directory
         start_rel_path = within_relative_path or "."
-        return await process_directory(start_rel_path)
+        return process_directory(start_rel_path)
 
     @staticmethod
     def _get_range_from_file_content(file_content: str) -> multilspy_types.Range:
@@ -1028,14 +1013,14 @@ class LanguageServer:
             end=multilspy_types.Position(line=end_line, character=end_column)
         )
 
-    async def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
         An overview of the given directory.
 
         Maps relative paths of all contained files to info about top-level symbols in the file
         (name, kind, line, column).
         """
-        symbol_tree = await self.request_full_symbol_tree(relative_dir_path)
+        symbol_tree = self.request_full_symbol_tree(relative_dir_path)
         # Initialize result dictionary
         result: dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]] = defaultdict(list)
 
@@ -1062,12 +1047,12 @@ class LanguageServer:
             process_symbol(root)
         return result
 
-    async def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
+    def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
         """
         An overview of the given file.
         Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
         """
-        _, document_roots = await self.request_document_symbols(relative_file_path)
+        _, document_roots = self.request_document_symbols(relative_file_path)
         result = []
         for root in document_roots:
             try:
@@ -1083,7 +1068,7 @@ class LanguageServer:
                 ) from e
         return result
 
-    async def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
         """
         An overview of all symbols in the given file or directory.
 
@@ -1095,12 +1080,12 @@ class LanguageServer:
             raise FileNotFoundError(f"File or directory not found: {abs_path}")
 
         if abs_path.is_file():
-            symbols_overview = await self.request_document_overview(within_relative_path)
+            symbols_overview = self.request_document_overview(within_relative_path)
             return {within_relative_path: symbols_overview}
         else:
-            return await self.request_dir_overview(within_relative_path)
+            return self.request_dir_overview(within_relative_path)
 
-    async def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
+    def request_hover(self, relative_file_path: str, line: int, column: int) -> Union[multilspy_types.Hover, None]:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
         to find the hover information at the given line and column in the given file. Wait for the response and return the result.
@@ -1112,7 +1097,7 @@ class LanguageServer:
         :return None
         """
         with self.open_file(relative_file_path):
-            response = await self.server.send.hover(
+            response = self.server.send.hover(
                 {
                     "textDocument": {
                         "uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
@@ -1154,7 +1139,7 @@ class LanguageServer:
         symbol_body = symbol_body[symbol_start_column:]
         return symbol_body
 
-    async def request_parsed_files(self) -> list[str]:
+    def request_parsed_files(self) -> list[str]:
         """Retrieves relative paths of all files analyzed by the Language Server."""
         if not self.server_started:
             self.logger.log(
@@ -1171,7 +1156,7 @@ class LanguageServer:
                     rel_file_paths.append(rel_file_path)
         return rel_file_paths
 
-    async def search_files_for_pattern(
+    def search_files_for_pattern(
             self,
             pattern: re.Pattern | str,
             context_lines_before: int = 0,
@@ -1192,7 +1177,7 @@ class LanguageServer:
         if isinstance(pattern, str):
             pattern = re.compile(pattern)
 
-        relative_file_paths = await self.request_parsed_files()
+        relative_file_paths = self.request_parsed_files()
         return search_files(
             relative_file_paths,
             pattern,
@@ -1203,7 +1188,7 @@ class LanguageServer:
             paths_exclude_glob=paths_exclude_glob
         )
 
-    async def request_referencing_symbols(
+    def request_referencing_symbols(
             self,
             relative_file_path: str,
             line: int,
@@ -1239,7 +1224,7 @@ class LanguageServer:
             raise MultilspyException("Language Server not started")
 
         # First, get all references to the symbol
-        references = await self.request_references(relative_file_path, line, column)
+        references = self.request_references(relative_file_path, line, column)
         if not references:
             return []
 
@@ -1253,7 +1238,7 @@ class LanguageServer:
 
             with self.open_file(ref_path) as file_data:
                 # Get the containing symbol for this reference
-                containing_symbol = await self.request_containing_symbol(
+                containing_symbol = self.request_containing_symbol(
                     ref_path, ref_line, ref_col, include_body=include_body
                 )
                 if containing_symbol is None:
@@ -1273,7 +1258,7 @@ class LanguageServer:
                     ref_text = file_data.contents.split("\n")[ref_line]
                     if "." in ref_text:
                         containing_symbol_name = ref_text.split(".")[0]
-                        all_symbols, _ = await self.request_document_symbols(ref_path)
+                        all_symbols, _ = self.request_document_symbols(ref_path)
                         for symbol in all_symbols:
                             if symbol["name"] == containing_symbol_name and symbol["kind"] == multilspy_types.SymbolKind.Variable:
                                 containing_symbol = copy(symbol)
@@ -1350,7 +1335,7 @@ class LanguageServer:
 
         return result
 
-    async def request_containing_symbol(
+    def request_containing_symbol(
             self,
             relative_file_path: str,
             line: int,
@@ -1397,7 +1382,7 @@ class LanguageServer:
                 )
                 return None
 
-        symbols, _ = await self.request_document_symbols(relative_file_path)
+        symbols, _ = self.request_document_symbols(relative_file_path)
 
         # make jedi and pyright api compatible
         # the former has no location, the later has no range
@@ -1470,7 +1455,7 @@ class LanguageServer:
         else:
             return None
 
-    async def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
+    def request_container_of_symbol(self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False) -> multilspy_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one. If the parent attribute is present, the parent is returned
         without further searching.
@@ -1482,7 +1467,7 @@ class LanguageServer:
         if "parent" in symbol:
             return symbol["parent"]
         assert "location" in symbol, f"Symbol {symbol} has no location and no parent attribute"
-        return await self.request_containing_symbol(
+        return self.request_containing_symbol(
             symbol["location"]["relativePath"],
             symbol["location"]["range"]["start"]["line"],
             symbol["location"]["range"]["start"]["character"],
@@ -1490,7 +1475,7 @@ class LanguageServer:
             include_body=include_body,
         )
 
-    async def request_defining_symbol(
+    def request_defining_symbol(
             self,
             relative_file_path: str,
             line: int,
@@ -1517,7 +1502,7 @@ class LanguageServer:
             raise MultilspyException("Language Server not started")
 
         # Get the definition location(s)
-        definitions = await self.request_definition(relative_file_path, line, column)
+        definitions = self.request_definition(relative_file_path, line, column)
         if not definitions:
             return None
 
@@ -1528,7 +1513,7 @@ class LanguageServer:
         def_col = definition["range"]["start"]["character"]
 
         # Find the symbol at or containing this location
-        defining_symbol = await self.request_containing_symbol(
+        defining_symbol = self.request_containing_symbol(
             def_path, def_line, def_col, strict=False, include_body=include_body
         )
 
@@ -1541,19 +1526,19 @@ class LanguageServer:
         """
         return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v20-05-25.pkl"
 
-    async def index_repository(self, progress_bar: bool = True, save_after_n_files: int = 10) -> None:
+    def index_repository(self, progress_bar: bool = True, save_after_n_files: int = 10) -> None:
         """Will go through the entire repository and "index" all files, meaning save their symbols to the cache.
 
         :param progress_bar: Whether to show a progress bar while indexing the repository.
         :param save_after_n_files: How many files to process before saving a checkpoint of the cache.
         """
-        parsed_files = await self.request_parsed_files()
+        parsed_files = self.request_parsed_files()
         files_processed = 0
         pbar = tqdm.tqdm(parsed_files, disable=not progress_bar)
         for relative_file_path in pbar:
             pbar.set_description(f"Indexing ({os.path.basename(relative_file_path)})")
-            await self.request_document_symbols(relative_file_path, include_body=False)
-            await self.request_document_symbols(relative_file_path, include_body=True)
+            self.request_document_symbols(relative_file_path, include_body=False)
+            self.request_document_symbols(relative_file_path, include_body=True)
             files_processed += 1
             if files_processed % save_after_n_files == 0:
                 self.save_cache()
@@ -1596,8 +1581,7 @@ class LanguageServer:
                     logging.ERROR,
                 )
 
-
-    async def request_workspace_symbol(self, query: str) -> Union[List[multilspy_types.UnifiedSymbolInformation], None]:
+    def request_workspace_symbol(self, query: str) -> Union[List[multilspy_types.UnifiedSymbolInformation], None]:
         """
         Raise a [workspace/symbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_symbol) request to the Language Server
         to find symbols across the whole workspace. Wait for the response and return the result.
@@ -1606,7 +1590,7 @@ class LanguageServer:
 
         :return: A list of matching symbols
         """
-        response = await self.server.send.workspace_symbol({"query": query})
+        response = self.server.send.workspace_symbol({"query": query})
         if response is None:
             return None
 
@@ -1624,8 +1608,25 @@ class LanguageServer:
 
         return ret
 
+    def start(self) -> "SolidLanguageServer":
+        """
+        Starts the language server process and connects to it. Call shutdown when ready.
 
-class PyrightServer(LanguageServer):
+        :return: self for method chaining
+        """
+        self.logger.log(f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}", logging.INFO)
+        self._server_context = self._start_server()
+        return self
+
+    @property
+    def language_server(self) -> Self:
+        return self
+
+    def is_running(self) -> bool:
+        return self.server.is_running()
+
+
+class SolidPyrightServer(SolidLanguageServer):
     """
     Provides Python specific instantiation of the LanguageServer class using Pyright.
     Contains various configurations and settings specific to Python.
@@ -1646,7 +1647,7 @@ class PyrightServer(LanguageServer):
         )
 
         # Event to signal when initial workspace analysis is complete
-        self.analysis_complete = asyncio.Event()
+        self.analysis_complete = threading.Event()
         self.found_source_files = False
 
     @override
@@ -1753,8 +1754,7 @@ class PyrightServer(LanguageServer):
 
         return initialize_params
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["PyrightServer"]:
+    def _start_server(self):
         """
         Starts the Pyright Language Server and waits for initial workspace analysis to complete.
 
@@ -1772,13 +1772,13 @@ class PyrightServer(LanguageServer):
         ```
         """
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             """
             Monitor Pyright's log messages to detect when initial analysis is complete.
             Pyright logs "Found X source files" when it finishes scanning the workspace.
@@ -1794,7 +1794,7 @@ class PyrightServer(LanguageServer):
                 self.analysis_complete.set()
                 self.completions_available.set()
 
-        async def check_experimental_status(params):
+        def check_experimental_status(params):
             """
             Also listen for experimental/serverStatus as a backup signal
             """
@@ -1814,38 +1814,35 @@ class PyrightServer(LanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        async with super().start_server():
-            self.logger.log("Starting pyright-langserver server process", logging.INFO)
-            await self.server.start()
+        super()._start_server()
+        self.logger.log("Starting pyright-langserver server process", logging.INFO)
+        self.server.start()
 
-            # Send proper initialization parameters
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        # Send proper initialization parameters
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to pyright server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
-            self.logger.log(f"Received initialize response from pyright server: {init_response}", logging.INFO)
+        self.logger.log(
+            "Sending initialize request from LSP client to pyright server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
+        self.logger.log(f"Received initialize response from pyright server: {init_response}", logging.INFO)
 
-            # Verify that the server supports our required features
-            assert "textDocumentSync" in init_response["capabilities"]
-            assert "completionProvider" in init_response["capabilities"]
-            assert "definitionProvider" in init_response["capabilities"]
+        # Verify that the server supports our required features
+        assert "textDocumentSync" in init_response["capabilities"]
+        assert "completionProvider" in init_response["capabilities"]
+        assert "definitionProvider" in init_response["capabilities"]
 
-            # Complete the initialization handshake
-            self.server.notify.initialized({})
+        # Complete the initialization handshake
+        self.server.notify.initialized({})
 
-            # Wait for Pyright to complete its initial workspace analysis
-            # This prevents zombie processes by ensuring background tasks finish
-            self.logger.log("Waiting for Pyright to complete initial workspace analysis...", logging.INFO)
-            try:
-                await asyncio.wait_for(self.analysis_complete.wait(), timeout=1.0)
-                self.logger.log("Pyright initial analysis complete, server ready", logging.INFO)
-            except asyncio.TimeoutError:
-                self.logger.log("Timeout waiting for Pyright analysis completion, proceeding anyway", logging.WARNING)
-                # Fallback: assume analysis is complete after timeout
-                self.analysis_complete.set()
-                self.completions_available.set()
-
-            yield self
+        # Wait for Pyright to complete its initial workspace analysis
+        # This prevents zombie processes by ensuring background tasks finish
+        self.logger.log("Waiting for Pyright to complete initial workspace analysis...", logging.INFO)
+        if self.analysis_complete.wait(timeout=5.0):
+            self.logger.log("Pyright initial analysis complete, server ready", logging.INFO)
+        else:
+            self.logger.log("Timeout waiting for Pyright analysis completion, proceeding anyway", logging.WARNING)
+            # Fallback: assume analysis is complete after timeout
+            self.analysis_complete.set()
+            self.completions_available.set()

@@ -49,6 +49,7 @@ from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
 from serena.util.thread import ExecutionResult, execute_with_timeout
+from solidlsp.ls import SolidLanguageServer
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
@@ -666,12 +667,21 @@ def create_ls_for_project(
     )
     ls_logger = MultilspyLogger(log_level=log_level)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
-    return SyncLanguageServer.create(
-        multilspy_config,
-        ls_logger,
-        project_instance.project_root,
-        timeout=ls_timeout,
-    )
+    use_solid_ls = True
+    if use_solid_ls:
+        return SolidLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            project_instance.project_root,
+            timeout=ls_timeout,
+        )
+    else:
+        return SyncLanguageServer.create(
+            multilspy_config,
+            ls_logger,
+            project_instance.project_root,
+            timeout=ls_timeout,
+        )
 
 
 @click.command()
