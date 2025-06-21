@@ -2,23 +2,20 @@
 Provides Kotlin specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Kotlin.
 """
 
-import asyncio
 import dataclasses
 import json
 import logging
 import os
-import stat
 import pathlib
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
+import stat
 
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
+from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_utils import FileUtils
 from multilspy.multilspy_utils import PlatformUtils
+from solidlsp.ls import SolidLanguageServer
 
 
 @dataclasses.dataclass
@@ -31,7 +28,7 @@ class KotlinRuntimeDependencyPaths:
     kotlin_executable_path: str
 
 
-class KotlinLanguageServer(LanguageServer):
+class KotlinLanguageServer(SolidLanguageServer):
     """
     Provides Kotlin specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Kotlin.
     """
@@ -167,28 +164,17 @@ class KotlinLanguageServer(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["KotlinLanguageServer"]:
+    def _start_server(self):
         """
-        Starts the Kotlin Language Server, waits for the server to be ready and yields the LanguageServer instance.
-
-        Usage:
-        ```
-        async with lsp.start_server():
-            # LanguageServer has been initialized and ready to serve requests
-            await lsp.request_definition(...)
-            await lsp.request_references(...)
-            # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
-        ```
+        Starts the Kotlin Language Server
         """
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", do_nothing)
@@ -199,29 +185,26 @@ class KotlinLanguageServer(LanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
-        async with super().start_server():
-            self.logger.log("Starting Kotlin server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting Kotlin server process", logging.INFO)
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
 
-            capabilities = init_response["capabilities"]
-            assert "textDocumentSync" in capabilities, "Server must support textDocumentSync"
-            assert "hoverProvider" in capabilities, "Server must support hover"
-            assert "completionProvider" in capabilities, "Server must support code completion"
-            assert "signatureHelpProvider" in capabilities, "Server must support signature help"
-            assert "definitionProvider" in capabilities, "Server must support go to definition"
-            assert "referencesProvider" in capabilities, "Server must support find references"
-            assert "documentSymbolProvider" in capabilities, "Server must support document symbols"
-            assert "workspaceSymbolProvider" in capabilities, "Server must support workspace symbols"
-            assert "semanticTokensProvider" in capabilities, "Server must support semantic tokens"
-            
-            self.server.notify.initialized({})
-            self.completions_available.set()
+        capabilities = init_response["capabilities"]
+        assert "textDocumentSync" in capabilities, "Server must support textDocumentSync"
+        assert "hoverProvider" in capabilities, "Server must support hover"
+        assert "completionProvider" in capabilities, "Server must support code completion"
+        assert "signatureHelpProvider" in capabilities, "Server must support signature help"
+        assert "definitionProvider" in capabilities, "Server must support go to definition"
+        assert "referencesProvider" in capabilities, "Server must support find references"
+        assert "documentSymbolProvider" in capabilities, "Server must support document symbols"
+        assert "workspaceSymbolProvider" in capabilities, "Server must support workspace symbols"
+        assert "semanticTokensProvider" in capabilities, "Server must support semantic tokens"
 
-            yield self
+        self.server.notify.initialized({})
+        self.completions_available.set()
