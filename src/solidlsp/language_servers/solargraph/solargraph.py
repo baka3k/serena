@@ -3,26 +3,23 @@ Provides Ruby specific instantiation of the LanguageServer class using Solargrap
 Contains various configurations and settings specific to Ruby.
 """
 
-import asyncio
 import json
 import logging
 import os
+import pathlib
 import stat
 import subprocess
-import pathlib
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, override
+import threading
+from typing import override
 
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_utils import FileUtils
-from multilspy.multilspy_utils import PlatformUtils, PlatformId
+from multilspy.multilspy_logger import MultilspyLogger
+from solidlsp.ls import SolidLanguageServer
 
 
-class Solargraph(LanguageServer):
+class Solargraph(SolidLanguageServer):
     """
     Provides Ruby specific instantiation of the LanguageServer class using Solargraph.
     Contains various configurations and settings specific to Ruby.
@@ -41,8 +38,11 @@ class Solargraph(LanguageServer):
             ProcessLaunchInfo(cmd=f"{solargraph_executable_path} stdio", cwd=repository_root_path),
             "ruby",
         )
-        self.server_ready = asyncio.Event()
-        
+        self.server_ready = threading.Event()
+        self.service_ready_event = threading.Event()
+        self.initialize_searcher_command_available = threading.Event()
+        self.resolve_main_method_available = threading.Event()
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["vendor"]
@@ -115,22 +115,12 @@ class Solargraph(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["Solargraph"]:
+    def _start_server(self):
         """
-        Starts the Solargraph Language Server for Ruby, waits for the server to be ready and yields the LanguageServer instance.
-
-        Usage:
-        ```
-        async with lsp.start_server():
-            # LanguageServer has been initialized and ready to serve requests
-            await lsp.request_definition(...)
-            await lsp.request_references(...)
-            # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
+        Starts the Solargraph Language Server for Ruby
         """
 
-        async def register_capability_handler(params):
+        def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -138,20 +128,20 @@ class Solargraph(LanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        async def lang_status_handler(params):
+        def lang_status_handler(params):
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -162,28 +152,25 @@ class Solargraph(LanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
-        async with super().start_server():
-            self.logger.log("Starting solargraph server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting solargraph server process", logging.INFO)
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            self.logger.log(f"Sending init params: {json.dumps(initialize_params, indent=4)}", logging.INFO)
-            init_response = await self.server.send.initialize(initialize_params)
-            self.logger.log(f"Received init response: {init_response}", logging.INFO)
-            assert init_response["capabilities"]["textDocumentSync"] == 2
-            assert "completionProvider" in init_response["capabilities"]
-            assert init_response["capabilities"]["completionProvider"] == {
-                "resolveProvider": True,
-                "triggerCharacters": [".", ":", "@"],
-            }
-            self.server.notify.initialized({})
-            self.completions_available.set()
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        self.logger.log(f"Sending init params: {json.dumps(initialize_params, indent=4)}", logging.INFO)
+        init_response = self.server.send.initialize(initialize_params)
+        self.logger.log(f"Received init response: {init_response}", logging.INFO)
+        assert init_response["capabilities"]["textDocumentSync"] == 2
+        assert "completionProvider" in init_response["capabilities"]
+        assert init_response["capabilities"]["completionProvider"] == {
+            "resolveProvider": True,
+            "triggerCharacters": [".", ":", "@"],
+        }
+        self.server.notify.initialized({})
+        self.completions_available.set()
 
-            self.server_ready.set()
-            await self.server_ready.wait()
-
-            yield self
+        self.server_ready.set()
+        self.server_ready.wait()
