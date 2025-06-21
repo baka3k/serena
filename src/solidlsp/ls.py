@@ -67,7 +67,6 @@ class SolidLanguageServer(ABC):
             from solidlsp.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
             )
-
             return PyrightServer(config, logger, repository_root_path)
             # It used to be jedi, but pyright is a bit faster, and also more actively maintained
             # Keeping the previous code for reference
@@ -76,53 +75,55 @@ class SolidLanguageServer(ABC):
             # )
 
             # return JediServer(config, logger, repository_root_path)
+
         elif config.code_language == Language.JAVA:
             from solidlsp.language_servers.eclipse_jdtls.eclipse_jdtls import (
                 EclipseJDTLS,
             )
-
             return EclipseJDTLS(config, logger, repository_root_path)
+
         elif config.code_language == Language.KOTLIN:
             from solidlsp.language_servers.kotlin_language_server.kotlin_language_server import (
                 KotlinLanguageServer,
             )
-
             return KotlinLanguageServer(config, logger, repository_root_path)
+
         elif config.code_language == Language.RUST:
             from solidlsp.language_servers.rust_analyzer.rust_analyzer import (
                 RustAnalyzer,
             )
-
             return RustAnalyzer(config, logger, repository_root_path)
+
         elif config.code_language == Language.CSHARP:
             from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
-
             return OmniSharp(config, logger, repository_root_path)
+
         elif config.code_language in [Language.TYPESCRIPT, Language.JAVASCRIPT]:
             from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
             return TypeScriptLanguageServer(config, logger, repository_root_path)
+
         elif config.code_language == Language.GO:
             from solidlsp.language_servers.gopls.gopls import Gopls
-
             return Gopls(config, logger, repository_root_path)
+
         elif config.code_language == Language.RUBY:
             from solidlsp.language_servers.solargraph.solargraph import Solargraph
-
             return Solargraph(config, logger, repository_root_path)
+
         elif config.code_language == Language.DART:
             from solidlsp.language_servers.dart_language_server.dart_language_server import DartLanguageServer
-
             return DartLanguageServer(config, logger, repository_root_path)
+
         elif config.code_language == Language.CPP:
             from solidlsp.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
-
             return ClangdLanguageServer(config, logger, repository_root_path)
+
         elif config.code_language == Language.PHP:
             from solidlsp.language_servers.intelephense.intelephense import Intelephense
-
             return Intelephense(config, logger, repository_root_path)
+
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise MultilspyException(f"Language {config.code_language} is not supported")

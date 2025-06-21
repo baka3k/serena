@@ -2,7 +2,6 @@
 Provides Java specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Java.
 """
 
-import asyncio
 import dataclasses
 import json
 import logging
@@ -10,21 +9,20 @@ import os
 import pathlib
 import shutil
 import stat
+import threading
 import uuid
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from pathlib import PurePath
 
 from overrides import override
 
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
+from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
+from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_settings import MultilspySettings
 from multilspy.multilspy_utils import FileUtils
 from multilspy.multilspy_utils import PlatformUtils
-from pathlib import PurePath
+from solidlsp.ls import SolidLanguageServer
 
 
 @dataclasses.dataclass
@@ -43,7 +41,7 @@ class RuntimeDependencyPaths:
     intellisense_members_path: str
 
 
-class EclipseJDTLS(LanguageServer):
+class EclipseJDTLS(SolidLanguageServer):
     """
     The EclipseJDTLS class provides a Java specific implementation of the LanguageServer class
     """
@@ -135,9 +133,9 @@ class EclipseJDTLS(LanguageServer):
             ]
         )
 
-        self.service_ready_event = asyncio.Event()
-        self.intellicode_enable_command_available = asyncio.Event()
-        self.initialize_searcher_command_available = asyncio.Event()
+        self.service_ready_event = threading.Event()
+        self.intellicode_enable_command_available = threading.Event()
+        self.initialize_searcher_command_available = threading.Event()
 
         super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java")
     
@@ -324,23 +322,12 @@ class EclipseJDTLS(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["EclipseJDTLS"]:
+    def _start_server(self):
         """
-        Starts the Eclipse JDTLS Language Server, waits for the server to be ready and yields the LanguageServer instance.
-
-        Usage:
-        ```
-        async with lsp.start_server():
-            # LanguageServer has been initialized and ready to serve requests
-            await lsp.request_definition(...)
-            await lsp.request_references(...)
-            # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
-        ```
+        Starts the Eclipse JDTLS Language Server
         """
 
-        async def register_capability_handler(params):
+        def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "textDocument/completion":
@@ -358,22 +345,22 @@ class EclipseJDTLS(LanguageServer):
                         self.intellicode_enable_command_available.set()
             return
 
-        async def lang_status_handler(params):
+        def lang_status_handler(params):
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             assert params["command"] == "_java.reloadBundles.command"
             assert params["arguments"] == []
             return []
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -384,39 +371,36 @@ class EclipseJDTLS(LanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
-        async with super().start_server():
-            self.logger.log("Starting EclipseJDTLS server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting EclipseJDTLS server process", logging.INFO)
+        self.server.start()
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
-            assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
-            assert "completionProvider" not in init_response["capabilities"]
-            assert "executeCommandProvider" not in init_response["capabilities"]
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert "completionProvider" not in init_response["capabilities"]
+        assert "executeCommandProvider" not in init_response["capabilities"]
 
-            self.server.notify.initialized({})
+        self.server.notify.initialized({})
 
-            self.server.notify.workspace_did_change_configuration(
-                {"settings": initialize_params["initializationOptions"]["settings"]}
-            )
+        self.server.notify.workspace_did_change_configuration(
+            {"settings": initialize_params["initializationOptions"]["settings"]}
+        )
 
-            await self.intellicode_enable_command_available.wait()
+        self.intellicode_enable_command_available.wait()
 
-            java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
-            assert os.path.exists(java_intellisense_members_path)
-            intellicode_enable_result = await self.server.send.execute_command(
-                {
-                    "command": "java.intellicode.enable",
-                    "arguments": [True, java_intellisense_members_path],
-                }
-            )
-            assert intellicode_enable_result
+        java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
+        assert os.path.exists(java_intellisense_members_path)
+        intellicode_enable_result = self.server.send.execute_command(
+            {
+                "command": "java.intellicode.enable",
+                "arguments": [True, java_intellisense_members_path],
+            }
+        )
+        assert intellicode_enable_result
 
-            # TODO: Add comments about why we wait here, and how this can be optimized
-            await self.service_ready_event.wait()
-
-            yield self
+        # TODO: Add comments about why we wait here, and how this can be optimized
+        self.service_ready_event.wait()
