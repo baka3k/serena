@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import os
@@ -15,14 +14,13 @@ from typing import Dict, Iterator, List, Optional, Tuple, Union, cast, Self
 
 import pathspec
 import tqdm
-from overrides import override
 
 from multilspy import multilspy_types
 from multilspy.language_server import LSPFileBuffer, GenericDocumentSymbol, ReferenceInSymbol
 from multilspy.lsp_protocol_handler import lsp_types
 from multilspy.lsp_protocol_handler import lsp_types as LSPTypes
 from multilspy.lsp_protocol_handler.lsp_constants import LSPConstants
-from multilspy.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind, InitializeParams
+from multilspy.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
 from multilspy.lsp_protocol_handler.server import (
     Error,
     ProcessLaunchInfo,
@@ -51,7 +49,7 @@ class SolidLanguageServer(ABC):
         return dirname.startswith('.')
 
     @classmethod
-    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, timeout) -> "SolidLanguageServer":
+    def create(cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, timeout: Optional[float] = None) -> "SolidLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
 
@@ -63,6 +61,7 @@ class SolidLanguageServer(ABC):
         :param logger: The logger to use.
         :return LanguageServer: A language specific LanguageServer instance.
         """
+        # TODO: Apply timeout
         if config.code_language == Language.PYTHON:
             from solidlsp.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
