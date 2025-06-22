@@ -73,7 +73,7 @@ google = [
 Homepage = "https://github.com/oraios/serena"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/serena", "src/multilspy", "src/interprompt"]
+packages = ["src/serena", "src/multilspy", "src/interprompt", "src/solidlsp"]
 
 [tool.black]
 line-length = 140
