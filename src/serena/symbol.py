@@ -256,6 +256,13 @@ class Symbol(ToStringMixin):
     def symbol_kind(self) -> SymbolKind:
         return self.symbol_root["kind"]
 
+    def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
+        """
+        :return: whether a symbol definition of this symbol's kind is usually separated from the
+            previous/next definition by at least one empty line.
+        """
+        return self.symbol_kind in (SymbolKind.Function, SymbolKind.Method, SymbolKind.Class, SymbolKind.Interface, SymbolKind.Struct)
+
     @property
     def relative_path(self) -> str | None:
         location = self.symbol_root.get("location")
@@ -758,10 +765,12 @@ class SymbolManager:
             # start at beginning of next line
             col = 0
             line += 1
-            # make sure there is one empty line before the new symbol
-            body = "\n" + body.lstrip("\n")
+            # strip preceding newlines, re-adding an empty line before the new symbol if appropriate
+            body = body.lstrip("\r\n")
+            if symbol.is_neighbouring_definition_separated_by_empty_line():
+                body = "\n" + body
             # make sure the one line break succeeding the original symbol, which we repurposed as prefix, is replaced
-            body = body.rstrip("\n") + "\n"
+            body = body.rstrip("\r\n") + "\n"
 
         if use_same_indentation:
             symbol_start_pos = symbol.body_start_position
@@ -836,8 +845,11 @@ class SymbolManager:
 
             if at_new_line:
                 col = 0
-                # ensure two newlines after inserted body (eol + empty line)
-                body = body.rstrip() + "\n\n"
+                # ensure eol is present at end
+                body = body.rstrip() + "\n"
+                # add empty line if appropriate
+                if symbol.is_neighbouring_definition_separated_by_empty_line():
+                    body += "\n"
 
             assert location.relative_path is not None
 
