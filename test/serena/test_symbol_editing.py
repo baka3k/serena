@@ -159,9 +159,9 @@ class InsertInRelToSymbolTest(EditingTest):
     def _apply_edit(self, symbol_manager: SymbolManager) -> None:
         assert self.mode is not None
         if self.mode == "before":
-            symbol_manager.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content)
+            symbol_manager.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
         elif self.mode == "after":
-            symbol_manager.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content)
+            symbol_manager.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
 
 
 @pytest.mark.parametrize("mode", ["before", "after"])
@@ -211,18 +211,16 @@ def test_insert_in_rel_to_symbol(test_case: InsertInRelToSymbolTest, mode: Liter
     test_case.run_test(content_after_ground_truth=snapshot)
 
 
-PYTHON_REPLACED_BODY = """        
-def modify_instance_var(self):
-    # This body has been replaced
-    self.instance_var = "Replaced!"
-    self.reassignable_instance_var = 999
+PYTHON_REPLACED_BODY = """def modify_instance_var(self):
+        # This body has been replaced
+        self.instance_var = "Replaced!"
+        self.reassignable_instance_var = 999
 """
 
-TYPESCRIPT_REPLACED_BODY = """
-function printValue() {
-    // This body has been replaced
-    console.warn("New value: " + this.value);
-}
+TYPESCRIPT_REPLACED_BODY = """function printValue() {
+        // This body has been replaced
+        console.warn("New value: " + this.value);
+    }
 """
 
 
@@ -233,7 +231,7 @@ class ReplaceBodyTest(EditingTest):
         self.new_body = new_body
 
     def _apply_edit(self, symbol_manager: SymbolManager) -> None:
-        symbol_manager.replace_body(self.symbol_name, self.rel_path, self.new_body)
+        symbol_manager.replace_body(self.symbol_name, self.rel_path, self.new_body, use_same_indentation=False)
 
 
 @pytest.mark.parametrize(
