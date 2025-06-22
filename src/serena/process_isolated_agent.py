@@ -414,10 +414,10 @@ class ProcessIsolatedSerenaAgent:
 
         # Create communication pipe
         parent_conn, child_conn = multiprocessing.Pipe()
-        self.conn = parent_conn
+        self.conn = parent_conn  # type: ignore
 
         # Create and start worker process, passing along the dashboard's queue if available
-        worker = SerenaAgentWorker(child_conn)
+        worker = SerenaAgentWorker(child_conn)  # type: ignore
         self.process = multiprocessing.Process(target=worker.run, args=[_global_log_queue])
         self.process.start()
 
