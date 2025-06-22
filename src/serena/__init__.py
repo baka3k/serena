@@ -1,4 +1,4 @@
-__version__ = "2025-05-21"
+__version__ = "2025-06-21"
 
 
 def serena_version() -> str:
