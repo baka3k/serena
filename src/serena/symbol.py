@@ -751,11 +751,16 @@ class SymbolManager:
             raise ValueError(f"Symbol at {location} does not have a defined end position.")
 
         line, col = pos["line"], pos["character"]
+
         if at_new_line:
-            line += 1
+            # start at beginning of next line
             col = 0
-            if not body.startswith("\n"):
-                body = "\n" + body
+            line += 1
+            # make sure there is one empty line before the new symbol
+            body = "\n" + body.lstrip("\n")
+            # make sure the one line break succeeding the original symbol, which we repurposed as prefix, is replaced
+            body = body.rstrip("\n") + "\n"
+
         if use_same_indentation:
             symbol_start_pos = symbol.body_start_position
             assert symbol_start_pos is not None, f"Symbol at {location=} does not have a defined start position."
@@ -822,16 +827,16 @@ class SymbolManager:
                 raise ValueError(f"Symbol at {location} does not have a defined start position.")
             line = symbol_start_pos["line"]
             col = symbol_start_pos["character"]
+
             if use_same_indentation:
                 indent = " " * (col)
                 body = "\n".join(indent + line for line in body.splitlines())
 
-            # similar problems as in insert_after_symbol_at_location, see comment there
             if at_new_line:
                 col = 0
-                line -= 1
-                if not body.endswith("\n"):
-                    body += "\n"
+                # ensure two newlines after inserted body (eol + empty line)
+                body = body.rstrip() + "\n\n"
+
             assert location.relative_path is not None
 
             self._lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
