@@ -184,11 +184,11 @@ class SerenaMCPFactory:
         # retain only FASTMCP_ prefix for already set environment variables.
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
 
-        mcp_settings = Settings(lifespan=self.server_lifespan, host=host, port=port)
+        mcp_settings: Settings = Settings(lifespan=self.server_lifespan, host=host, port=port)
         mcp = FastMCP(**mcp_settings.model_dump())
         return mcp
 
-    @asynccontextmanager
+    @asynccontextmanager  # type: ignore
     @abstractmethod
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
@@ -213,6 +213,7 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
         self.agent = SerenaAgent(project=self.project, serena_config=serena_config, context=self.context, modes=modes)
 
     def _iter_tools(self) -> Iterator[ToolInterface]:
+        assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
 
     @asynccontextmanager
@@ -236,12 +237,12 @@ class SerenaMCPFactoryWithProcessIsolation(SerenaMCPFactory):
         """
         super().__init__(context=context, project=project)
 
-        self.active_tool_names: list[str] | None = None
+        self.active_tool_names: set[str] | None = None
         self.serena_agent_process: ProcessIsolatedSerenaAgent | None = None
         self.serena_dashboard_process: ProcessIsolatedDashboard | None = None
 
     @staticmethod
-    def _determine_active_tool_names(context: SerenaAgentContext, project: Project) -> set[str]:
+    def _determine_active_tool_names(context: SerenaAgentContext, project: Project | None) -> set[str]:
         """
         Determine the names of tools that should be included in this session based on the context.
         """
@@ -306,6 +307,8 @@ class SerenaMCPFactoryWithProcessIsolation(SerenaMCPFactory):
         )
 
     def _iter_tools(self) -> Iterator[ToolInterface]:
+        assert self.active_tool_names is not None
+        assert self.serena_agent_process is not None
         for tool_name in self.active_tool_names:
             yield ProcessIsolatedTool(process_agent=self.serena_agent_process, tool_name=tool_name)
 
@@ -319,12 +322,14 @@ class SerenaMCPFactoryWithProcessIsolation(SerenaMCPFactory):
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
 
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
-        self.project_instance = serena_config.get_project(self.project)
+        if self.project is not None:
+            self.project_instance = serena_config.get_project(self.project)
         self.serena_agent_process = ProcessIsolatedSerenaAgent(
             project=self.project, serena_config=serena_config, modes=modes, context=self.context
         )
         self.active_tool_names = self._determine_active_tool_names(self.context, self.project_instance)
         if serena_config.web_dashboard:
+            assert self.active_tool_names is not None
             self.serena_dashboard_process = ProcessIsolatedDashboard(tool_names=sorted(self.active_tool_names))
 
     def create_mcp_server(
@@ -399,8 +404,10 @@ class SerenaMCPFactoryWithProcessIsolation(SerenaMCPFactory):
 
         if self.serena_dashboard_process is not None:
             log.info("Starting dashboard process")
+            assert self.serena_dashboard_process is not None
             self.serena_dashboard_process.start()
         log.info("Starting serena agent process")
+        assert self.serena_agent_process is not None
         self.serena_agent_process.start()
 
         self._set_mcp_tools(mcp_server)
@@ -578,6 +585,7 @@ def start_mcp_server(
     # This is for backward compatibility with the old CLI, should be removed in the future!
     project_file = project_file_arg if project_file_arg is not None else project
 
+    mcp_factory: SerenaMCPFactory
     if USE_SOLID_LSP:
         mcp_factory = SerenaMCPFactorySingleProcess(context=context, project=project_file)
     else:

@@ -3,8 +3,9 @@ import queue
 import socket
 import threading
 from collections.abc import Callable
+from typing import Any
 
-from flask import Flask, request, send_from_directory
+from flask import Flask, Response, request, send_from_directory
 from pydantic import BaseModel
 from sensai.util import logging
 
@@ -85,16 +86,16 @@ class SerenaDashboardAPI:
     def _setup_routes(self) -> None:
         # Static files
         @self._app.route("/dashboard/<path:filename>")
-        def serve_dashboard(filename):
+        def serve_dashboard(filename: str) -> Response:
             return send_from_directory(SERENA_DASHBOARD_DIR, filename)
 
         @self._app.route("/dashboard/")
-        def serve_dashboard_index():
+        def serve_dashboard_index() -> Response:
             return send_from_directory(SERENA_DASHBOARD_DIR, "index.html")
 
         # API routes
         @self._app.route("/get_log_messages", methods=["POST"])
-        def get_log_messages():
+        def get_log_messages() -> dict[str, Any]:
             request_data = request.get_json()
             if not request_data:
                 request_log = RequestLog()
@@ -105,12 +106,12 @@ class SerenaDashboardAPI:
             return result.model_dump()
 
         @self._app.route("/get_tool_names", methods=["GET"])
-        def get_tool_names():
+        def get_tool_names() -> dict[str, Any]:
             result = self._get_tool_names()
             return result.model_dump()
 
         @self._app.route("/shutdown", methods=["PUT"])
-        def shutdown():
+        def shutdown() -> dict[str, str]:
             self._shutdown()
             return {"status": "shutting down"}
 

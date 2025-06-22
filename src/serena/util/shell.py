@@ -51,7 +51,7 @@ def subprocess_check_output(args: list[str], encoding: str = "utf-8", strip: boo
     }
     if platform.system() == "Windows":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-    output = subprocess.check_output(args, **kwargs).decode(encoding)
+    output = subprocess.check_output(args, **kwargs).decode(encoding)  # type: ignore
     if strip:
         output = output.strip()
     return output

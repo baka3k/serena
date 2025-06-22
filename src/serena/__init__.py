@@ -14,9 +14,10 @@ def serena_version() -> str:
     version = __version__
     try:
         git_status = get_git_status()
-        version += f"-{git_status.commit[:8]}"
-        if not git_status.is_clean:
-            version += "-dirty"
+        if git_status is not None:
+            version += f"-{git_status.commit[:8]}"
+            if not git_status.is_clean:
+                version += "-dirty"
     except:
         pass
     return version
