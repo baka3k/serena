@@ -188,10 +188,11 @@ class SerenaMCPFactory:
         mcp = FastMCP(**mcp_settings.model_dump())
         return mcp
 
-    @asynccontextmanager  # type: ignore
+    @asynccontextmanager
     @abstractmethod
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
+        yield None  # ensures MyPy understands we yield None
 
 
 class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
