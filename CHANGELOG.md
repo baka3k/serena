@@ -2,6 +2,17 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* **Reduce the use of asyncio to a minimum**, improving stability and reducing the need for workarounds
+   * Switch to newly developed fully synchronous LSP library `solidlsp` (derived from `multilspy`)
+   * Switch from fastapi (which uses asyncio) to Flask in the Serena dashboard
+   * The MCP server is the only asynchronous component now, which resolves cross-component loop contamination,
+     such that process isolation is no longer required.
+     Neither are non-graceful shutdowns on Windows.
+
+Fixes:
+* Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows
+* Fix project activation by name via `--project` not working (was broken in previous release) 
+
 # 2025-06-20
 
 * **Overhaul and major improvement of editing tools!**
