@@ -18,3 +18,9 @@ DEFAULT_MODES = ("interactive", "editing")
 
 PROJECT_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "project.template.yml")
 SELENA_CONFIG_TEMPLATE_FILE = str(_serena_pkg_path / "resources" / "serena_config.template.yml")
+
+USE_SOLID_LSP = True
+"""Whether to use Solid LSP instead of multilspy for language server operations.
+Multilspy uses asyncio, which creates many problems like deadlocks and requires full process
+isolation (and even then some issues remain).
+"""
