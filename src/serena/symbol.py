@@ -5,7 +5,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union, Iterable, Reversible
 
 from sensai.util.string import ToStringMixin
 
@@ -709,6 +709,22 @@ class SymbolManager:
             self._lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
             self._lang_server.insert_text_at_position(location.relative_path, start_line, start_col, body)
 
+    @staticmethod
+    def _count_leading_newlines(text: Iterable) -> int:
+        cnt = 0
+        for c in text:
+            if c == "\n":
+                cnt += 1
+            elif c == "\r":
+                continue
+            else:
+                break
+        return cnt
+
+    @classmethod
+    def _count_trailing_newlines(cls, text: Reversible) -> int:
+        return cls._count_leading_newlines(reversed(text))
+
     def insert_after_symbol(
         self,
         name_path: str,
@@ -765,10 +781,12 @@ class SymbolManager:
             # start at beginning of next line
             col = 0
             line += 1
-            # strip preceding newlines, re-adding an empty line before the new symbol if appropriate
+            # strip preceding newlines, re-adding one or more empty lines before the new symbol if appropriate
+            original_leading_newlines = self._count_leading_newlines(body)
             body = body.lstrip("\r\n")
             if symbol.is_neighbouring_definition_separated_by_empty_line():
-                body = "\n" + body
+                num_leading_newlines = max(1, original_leading_newlines)
+                body = ("\n" * num_leading_newlines) + body
             # make sure the one line break succeeding the original symbol, which we repurposed as prefix, is replaced
             body = body.rstrip("\r\n") + "\n"
 
@@ -845,11 +863,13 @@ class SymbolManager:
 
             if at_new_line:
                 col = 0
+                original_trailing_empty_lines = self._count_trailing_newlines(body) - 1
                 # ensure eol is present at end
                 body = body.rstrip() + "\n"
-                # add empty line if appropriate
+                # add one or more empty lines if appropriate
                 if symbol.is_neighbouring_definition_separated_by_empty_line():
-                    body += "\n"
+                    num_trailing_newlines = max(1, original_trailing_empty_lines)
+                    body += "\n" * num_trailing_newlines
 
             assert location.relative_path is not None
 
