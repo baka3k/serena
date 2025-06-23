@@ -220,6 +220,7 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
     @asynccontextmanager
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
         self._set_mcp_tools(mcp_server)
+        log.info("MCP server lifetime setup complete")
         yield
 
 
@@ -427,6 +428,7 @@ class SerenaMCPFactoryWithProcessIsolation(SerenaMCPFactory):
         # Start monitoring task
         monitor_task = asyncio.create_task(monitor_global_shutdown())
 
+        log.info("MCP server lifetime setup complete")
         try:
             yield
         except (KeyboardInterrupt, SystemExit):
