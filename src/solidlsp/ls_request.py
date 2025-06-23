@@ -1,9 +1,9 @@
 from typing import Union
 
-from multilspy.lsp_protocol_handler import lsp_types
+from solidlsp.lsp_protocol_handler import lsp_types
 
 
-class SolidLspRequest:
+class LanguageServerRequest:
     def __init__(self, send_request):
         self.send_request = send_request
 

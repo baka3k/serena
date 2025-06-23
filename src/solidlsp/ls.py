@@ -1,3 +1,5 @@
+import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -11,28 +13,65 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from typing import Self, cast
+from typing import Self, Union, cast
 
 import pathspec
 import tqdm
 
-from multilspy import multilspy_types
-from multilspy.language_server import GenericDocumentSymbol, LSPFileBuffer, ReferenceInSymbol
-from multilspy.lsp_protocol_handler import lsp_types
-from multilspy.lsp_protocol_handler import lsp_types as LSPTypes
-from multilspy.lsp_protocol_handler.lsp_constants import LSPConstants
-from multilspy.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
-from multilspy.lsp_protocol_handler.server import (
+from serena.text_utils import MatchedConsecutiveLines, search_files
+from solidlsp import ls_types
+from solidlsp.ls_handler import SolidLanguageServerHandler
+from solidlsp.lsp_protocol_handler import lsp_types
+from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
+from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
+from solidlsp.lsp_protocol_handler.server import (
     Error,
     ProcessLaunchInfo,
     StringDict,
 )
-from multilspy.multilspy_config import Language, MultilspyConfig
-from multilspy.multilspy_exceptions import MultilspyException
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import FileUtils, PathUtils, TextUtils
-from serena.text_utils import MatchedConsecutiveLines, search_files
-from solidlsp.ls_handler import SolidLanguageServerHandler
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
+
+GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
+
+
+@dataclasses.dataclass(kw_only=True)
+class ReferenceInSymbol:
+    """A symbol retrieved when requesting reference to a symbol, together with the location of the reference"""
+
+    symbol: ls_types.UnifiedSymbolInformation
+    line: int
+    character: int
+
+
+@dataclasses.dataclass
+class LSPFileBuffer:
+    """
+    This class is used to store the contents of an open LSP file in memory.
+    """
+
+    # uri of the file
+    uri: str
+
+    # The contents of the file
+    contents: str
+
+    # The version of the file
+    version: int
+
+    # The language id of the file
+    language_id: str
+
+    # reference count of the file
+    ref_count: int
+
+    content_hash: str = ""
+
+    def __post_init__(self):
+        self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
 
 
 class SolidLanguageServer(ABC):
@@ -51,7 +90,7 @@ class SolidLanguageServer(ABC):
 
     @classmethod
     def create(
-        cls, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str, timeout: float | None = None
+        cls, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, timeout: float | None = None
     ) -> "SolidLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
@@ -139,12 +178,12 @@ class SolidLanguageServer(ABC):
 
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
-            raise MultilspyException(f"Language {config.code_language} is not supported")
+            raise LanguageServerException(f"Language {config.code_language} is not supported")
 
     def __init__(
         self,
-        config: MultilspyConfig,
-        logger: MultilspyLogger,
+        config: LanguageServerConfig,
+        logger: LanguageServerLogger,
         repository_root_path: str,
         process_launch_info: ProcessLaunchInfo,
         language_id: str,
@@ -175,7 +214,7 @@ class SolidLanguageServer(ABC):
 
         # load cache first to prevent any racing conditions due to asyncio stuff
         self._document_symbols_cache: dict[
-            str, tuple[str, tuple[list[multilspy_types.UnifiedSymbolInformation], list[multilspy_types.UnifiedSymbolInformation]]]
+            str, tuple[str, tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]]
         ] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self._cache_lock = threading.Lock()
@@ -329,7 +368,7 @@ class SolidLanguageServer(ABC):
                 "open_file called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
         uri = pathlib.Path(absolute_file_path).as_uri()
@@ -372,7 +411,7 @@ class SolidLanguageServer(ABC):
 
     def insert_text_at_position(
         self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str
-    ) -> multilspy_types.Position:
+    ) -> ls_types.Position:
         """
         Insert text at the given line and column in the given file and return
         the updated cursor position after inserting the text.
@@ -387,7 +426,7 @@ class SolidLanguageServer(ABC):
                 "insert_text_at_position called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
         uri = pathlib.Path(absolute_file_path).as_uri()
@@ -417,13 +456,13 @@ class SolidLanguageServer(ABC):
                 ],
             }
         )
-        return multilspy_types.Position(line=new_l, character=new_c)
+        return ls_types.Position(line=new_l, character=new_c)
 
     def delete_text_between_positions(
         self,
         relative_file_path: str,
-        start: multilspy_types.Position,
-        end: multilspy_types.Position,
+        start: ls_types.Position,
+        end: ls_types.Position,
     ) -> str:
         """
         Delete text between the given start and end positions in the given file and return the deleted text.
@@ -433,7 +472,7 @@ class SolidLanguageServer(ABC):
                 "insert_text_at_position called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
 
         absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
         uri = pathlib.Path(absolute_file_path).as_uri()
@@ -461,7 +500,7 @@ class SolidLanguageServer(ABC):
     def _send_definition_request(self, definition_params: DefinitionParams) -> Definition | list[LocationLink] | None:
         return self.server.send.definition(definition_params)
 
-    def request_definition(self, relative_file_path: str, line: int, column: int) -> list[multilspy_types.Location]:
+    def request_definition(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
         """
         Raise a [textDocument/definition](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_definition) request to the Language Server
         for the symbol at the given line and column in the given file. Wait for the response and return the result.
@@ -477,7 +516,7 @@ class SolidLanguageServer(ABC):
                 "find_function_definition called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
 
         with self.open_file(relative_file_path):
             # sending request to the language server and waiting for response
@@ -495,29 +534,29 @@ class SolidLanguageServer(ABC):
             )
             response = self._send_definition_request(definition_params)
 
-        ret: list[multilspy_types.Location] = []
+        ret: list[ls_types.Location] = []
         if isinstance(response, list):
             # response is either of type Location[] or LocationLink[]
             for item in response:
                 assert isinstance(item, dict)
                 if LSPConstants.URI in item and LSPConstants.RANGE in item:
-                    new_item: multilspy_types.Location = {}
+                    new_item: ls_types.Location = {}
                     new_item.update(item)
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
-                    ret.append(multilspy_types.Location(new_item))
+                    ret.append(ls_types.Location(new_item))
                 elif (
                     LSPConstants.ORIGIN_SELECTION_RANGE in item
                     and LSPConstants.TARGET_URI in item
                     and LSPConstants.TARGET_RANGE in item
                     and LSPConstants.TARGET_SELECTION_RANGE in item
                 ):
-                    new_item: multilspy_types.Location = {}
+                    new_item: ls_types.Location = {}
                     new_item["uri"] = item[LSPConstants.TARGET_URI]
                     new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
                     new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
                     new_item["range"] = item[LSPConstants.TARGET_SELECTION_RANGE]
-                    ret.append(multilspy_types.Location(**new_item))
+                    ret.append(ls_types.Location(**new_item))
                 else:
                     assert False, f"Unexpected response from Language Server: {item}"
         elif isinstance(response, dict):
@@ -525,11 +564,11 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.URI in response
             assert LSPConstants.RANGE in response
 
-            new_item: multilspy_types.Location = {}
+            new_item: ls_types.Location = {}
             new_item.update(response)
             new_item["absolutePath"] = PathUtils.uri_to_path(new_item["uri"])
             new_item["relativePath"] = PathUtils.get_relative_path(new_item["absolutePath"], self.repository_root_path)
-            ret.append(multilspy_types.Location(**new_item))
+            ret.append(ls_types.Location(**new_item))
         elif response is None:
             # Some language servers return None when they cannot find a definition
             # This is expected for certain symbol types like generics or types with incomplete information
@@ -552,7 +591,7 @@ class SolidLanguageServer(ABC):
             }
         )
 
-    def request_references(self, relative_file_path: str, line: int, column: int) -> list[multilspy_types.Location]:
+    def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
         """
         Raise a [textDocument/references](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_references) request to the Language Server
         to find references to the symbol at the given line and column in the given file. Wait for the response and return the result.
@@ -569,7 +608,7 @@ class SolidLanguageServer(ABC):
                 "request_references called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
 
         with self.open_file(relative_file_path):
             try:
@@ -585,7 +624,7 @@ class SolidLanguageServer(ABC):
         if response is None:
             return []
 
-        ret: list[multilspy_types.Location] = []
+        ret: list[ls_types.Location] = []
         assert isinstance(response, list), f"Unexpected response from Language Server (expected list, got {type(response)}): {response}"
         for item in response:
             assert isinstance(item, dict), f"Unexpected response from Language Server (expected dict, got {type(item)}): {item}"
@@ -598,11 +637,11 @@ class SolidLanguageServer(ABC):
                 self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)
                 continue
 
-            new_item: multilspy_types.Location = {}
+            new_item: ls_types.Location = {}
             new_item.update(item)
             new_item["absolutePath"] = str(abs_path)
             new_item["relativePath"] = str(rel_path)
-            ret.append(multilspy_types.Location(**new_item))
+            ret.append(ls_types.Location(**new_item))
 
         return ret
 
@@ -658,7 +697,7 @@ class SolidLanguageServer(ABC):
 
     def request_completions(
         self, relative_file_path: str, line: int, column: int, allow_incomplete: bool = False
-    ) -> list[multilspy_types.CompletionItem]:
+    ) -> list[ls_types.CompletionItem]:
         """
         Raise a [textDocument/completion](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion) request to the Language Server
         to find completions at the given line and column in the given file. Wait for the response and return the result.
@@ -698,7 +737,7 @@ class SolidLanguageServer(ABC):
             # TODO: Handle the case when the completion is a keyword
             items = [item for item in response if item["kind"] != LSPTypes.CompletionItemKind.Keyword]
 
-            completions_list: list[multilspy_types.CompletionItem] = []
+            completions_list: list[ls_types.CompletionItem] = []
 
             for item in items:
                 assert "insertText" in item or "textEdit" in item
@@ -737,14 +776,14 @@ class SolidLanguageServer(ABC):
                 else:
                     assert False
 
-                completion_item = multilspy_types.CompletionItem(**completion_item)
+                completion_item = ls_types.CompletionItem(**completion_item)
                 completions_list.append(completion_item)
 
             return [json.loads(json_repr) for json_repr in set(json.dumps(item, sort_keys=True) for item in completions_list)]
 
     def request_document_symbols(
         self, relative_file_path: str, include_body: bool = False
-    ) -> tuple[list[multilspy_types.UnifiedSymbolInformation], list[multilspy_types.UnifiedSymbolInformation]]:
+    ) -> tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]:
         """
         Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
         to find symbols in the given file. Wait for the response and return the result.
@@ -784,14 +823,14 @@ class SolidLanguageServer(ABC):
             )
 
         def turn_item_into_symbol_with_children(item: GenericDocumentSymbol):
-            item = cast(multilspy_types.UnifiedSymbolInformation, item)
+            item = cast(ls_types.UnifiedSymbolInformation, item)
             absolute_path = os.path.join(self.repository_root_path, relative_file_path)
 
             # handle missing entries in location
             if "location" not in item:
                 uri = pathlib.Path(absolute_path).as_uri()
                 assert "range" in item
-                tree_location = multilspy_types.Location(
+                tree_location = ls_types.Location(
                     uri=uri,
                     range=item["range"],
                     absolutePath=absolute_path,
@@ -816,9 +855,9 @@ class SolidLanguageServer(ABC):
                 child["parent"] = item
             item[LSPConstants.CHILDREN] = children
 
-        flat_all_symbol_list: list[multilspy_types.UnifiedSymbolInformation] = []
+        flat_all_symbol_list: list[ls_types.UnifiedSymbolInformation] = []
         assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
-        root_nodes: list[multilspy_types.UnifiedSymbolInformation] = []
+        root_nodes: list[ls_types.UnifiedSymbolInformation] = []
         for root_item in response:
             if "range" not in root_item and "location" not in root_item:
                 if root_item["kind"] in [SymbolKind.File, SymbolKind.Module]:
@@ -828,7 +867,7 @@ class SolidLanguageServer(ABC):
             # so we cast and rename the var after the mutating call to turn_item_into_symbol_with_children
             # which turned and item into a "symbol"
             turn_item_into_symbol_with_children(root_item)
-            root_symbol = cast(multilspy_types.UnifiedSymbolInformation, root_item)
+            root_symbol = cast(ls_types.UnifiedSymbolInformation, root_item)
             root_symbol["parent"] = None
 
             root_nodes.append(root_symbol)
@@ -839,9 +878,9 @@ class SolidLanguageServer(ABC):
             if LSPConstants.CHILDREN in root_symbol:
                 # TODO: l_tree should be a list of TreeRepr. Define the following function to return TreeRepr as well
 
-                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> list[multilspy_types.UnifiedSymbolInformation]:
-                    node = cast(multilspy_types.UnifiedSymbolInformation, node)
-                    l: list[multilspy_types.UnifiedSymbolInformation] = []
+                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> list[ls_types.UnifiedSymbolInformation]:
+                    node = cast(ls_types.UnifiedSymbolInformation, node)
+                    l: list[ls_types.UnifiedSymbolInformation] = []
                     turn_item_into_symbol_with_children(node)
                     assert LSPConstants.CHILDREN in node
                     children = node[LSPConstants.CHILDREN]
@@ -852,7 +891,7 @@ class SolidLanguageServer(ABC):
 
                 flat_all_symbol_list.extend(visit_tree_nodes_and_build_tree_repr(root_symbol))
             else:
-                flat_all_symbol_list.append(multilspy_types.UnifiedSymbolInformation(**root_symbol))
+                flat_all_symbol_list.append(ls_types.UnifiedSymbolInformation(**root_symbol))
 
         result = flat_all_symbol_list, root_nodes
         self.logger.log(f"Caching document symbols for {relative_file_path}", logging.DEBUG)
@@ -863,7 +902,7 @@ class SolidLanguageServer(ABC):
 
     def request_full_symbol_tree(
         self, within_relative_path: str | None = None, include_body: bool = False
-    ) -> list[multilspy_types.UnifiedSymbolInformation]:
+    ) -> list[ls_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols.
         Note: this may be slow the first time it is called, especially if `within_relative_path` is not used to restrict the search.
@@ -898,7 +937,7 @@ class SolidLanguageServer(ABC):
                     return root_nodes
 
         # Helper function to recursively process directories
-        def process_directory(rel_dir_path: str) -> list[multilspy_types.UnifiedSymbolInformation]:
+        def process_directory(rel_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
             abs_dir_path = self.repository_root_path if rel_dir_path == "." else os.path.join(self.repository_root_path, rel_dir_path)
             abs_dir_path = os.path.realpath(abs_dir_path)
 
@@ -913,10 +952,10 @@ class SolidLanguageServer(ABC):
                 return []
 
             # Create package symbol for directory
-            package_symbol = multilspy_types.UnifiedSymbolInformation(  # type: ignore
+            package_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
                 name=os.path.basename(abs_dir_path),
-                kind=multilspy_types.SymbolKind.Package,
-                location=multilspy_types.Location(
+                kind=ls_types.SymbolKind.Package,
+                location=ls_types.Location(
                     uri=str(pathlib.Path(abs_dir_path).as_uri()),
                     range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
                     absolutePath=str(abs_dir_path),
@@ -946,12 +985,12 @@ class SolidLanguageServer(ABC):
                     file_rel_path = str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path))
                     with self.open_file(file_rel_path) as file_data:
                         fileRange = self._get_range_from_file_content(file_data.contents)
-                    file_symbol = multilspy_types.UnifiedSymbolInformation(  # type: ignore
+                    file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
                         name=os.path.splitext(contained_dir_or_file_name)[0],
-                        kind=multilspy_types.SymbolKind.File,
+                        kind=ls_types.SymbolKind.File,
                         range=fileRange,
                         selectionRange=fileRange,
-                        location=multilspy_types.Location(
+                        location=ls_types.Location(
                             uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
                             range=fileRange,
                             absolutePath=str(contained_dir_or_file_abs_path),
@@ -967,7 +1006,7 @@ class SolidLanguageServer(ABC):
                     package_symbol["children"].append(file_symbol)
 
                     # TODO: Not sure if this is actually still needed given recent changes to relative path handling
-                    def fix_relative_path(nodes: list[multilspy_types.UnifiedSymbolInformation]):
+                    def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]):
                         for node in nodes:
                             if "location" in node and "relativePath" in node["location"]:
                                 path = Path(node["location"]["relativePath"])
@@ -989,18 +1028,18 @@ class SolidLanguageServer(ABC):
         return process_directory(start_rel_path)
 
     @staticmethod
-    def _get_range_from_file_content(file_content: str) -> multilspy_types.Range:
+    def _get_range_from_file_content(file_content: str) -> ls_types.Range:
         """
         Get the range for the given file.
         """
         lines = file_content.split("\n")
         end_line = len(lines)
         end_column = len(lines[-1])
-        return multilspy_types.Range(
-            start=multilspy_types.Position(line=0, character=0), end=multilspy_types.Position(line=end_line, character=end_column)
+        return ls_types.Range(
+            start=ls_types.Position(line=0, character=0), end=ls_types.Position(line=end_line, character=end_column)
         )
 
-    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+    def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]]:
         """
         An overview of the given directory.
 
@@ -1009,11 +1048,11 @@ class SolidLanguageServer(ABC):
         """
         symbol_tree = self.request_full_symbol_tree(relative_dir_path)
         # Initialize result dictionary
-        result: dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]] = defaultdict(list)
+        result: dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]] = defaultdict(list)
 
         # Helper function to process a symbol and its children
-        def process_symbol(symbol: multilspy_types.UnifiedSymbolInformation):
-            if symbol["kind"] == multilspy_types.SymbolKind.File:
+        def process_symbol(symbol: ls_types.UnifiedSymbolInformation):
+            if symbol["kind"] == ls_types.SymbolKind.File:
                 # For file symbols, process their children (top-level symbols)
                 for child in symbol["children"]:
                     assert "location" in child
@@ -1036,7 +1075,7 @@ class SolidLanguageServer(ABC):
             process_symbol(root)
         return result
 
-    def request_document_overview(self, relative_file_path: str) -> list[tuple[str, multilspy_types.SymbolKind, int, int]]:
+    def request_document_overview(self, relative_file_path: str) -> list[tuple[str, ls_types.SymbolKind, int, int]]:
         """
         An overview of the given file.
         Returns the list of tuples (name, kind, line, column) of all top-level symbols in the file.
@@ -1052,7 +1091,7 @@ class SolidLanguageServer(ABC):
                 raise KeyError(f"Could not process symbol of name {root.get('name', 'unknown')} in {relative_file_path=}") from e
         return result
 
-    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, multilspy_types.SymbolKind, int, int]]]:
+    def request_overview(self, within_relative_path: str) -> dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]]:
         """
         An overview of all symbols in the given file or directory.
 
@@ -1069,7 +1108,7 @@ class SolidLanguageServer(ABC):
         else:
             return self.request_dir_overview(within_relative_path)
 
-    def request_hover(self, relative_file_path: str, line: int, column: int) -> multilspy_types.Hover | None:
+    def request_hover(self, relative_file_path: str, line: int, column: int) -> ls_types.Hover | None:
         """
         Raise a [textDocument/hover](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover) request to the Language Server
         to find the hover information at the given line and column in the given file. Wait for the response and return the result.
@@ -1096,12 +1135,12 @@ class SolidLanguageServer(ABC):
 
         assert isinstance(response, dict)
 
-        return multilspy_types.Hover(**response)
+        return ls_types.Hover(**response)
 
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
 
     def retrieve_symbol_body(
-        self, symbol: multilspy_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation
+        self, symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation
     ) -> str:
         """
         Load the body of the given symbol. If the body is already contained in the symbol, just return it.
@@ -1130,7 +1169,7 @@ class SolidLanguageServer(ABC):
                 "request_parsed_files called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
         rel_file_paths = []
         for root, dirs, files in os.walk(self.repository_root_path):
             dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
@@ -1205,7 +1244,7 @@ class SolidLanguageServer(ABC):
                 "request_referencing_symbols called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
 
         # First, get all references to the symbol
         references = self.request_references(relative_file_path, line, column)
@@ -1242,7 +1281,7 @@ class SolidLanguageServer(ABC):
                         containing_symbol_name = ref_text.split(".")[0]
                         all_symbols, _ = self.request_document_symbols(ref_path)
                         for symbol in all_symbols:
-                            if symbol["name"] == containing_symbol_name and symbol["kind"] == multilspy_types.SymbolKind.Variable:
+                            if symbol["name"] == containing_symbol_name and symbol["kind"] == ls_types.SymbolKind.Variable:
                                 containing_symbol = copy(symbol)
                                 containing_symbol["location"] = ref
                                 containing_symbol["range"] = ref["range"]
@@ -1255,7 +1294,7 @@ class SolidLanguageServer(ABC):
                         logging.WARNING,
                     )
                     fileRange = self._get_range_from_file_content(file_data.contents)
-                    location = multilspy_types.Location(
+                    location = ls_types.Location(
                         uri=str(pathlib.Path(os.path.join(self.repository_root_path, ref_path)).as_uri()),
                         range=fileRange,
                         absolutePath=str(os.path.join(self.repository_root_path, ref_path)),
@@ -1268,8 +1307,8 @@ class SolidLanguageServer(ABC):
                     else:
                         body = ""
 
-                    containing_symbol = multilspy_types.UnifiedSymbolInformation(
-                        kind=multilspy_types.SymbolKind.File,
+                    containing_symbol = ls_types.UnifiedSymbolInformation(
+                        kind=ls_types.SymbolKind.File,
                         range=fileRange,
                         selectionRange=fileRange,
                         location=location,
@@ -1277,7 +1316,7 @@ class SolidLanguageServer(ABC):
                         children=[],
                         body=body,
                     )
-                if containing_symbol is None or (not include_file_symbols and containing_symbol["kind"] == multilspy_types.SymbolKind.File):
+                if containing_symbol is None or (not include_file_symbols and containing_symbol["kind"] == ls_types.SymbolKind.File):
                     continue
 
                 assert "location" in containing_symbol
@@ -1324,7 +1363,7 @@ class SolidLanguageServer(ABC):
         column: int | None = None,
         strict: bool = False,
         include_body: bool = False,
-    ) -> multilspy_types.UnifiedSymbolInformation | None:
+    ) -> ls_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
         For Python, container symbols are considered to be those with kinds corresponding to
@@ -1370,7 +1409,7 @@ class SolidLanguageServer(ABC):
         for symbol in symbols:
             if "location" not in symbol:
                 range = symbol["range"]
-                location = multilspy_types.Location(
+                location = ls_types.Location(
                     uri=f"file:/{absolute_file_path}",
                     range=range,
                     absolutePath=absolute_file_path,
@@ -1385,9 +1424,9 @@ class SolidLanguageServer(ABC):
                 location["uri"] = Path(absolute_file_path).as_uri()
 
         # Allowed container kinds, currently only for Python
-        container_symbol_kinds = {multilspy_types.SymbolKind.Method, multilspy_types.SymbolKind.Function, multilspy_types.SymbolKind.Class}
+        container_symbol_kinds = {ls_types.SymbolKind.Method, ls_types.SymbolKind.Function, ls_types.SymbolKind.Class}
 
-        def is_position_in_range(line: int, range_d: multilspy_types.Range) -> bool:
+        def is_position_in_range(line: int, range_d: ls_types.Range) -> bool:
             start = range_d["start"]
             end = range_d["end"]
 
@@ -1408,7 +1447,7 @@ class SolidLanguageServer(ABC):
             for s in symbols
             if s["kind"] in container_symbol_kinds and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
         ]
-        var_containers = [s for s in symbols if s["kind"] == multilspy_types.SymbolKind.Variable]
+        var_containers = [s for s in symbols if s["kind"] == ls_types.SymbolKind.Variable]
         candidate_containers.extend(var_containers)
 
         if not candidate_containers:
@@ -1432,8 +1471,8 @@ class SolidLanguageServer(ABC):
             return None
 
     def request_container_of_symbol(
-        self, symbol: multilspy_types.UnifiedSymbolInformation, include_body: bool = False
-    ) -> multilspy_types.UnifiedSymbolInformation | None:
+        self, symbol: ls_types.UnifiedSymbolInformation, include_body: bool = False
+    ) -> ls_types.UnifiedSymbolInformation | None:
         """
         Finds the container of the given symbol if there is one. If the parent attribute is present, the parent is returned
         without further searching.
@@ -1459,7 +1498,7 @@ class SolidLanguageServer(ABC):
         line: int,
         column: int,
         include_body: bool = False,
-    ) -> multilspy_types.UnifiedSymbolInformation | None:
+    ) -> ls_types.UnifiedSymbolInformation | None:
         """
         Finds the symbol that defines the symbol at the given location.
 
@@ -1477,7 +1516,7 @@ class SolidLanguageServer(ABC):
                 "request_defining_symbol called before Language Server started",
                 logging.ERROR,
             )
-            raise MultilspyException("Language Server not started")
+            raise LanguageServerException("Language Server not started")
 
         # Get the definition location(s)
         definitions = self.request_definition(relative_file_path, line, column)
@@ -1557,7 +1596,7 @@ class SolidLanguageServer(ABC):
                     logging.ERROR,
                 )
 
-    def request_workspace_symbol(self, query: str) -> list[multilspy_types.UnifiedSymbolInformation] | None:
+    def request_workspace_symbol(self, query: str) -> list[ls_types.UnifiedSymbolInformation] | None:
         """
         Raise a [workspace/symbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#workspace_symbol) request to the Language Server
         to find symbols across the whole workspace. Wait for the response and return the result.
@@ -1572,7 +1611,7 @@ class SolidLanguageServer(ABC):
 
         assert isinstance(response, list)
 
-        ret: list[multilspy_types.UnifiedSymbolInformation] = []
+        ret: list[ls_types.UnifiedSymbolInformation] = []
         for item in response:
             assert isinstance(item, dict)
 
@@ -1580,7 +1619,7 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.KIND in item
             assert LSPConstants.LOCATION in item
 
-            ret.append(multilspy_types.UnifiedSymbolInformation(**item))
+            ret.append(ls_types.UnifiedSymbolInformation(**item))
 
         return ret
 
