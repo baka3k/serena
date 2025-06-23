@@ -414,7 +414,7 @@ For more information on MCP servers with Claude Desktop, see [the official quick
 Being an MCP Server, Serena can be included in any MCP Client. The same configuration as above,
 perhaps with small client-specific modifications, should work. Most of the popular
 existing coding assistants (IDE extensions or VSCode-like IDEs) support connections
-to MCP Servers. It is ** recommended to use the `ide-assistant` context** for these integrations by adding `"--context", "ide-assistant"` to the `args` in your MCP client's configuration. Including Serena generally boosts their performance
+to MCP Servers. It is **recommended to use the `ide-assistant` context** for these integrations by adding `"--context", "ide-assistant"` to the `args` in your MCP client's configuration. Including Serena generally boosts their performance
 by providing them tools for symbolic operations.
 
 In this case, the billing for the usage continues to be controlled by the client of your choice
@@ -422,8 +422,8 @@ In this case, the billing for the usage continues to be controlled by the client
 e.g., for one of the following reasons:
 
 1. You are already using a coding assistant (say Cline or Cursor) and just want to make it more powerful.
-2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian)
-3. You want tighter integration of Serena into your IDE and don't mind paying for that
+2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian).
+3. You want tighter integration of Serena into your IDE and don't mind paying for that.
 
 ### Agno Agent
 
