@@ -1693,27 +1693,16 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         r"""
         Replaces the body of the symbol with the given `name_path`.
 
-        Important:
-        You don't need to provide an adjusted indentation,
-        as the tool will automatically add the indentation of the original symbol to each line. For example,
-        for replacing a method in python, you can just write (using the standard python indentation):
-        body="def my_method_replacement(self, ...):\n    first_line\n    second_line...". So each line after the first line only has
-        an indentation of 4 (the indentation relative to the first character),
-        since the additional indentation will be added by the tool. Same for more deeply nested
-        cases. You always only need to write the relative indentation to the first character of the first line, and that
-        in turn should not have any indentation.
-        ALWAYS REMEMBER TO USE THE CORRECT INDENTATION IN THE BODY!
-
         :param name_path: for finding the symbol to replace, same logic as in the `find_symbol` tool.
         :param relative_path: the relative path to the file containing the symbol
-        :param body: the new symbol body.
-
+        :param body: the new symbol body. Important: Begin directly with the symbol definition and provide no
+            leading indentation for the first line (but do indent the rest of the body according to the context).
         """
         self.symbol_manager.replace_body(
             name_path,
             relative_file_path=relative_path,
             body=body,
-            use_same_indentation=True,
+            use_same_indentation=False,
         )
         return SUCCESS_RESULT
 
@@ -1733,17 +1722,12 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         Inserts the given body/content after the end of the definition of the given symbol (via the symbol's location).
         A typical use case is to insert a new class, function, method, field or variable assignment.
 
-        :param name_path: for finding the symbol to insert after, same logic as in the `find_symbol` tool.
+        :param name_path: name path of the symbol after which to insert content (definitions in the `find_symbol` tool apply)
         :param relative_path: the relative path to the file containing the symbol
-        :param body: the body/content to be inserted. Important: the inserted code will automatically have the
-            same indentation as the symbol's body, so you do not need to provide any additional indentation.
+        :param body: the body/content to be inserted. The inserted code shall begin with the next line after
+            the symbol.
         """
-        self.symbol_manager.insert_after_symbol(
-            name_path,
-            relative_file_path=relative_path,
-            body=body,
-            use_same_indentation=True,
-        )
+        self.symbol_manager.insert_after_symbol(name_path, relative_file_path=relative_path, body=body, use_same_indentation=False)
         return SUCCESS_RESULT
 
 
@@ -1763,17 +1747,11 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         A typical use case is to insert a new class, function, method, field or variable assignment.
         It also can be used to insert a new import statement before the first symbol in the file.
 
-        :param name_path: for finding the symbol to insert before, same logic as in the `find_symbol` tool.
+        :param name_path: name path of the symbol before which to insert content (definitions in the `find_symbol` tool apply)
         :param relative_path: the relative path to the file containing the symbol
-        :param body: the body/content to be inserted. Important: the inserted code will automatically have the
-            same indentation as the symbol's body, so you do not need to provide any additional indentation.
+        :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        self.symbol_manager.insert_before_symbol(
-            name_path,
-            relative_file_path=relative_path,
-            body=body,
-            use_same_indentation=True,
-        )
+        self.symbol_manager.insert_before_symbol(name_path, relative_file_path=relative_path, body=body, use_same_indentation=False)
         return SUCCESS_RESULT
 
 

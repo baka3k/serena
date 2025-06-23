@@ -23,8 +23,7 @@ prompt: |
   use `find_symbol` with the name path `Foo/__init__` and `include_body=True`. If you don't know yet which methods in `Foo` you need to read or edit,
   you can use `find_symbol` with the name path `Foo`, `include_body=False` and `depth=1` to get all (top-level) methods of `Foo` before proceeding
   to read the desired methods with `include_body=True`.
-  Note that you never need to add additional indentation, as all symbol editing tools will automatically add the indentation of the symbol that
-  you are replacing or inserting above or below. In particular, keep in mind the description of the `replace_symbol_body` tool. If you want to add some new code at the end of the file, you should
+  In particular, keep in mind the description of the `replace_symbol_body` tool. If you want to add some new code at the end of the file, you should
   use the `insert_after_symbol` tool with the last top-level symbol in the file. If you want to add an import, often a good strategy is to use
   `insert_before_symbol` with the first top-level symbol in the file.
   You can understand relationships between symbols by using the `find_referencing_symbols` tool. If not explicitly requested otherwise by a user,

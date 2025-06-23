@@ -13,6 +13,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows
 * Fix project activation by name via `--project` not working (was broken in previous release) 
+* Improve handling of indentation and newlines in symbolic editing tools
+* Fix that `insert_after_symbol` was failing for insertions at the end of a file that did not end with a newline
 
 # 2025-06-20
 

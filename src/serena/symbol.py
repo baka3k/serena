@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Reversible, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
@@ -255,6 +255,13 @@ class Symbol(ToStringMixin):
     @property
     def symbol_kind(self) -> SymbolKind:
         return self.symbol_root["kind"]
+
+    def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
+        """
+        :return: whether a symbol definition of this symbol's kind is usually separated from the
+            previous/next definition by at least one empty line.
+        """
+        return self.symbol_kind in (SymbolKind.Function, SymbolKind.Method, SymbolKind.Class, SymbolKind.Interface, SymbolKind.Struct)
 
     @property
     def relative_path(self) -> str | None:
@@ -689,26 +696,36 @@ class SymbolManager:
             if start_pos is None or end_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined body range.")
             start_line, start_col = start_pos["line"], start_pos["character"]
+
             if use_same_indentation:
                 indent = " " * start_col
                 body_lines = body.splitlines()
                 body = body_lines[0] + "\n" + "\n".join(indent + line for line in body_lines[1:])
 
-            # make sure body always ends with at least one newline
-            if not body.endswith("\n"):
-                body += "\n"
+            # make sure the replacement adds no additional newlines (before or after) - all newlines
+            # and whitespace before/after should remain the same, so we strip it entirely
+            body = body.strip()
+
             self._lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
             self._lang_server.insert_text_at_position(location.relative_path, start_line, start_col, body)
 
-    def insert_after_symbol(
-        self,
-        name_path: str,
-        relative_file_path: str,
-        body: str,
-        *,
-        use_same_indentation: bool = True,
-        at_new_line: bool = True,
-    ) -> None:
+    @staticmethod
+    def _count_leading_newlines(text: Iterable) -> int:
+        cnt = 0
+        for c in text:
+            if c == "\n":
+                cnt += 1
+            elif c == "\r":
+                continue
+            else:
+                break
+        return cnt
+
+    @classmethod
+    def _count_trailing_newlines(cls, text: Reversible) -> int:
+        return cls._count_leading_newlines(reversed(text))
+
+    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
         """
         Inserts content after the symbol with the given name in the given file.
         """
@@ -722,13 +739,9 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[-1]
-        return self.insert_after_symbol_at_location(
-            symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation
-        )
+        return self.insert_after_symbol_at_location(symbol.location, body, use_same_indentation=use_same_indentation)
 
-    def insert_after_symbol_at_location(
-        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True
-    ) -> None:
+    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, use_same_indentation: bool = True) -> None:
         """
         Appends content after the given symbol
 
@@ -750,12 +763,23 @@ class SymbolManager:
         if pos is None:
             raise ValueError(f"Symbol at {location} does not have a defined end position.")
 
-        line, col = pos["line"], pos["character"]
-        if at_new_line:
-            line += 1
-            col = 0
-            if not body.startswith("\n"):
-                body = "\n" + body
+        # start at the beginning of the next line
+        col = 0
+        line = pos["line"] + 1
+        # make sure a suitable number of leading empty lines is used (at least 0/1 depending on the symbol type,
+        # otherwise as many as the caller wanted to insert)
+        original_leading_newlines = self._count_leading_newlines(body)
+        body = body.lstrip("\r\n")
+        min_empty_lines = 0
+        if symbol.is_neighbouring_definition_separated_by_empty_line():
+            min_empty_lines = 1
+        num_leading_empty_lines = max(min_empty_lines, original_leading_newlines)
+        if num_leading_empty_lines:
+            body = ("\n" * num_leading_empty_lines) + body
+        # make sure the one line break succeeding the original symbol, which we repurposed as prefix via
+        # `line += 1`, is replaced
+        body = body.rstrip("\r\n") + "\n"
+
         if use_same_indentation:
             symbol_start_pos = symbol.body_start_position
             assert symbol_start_pos is not None, f"Symbol at {location=} does not have a defined start position."
@@ -778,20 +802,11 @@ class SymbolManager:
             # > test test
             # > second line
             # > dataclass_instance.status = "active"  # Reassign dataclass field
-            col = 0
 
         with self._edited_symbol_location(location):
             self._lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
 
-    def insert_before_symbol(
-        self,
-        name_path: str,
-        relative_file_path: str,
-        body: str,
-        *,
-        at_new_line: bool = True,
-        use_same_indentation: bool = True,
-    ) -> None:
+    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
         """
         Inserts content before the symbol with the given name in the given file.
         """
@@ -805,11 +820,9 @@ class SymbolManager:
                 f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         symbol = symbol_candidates[0]
-        self.insert_before_symbol_at_location(symbol.location, body, at_new_line=at_new_line, use_same_indentation=use_same_indentation)
+        self.insert_before_symbol_at_location(symbol.location, body, use_same_indentation=use_same_indentation)
 
-    def insert_before_symbol_at_location(
-        self, location: SymbolLocation, body: str, *, at_new_line: bool = True, use_same_indentation: bool = True
-    ) -> None:
+    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, use_same_indentation: bool = True) -> None:
         """
         Inserts content before the given symbol
 
@@ -820,18 +833,28 @@ class SymbolManager:
             symbol_start_pos = symbol.body_start_position
             if symbol_start_pos is None:
                 raise ValueError(f"Symbol at {location} does not have a defined start position.")
-            line = symbol_start_pos["line"]
-            col = symbol_start_pos["character"]
+
             if use_same_indentation:
-                indent = " " * (col)
+                indent = " " * (symbol_start_pos["character"])
                 body = "\n".join(indent + line for line in body.splitlines())
 
-            # similar problems as in insert_after_symbol_at_location, see comment there
-            if at_new_line:
-                col = 0
-                line -= 1
-                if not body.endswith("\n"):
-                    body += "\n"
+            # insert position is the start of line where the symbol is defined
+            line = symbol_start_pos["line"]
+            col = 0
+
+            original_trailing_empty_lines = self._count_trailing_newlines(body) - 1
+
+            # ensure eol is present at end
+            body = body.rstrip() + "\n"
+
+            # add suitable number of trailing empty lines after the body (at least 0/1 depending on the symbol type,
+            # otherwise as many as the caller wanted to insert)
+            min_trailing_empty_lines = 0
+            if symbol.is_neighbouring_definition_separated_by_empty_line():
+                min_trailing_empty_lines = 1
+            num_trailing_newlines = max(min_trailing_empty_lines, original_trailing_empty_lines)
+            body += "\n" * num_trailing_newlines
+
             assert location.relative_path is not None
 
             self._lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
