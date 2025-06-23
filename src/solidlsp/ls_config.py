@@ -1,5 +1,5 @@
 """
-Configuration parameters for Multilspy.
+Configuration objects for language servers
 """
 
 import fnmatch
