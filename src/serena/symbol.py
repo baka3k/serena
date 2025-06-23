@@ -767,7 +767,7 @@ class SymbolManager:
         col = 0
         line = pos["line"] + 1
         # make sure a suitable number of leading empty lines is used (at least 0/1 depending on the symbol type,
-        # otherweise as many as the caller wanted to insert)
+        # otherwise as many as the caller wanted to insert)
         original_leading_newlines = self._count_leading_newlines(body)
         body = body.lstrip("\r\n")
         min_empty_lines = 0
