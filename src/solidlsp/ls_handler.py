@@ -28,8 +28,8 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from solidlsp.multilspy_exceptions import MultilspyException
 from solidlsp.lsp_request import SolidLspRequest
+from solidlsp.multilspy_exceptions import MultilspyException
 
 log = logging.getLogger(__name__)
 

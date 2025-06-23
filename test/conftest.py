@@ -6,11 +6,11 @@ import pytest
 from sensai.util.logging import configure
 
 from multilspy.language_server import SyncLanguageServer
-from solidlsp.multilspy_config import Language, MultilspyConfig
-from solidlsp.multilspy_logger import MultilspyLogger
 from serena.constants import USE_SOLID_LSP
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.multilspy_config import Language, MultilspyConfig
+from solidlsp.multilspy_logger import MultilspyLogger
 
 configure(level=logging.DEBUG)
 

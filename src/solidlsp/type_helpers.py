@@ -3,14 +3,15 @@ This module provides type-helpers used across multilspy implementation
 """
 
 import inspect
-
-from typing import Callable, TypeVar, Type
+from collections.abc import Callable
+from typing import TypeVar
 
 R = TypeVar("R", bound=object)
 
+
 def ensure_all_methods_implemented(
-    source_cls: Type[object],
-) -> Callable[[Type[R]], Type[R]]:
+    source_cls: type[object],
+) -> Callable[[type[R]], type[R]]:
     """
     A decorator to ensure that all methods of source_cls class are implemented in the decorated class.
     """

@@ -34,9 +34,6 @@ from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
 from multilspy import SyncLanguageServer
-from solidlsp.multilspy_config import Language, MultilspyConfig
-from solidlsp.multilspy_logger import MultilspyLogger
-from solidlsp.multilspy_types import SymbolKind
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import (
@@ -57,6 +54,9 @@ from serena.util.inspection import determine_programming_language_composition, i
 from serena.util.shell import execute_shell_command
 from serena.util.thread import ExecutionResult, execute_with_timeout
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.multilspy_config import Language, MultilspyConfig
+from solidlsp.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_types import SymbolKind
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler

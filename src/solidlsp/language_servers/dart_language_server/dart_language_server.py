@@ -4,10 +4,10 @@ import os
 import pathlib
 import stat
 
+from solidlsp.ls import SolidLanguageServer
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.multilspy_logger import MultilspyLogger
 from solidlsp.multilspy_utils import FileUtils, PlatformUtils
-from solidlsp.ls import SolidLanguageServer
 
 
 class DartLanguageServer(SolidLanguageServer):

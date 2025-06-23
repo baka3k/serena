@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from solidlsp.multilspy_config import Language
 from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfigBase
 from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
+from solidlsp.multilspy_config import Language
 from test.conftest import get_repo_path
 
 

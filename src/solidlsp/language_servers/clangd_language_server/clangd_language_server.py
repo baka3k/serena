@@ -9,12 +9,12 @@ import pathlib
 import stat
 import threading
 
+from solidlsp.ls import SolidLanguageServer
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.multilspy_config import MultilspyConfig
 from solidlsp.multilspy_logger import MultilspyLogger
 from solidlsp.multilspy_utils import FileUtils, PlatformUtils
-from solidlsp.ls import SolidLanguageServer
 
 
 class ClangdLanguageServer(SolidLanguageServer):

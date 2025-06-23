@@ -10,8 +10,8 @@ import os
 import pytest
 
 from multilspy.language_server import SyncLanguageServer
-from solidlsp.multilspy_config import Language
 from serena.text_utils import LineType
+from solidlsp.multilspy_config import Language
 
 
 @pytest.mark.python

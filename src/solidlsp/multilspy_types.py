@@ -4,16 +4,19 @@ Defines wrapper objects around the types returned by LSP to ensure decoupling be
 
 from __future__ import annotations
 
-from enum import IntEnum, Enum
-from typing_extensions import NotRequired, TypedDict, List, Dict, Union
+from enum import Enum, IntEnum
+from typing import NotRequired, Union
+
+from typing_extensions import TypedDict
 
 URI = str
 DocumentUri = str
 Uint = int
 RegExp = str
 
+
 class Position(TypedDict):
-    """Position in a text document expressed as zero-based line and character
+    r"""Position in a text document expressed as zero-based line and character
     offset. Prior to 3.17 the offsets were always based on a UTF-16 string
     representation. So a string of the form `a𐐀b` the character offset of the
     character `a` is 0, the character offset of `𐐀` is 1 and the character
@@ -39,7 +42,8 @@ class Position(TypedDict):
     Positions are line end character agnostic. So you can not specify a position
     that denotes `\r|\n` or `\n|` where `|` represents the character offset.
 
-    @since 3.17.0 - support for negotiated position encoding."""
+    @since 3.17.0 - support for negotiated position encoding.
+    """
 
     line: Uint
     """ Line position in a document (zero-based).
@@ -67,7 +71,8 @@ class Range(TypedDict):
         start: { line: 5, character: 23 }
         end : { line 6, character : 0 }
     }
-    ```"""
+    ```
+    """
 
     start: Position
     """ The range's start position. """
@@ -77,12 +82,14 @@ class Range(TypedDict):
 
 class Location(TypedDict):
     """Represents a location inside a resource, such as a line
-    inside a text file."""
+    inside a text file.
+    """
 
     uri: DocumentUri
     range: Range
     absolutePath: str
-    relativePath: Union[str, None]
+    relativePath: str | None
+
 
 class CompletionItemKind(IntEnum):
     """The kind of a completion entry."""
@@ -113,9 +120,11 @@ class CompletionItemKind(IntEnum):
     Operator = 24
     TypeParameter = 25
 
+
 class CompletionItem(TypedDict):
     """A completion item represents a text snippet that is
-    proposed to complete text that is being typed."""
+    proposed to complete text that is being typed.
+    """
 
     completionText: str
     """ The completionText of this completion item.
@@ -130,6 +139,7 @@ class CompletionItem(TypedDict):
     detail: NotRequired[str]
     """ A human-readable string with additional information
     about this item, like type or symbol information. """
+
 
 class SymbolKind(IntEnum):
     """A symbol kind."""
@@ -161,17 +171,21 @@ class SymbolKind(IntEnum):
     Operator = 25
     TypeParameter = 26
 
+
 class SymbolTag(IntEnum):
     """Symbol tags are extra annotations that tweak the rendering of a symbol.
 
-    @since 3.16"""
+    @since 3.16
+    """
 
     Deprecated = 1
     """ Render a symbol as obsolete, usually using a strike-out. """
 
+
 class UnifiedSymbolInformation(TypedDict):
     """Represents information about programming constructs like variables, classes,
-    interfaces etc."""
+    interfaces etc.
+    """
 
     deprecated: NotRequired[bool]
     """ Indicates if this symbol is deprecated.
@@ -191,7 +205,7 @@ class UnifiedSymbolInformation(TypedDict):
     """ The name of this symbol. """
     kind: SymbolKind
     """ The kind of this symbol. """
-    tags: NotRequired[List[SymbolTag]]
+    tags: NotRequired[list[SymbolTag]]
     """ Tags for this symbol.
 
     @since 3.16.0 """
@@ -207,7 +221,7 @@ class UnifiedSymbolInformation(TypedDict):
 
     detail: NotRequired[str]
     """ More detail for this symbol, e.g the signature of a function. """
-    
+
     range: NotRequired[Range]
     """ The range enclosing this symbol not including leading/trailing whitespace but everything else
     like comments. This information is typically used to determine if the clients cursor is
@@ -215,36 +229,39 @@ class UnifiedSymbolInformation(TypedDict):
     selectionRange: NotRequired[Range]
     """ The range that should be selected and revealed when this symbol is being picked, e.g the name of a function.
     Must be contained by the `range`. """
-    
+
     body: NotRequired[str]
     """ The body of the symbol. """
-    
-    children: List[UnifiedSymbolInformation]
+
+    children: list[UnifiedSymbolInformation]
     """ The children of the symbol. 
     Added to be compatible with `lsp_types.DocumentSymbol`, 
     since it is sometimes useful to have the children of the symbol as a user-facing feature."""
-    
+
     parent: NotRequired[UnifiedSymbolInformation | None]
     """The parent of the symbol, if there is any. Added with Serena, not part of the LSP.
     All symbols except the root packages will have a parent.
     """
-    
+
 
 class MarkupKind(Enum):
     """Describes the content type that a client supports in various
     result literals like `Hover`, `ParameterInfo` or `CompletionItem`.
 
     Please note that `MarkupKinds` must not start with a `$`. This kinds
-    are reserved for internal usage."""
+    are reserved for internal usage.
+    """
 
     PlainText = "plaintext"
     """ Plain text is supported as a content format """
     Markdown = "markdown"
     """ Markdown is supported as a content format """
 
+
 class __MarkedString_Type_1(TypedDict):
     language: str
     value: str
+
 
 MarkedString = Union[str, "__MarkedString_Type_1"]
 """ MarkedString can be used to render human readable text. It is either a markdown string
@@ -260,8 +277,9 @@ ${value}
 Note that markdown strings will be sanitized - that means html will be escaped.
 @deprecated use MarkupContent instead. """
 
+
 class MarkupContent(TypedDict):
-    """A `MarkupContent` literal represents a string value which content is interpreted base on its
+    r"""A `MarkupContent` literal represents a string value which content is interpreted base on its
     kind flag. Currently the protocol supports `plaintext` and `markdown` as markup kinds.
 
     If the kind is `markdown` then the value can contain fenced code blocks like in GitHub issues.
@@ -282,18 +300,20 @@ class MarkupContent(TypedDict):
     ```
 
     *Please Note* that clients might sanitize the return markdown. A client could decide to
-    remove HTML from the markdown to avoid script execution."""
+    remove HTML from the markdown to avoid script execution.
+    """
 
-    kind: "MarkupKind"
+    kind: MarkupKind
     """ The type of the Markup """
     value: str
     """ The content itself """
 
+
 class Hover(TypedDict):
     """The result of a hover request."""
 
-    contents: Union["MarkupContent", "MarkedString", List["MarkedString"]]
+    contents: MarkupContent | MarkedString | list[MarkedString]
     """ The hover's content """
-    range: NotRequired["Range"]
+    range: NotRequired[Range]
     """ An optional range inside the text document that is used to
     visualize the hover, e.g. by changing the background color. """
