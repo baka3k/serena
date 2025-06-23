@@ -36,7 +36,7 @@ from serena.agent import (
     show_fatal_exception_safe,
 )
 from serena.config import RegisteredContext, SerenaAgentContext, SerenaAgentMode
-from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, USE_SOLID_LSP, USE_PROCESS_ISOLATION
+from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, USE_PROCESS_ISOLATION
 from serena.process_isolated_agent import (
     ProcessIsolatedDashboard,
     ProcessIsolatedSerenaAgent,

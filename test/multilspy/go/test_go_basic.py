@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from solidlsp import SolidLanguageServer as SyncLanguageServer
+from solidlsp import SolidLanguageServer
 from solidlsp.multilspy_config import Language
 from solidlsp.multilspy_utils import SymbolUtils
 
@@ -10,14 +10,14 @@ from solidlsp.multilspy_utils import SymbolUtils
 @pytest.mark.go
 class TestGoLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)
-    def test_find_symbol(self, language_server: SyncLanguageServer) -> None:
+    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main function not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Helper"), "Helper function not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "DemoStruct"), "DemoStruct not found in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)
-    def test_find_referencing_symbols(self, language_server: SyncLanguageServer) -> None:
+    def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("main.go")
         symbols = language_server.request_document_symbols(file_path)
         helper_symbol = None

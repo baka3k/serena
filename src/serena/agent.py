@@ -51,8 +51,7 @@ from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
 from serena.util.thread import ExecutionResult, execute_with_timeout
-from solidlsp import SolidLanguageServer as SyncLanguageServer
-from solidlsp.ls import SolidLanguageServer
+from solidlsp import SolidLanguageServer
 from solidlsp.multilspy_config import Language, MultilspyConfig
 from solidlsp.multilspy_logger import MultilspyLogger
 from solidlsp.multilspy_types import SymbolKind
@@ -640,7 +639,7 @@ def create_ls_for_project(
     log_level: int = logging.INFO,
     ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
     trace_lsp_communication: bool = False,
-) -> SyncLanguageServer:
+) -> SolidLanguageServer:
     """
     Create a language server for a project. Note that you will have to start it
     before performing any LS operations.
@@ -789,7 +788,7 @@ class SerenaAgent:
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
         self._active_project_root: str | None = None
-        self.language_server: SyncLanguageServer | None = None
+        self.language_server: SolidLanguageServer | None = None
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
@@ -1135,7 +1134,7 @@ class Component(ABC):
         self.agent = agent
 
     @property
-    def language_server(self) -> SyncLanguageServer:
+    def language_server(self) -> SolidLanguageServer:
         assert self.agent.language_server is not None
         return self.agent.language_server
 

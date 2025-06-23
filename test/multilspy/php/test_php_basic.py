@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from solidlsp import SolidLanguageServer as SyncLanguageServer
+from solidlsp import SolidLanguageServer
 from solidlsp.multilspy_config import Language
 
 
@@ -10,7 +10,7 @@ from solidlsp.multilspy_config import Language
 class TestPhpLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
-    def test_ls_is_running(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
+    def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that the language server starts and stops successfully."""
         # The fixture already handles start and stop
         assert language_server.is_running()
@@ -18,7 +18,7 @@ class TestPhpLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
-    def test_find_definition_within_file(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
+    def test_find_definition_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
 
         # In index.php:
         # Line 9 (1-indexed): $greeting = greet($userName);
@@ -41,7 +41,7 @@ class TestPhpLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
-    def test_find_definition_across_files(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
+    def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         definition_location_list = language_server.request_definition(str(repo_path / "index.php"), 12, 5)  # helperFunction
 
         assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
@@ -53,7 +53,7 @@ class TestPhpLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
-    def test_find_definition_simple_variable(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
+    def test_find_definition_simple_variable(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         file_path = str(repo_path / "simple_var.php")
 
         # In simple_var.php:
@@ -74,7 +74,7 @@ class TestPhpLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
-    def test_find_references_within_file(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
+    def test_find_references_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         index_php_path = str(repo_path / "index.php")
 
         # In index.php (0-indexed lines):
@@ -108,7 +108,7 @@ class TestPhpLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
-    def test_find_references_across_files(self, language_server: SyncLanguageServer, repo_path: Path) -> None:
+    def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         helper_php_path = str(repo_path / "helper.php")
         # In index.php (0-indexed lines):
         # Line 13: helperFunction(); // Usage of helperFunction

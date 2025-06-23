@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from solidlsp import SolidLanguageServer as SyncLanguageServer
+from solidlsp import SolidLanguageServer
 from solidlsp.multilspy_config import Language
 from test.conftest import create_ls
 
@@ -12,7 +12,7 @@ pytestmark = pytest.mark.python
 
 
 @pytest.fixture(scope="module")
-def ls_with_ignored_dirs() -> Generator[SyncLanguageServer, None, None]:
+def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the python test repo with the 'scripts' directory ignored."""
     ignored_paths = ["scripts", "custom_test"]
     ls = create_ls(ignored_paths=ignored_paths, language=Language.PYTHON)
@@ -24,7 +24,7 @@ def ls_with_ignored_dirs() -> Generator[SyncLanguageServer, None, None]:
 
 
 @pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
-def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
+def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory."""
     root = ls_with_ignored_dirs.request_full_symbol_tree()[0]
     root_children = root["children"]
@@ -33,7 +33,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
 
 
 @pytest.mark.parametrize("ls_with_ignored_dirs", [Language.PYTHON], indirect=True)
-def test_find_references_ignores_dir(ls_with_ignored_dirs: SyncLanguageServer):
+def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that find_references ignores the configured directory."""
     # Location of Item, which is referenced in scripts
     definition_file = "test_repo/models.py"
