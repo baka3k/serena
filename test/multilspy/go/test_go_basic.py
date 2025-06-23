@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from multilspy import SyncLanguageServer
+from solidlsp import SolidLanguageServer as SyncLanguageServer
 from solidlsp.multilspy_config import Language
 from solidlsp.multilspy_utils import SymbolUtils
 

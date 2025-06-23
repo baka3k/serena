@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 from sensai.util.logging import configure
 
-from multilspy.language_server import SyncLanguageServer
+from solidlsp import SolidLanguageServer as SyncLanguageServer
 from serena.constants import USE_SOLID_LSP
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer

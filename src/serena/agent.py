@@ -33,7 +33,7 @@ from sensai.util import logging
 from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
-from multilspy import SyncLanguageServer
+from solidlsp import SolidLanguageServer as SyncLanguageServer
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import (

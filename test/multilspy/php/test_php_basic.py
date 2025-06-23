@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from multilspy.language_server import SyncLanguageServer
+from solidlsp import SolidLanguageServer as SyncLanguageServer
 from solidlsp.multilspy_config import Language
 
 

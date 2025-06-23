@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
 from sensai.util.string import ToStringMixin
 
-from multilspy import SyncLanguageServer
-from multilspy.language_server import ReferenceInSymbol as LSPReferenceInSymbol
+from solidlsp import SolidLanguageServer as SyncLanguageServer
+from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
 
 if TYPE_CHECKING:
