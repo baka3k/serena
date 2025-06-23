@@ -1,4 +1,4 @@
-# language of the project (csharp, python, rust, java, typescript, javascript, go, cpp, or ruby)
+# language of the project (csharp, python, rust, java, typescript (also for js projects), go, cpp, or ruby)
 # Special requirements:
 #  * csharp: Requires the presence of a .sln file in the project folder.
 language: python
