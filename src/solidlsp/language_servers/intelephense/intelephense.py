@@ -16,7 +16,7 @@ from multilspy.lsp_protocol_handler.lsp_types import DefinitionParams, Initializ
 from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import PlatformUtils, PlatformId
+from multilspy.multilspy_utils import PlatformId, PlatformUtils
 from solidlsp.ls import SolidLanguageServer
 
 
@@ -24,14 +24,14 @@ class Intelephense(SolidLanguageServer):
     """
     Provides PHP specific instantiation of the LanguageServer class using Intelephense.
     """
-    
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         # For PHP projects, we should ignore:
         # - vendor: third-party dependencies managed by Composer
         # - node_modules: if the project has JavaScript components
         # - cache: commonly used for caching
-        return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"] 
+        return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
     def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
         """
@@ -50,17 +50,17 @@ class Intelephense(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy PHP at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
         runtime_dependencies = d.get("runtimeDependencies", [])
         intelephense_ls_dir = os.path.join(os.path.dirname(__file__), "static", "php-lsp")
-        
+
         # Verify both node and npm are installed
-        is_node_installed = shutil.which('node') is not None
+        is_node_installed = shutil.which("node") is not None
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which('npm') is not None
+        is_npm_installed = shutil.which("npm") is not None
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install intelephense if not already installed
@@ -75,11 +75,12 @@ class Intelephense(SolidLanguageServer):
                         check=True,
                         cwd=intelephense_ls_dir,
                         stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
+                        stderr=subprocess.DEVNULL,
                     )
                 else:
                     # On Unix-like systems, run as non-root user
                     import pwd
+
                     user = pwd.getpwuid(os.getuid()).pw_name
                     subprocess.run(
                         dependency["command"],
@@ -88,32 +89,26 @@ class Intelephense(SolidLanguageServer):
                         user=user,
                         cwd=intelephense_ls_dir,
                         stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
+                        stderr=subprocess.DEVNULL,
                     )
-        
+
         intelephense_executable_path = os.path.join(intelephense_ls_dir, "node_modules", ".bin", "intelephense")
         assert os.path.exists(intelephense_executable_path), "intelephense executable not found. Please install intelephense and try again."
-        
+
         return f"{intelephense_executable_path} --stdio"
 
     def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
         # Setup runtime dependencies before initializing
         intelephense_cmd = self.setup_runtime_dependencies(logger, config)
-        
-        super().__init__(
-            config,
-            logger,
-            repository_root_path,
-            ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path),
-            "php"
-        )
+
+        super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd=intelephense_cmd, cwd=repository_root_path), "php")
         self.request_id = 0
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]
@@ -135,6 +130,7 @@ class Intelephense(SolidLanguageServer):
 
     def _start_server(self):
         """Start Intelephense server process"""
+
         def register_capability_handler(params):
             return
 
@@ -184,7 +180,7 @@ class Intelephense(SolidLanguageServer):
         # The sleeping doesn't seem to be needed on all systems
         sleep(1)
         return super()._send_references_request(relative_file_path, line, column)
-    
+
     @override
     def _send_definition_request(self, definition_params: DefinitionParams):
         # TODO: same as above, also only a problem if the definition is in another file

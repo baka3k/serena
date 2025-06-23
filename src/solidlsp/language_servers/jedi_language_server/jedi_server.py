@@ -32,7 +32,7 @@ class JediServer(SolidLanguageServer):
             ProcessLaunchInfo(cmd="jedi-language-server", cwd=repository_root_path),
             "python",
         )
-        
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["venv", "__pycache__"]
@@ -41,7 +41,7 @@ class JediServer(SolidLanguageServer):
         """
         Returns the initialize params for the Jedi Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

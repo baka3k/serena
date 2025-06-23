@@ -51,8 +51,7 @@ class Solargraph(SolidLanguageServer):
         """
         Setup runtime dependencies for Solargraph.
         """
-
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -64,38 +63,40 @@ class Solargraph(SolidLanguageServer):
             ruby_version = result.stdout.strip()
             logger.log(f"Ruby version: {ruby_version}", logging.INFO)
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Error checking for Ruby installation: {e.stderr}")
-        except FileNotFoundError:
-            raise RuntimeError("Ruby is not installed. Please install Ruby before continuing.")
+            raise RuntimeError(f"Error checking for Ruby installation: {e.stderr}") from e
+        except FileNotFoundError as e:
+            raise RuntimeError("Ruby is not installed. Please install Ruby before continuing.") from e
 
         # Check if solargraph is installed
         try:
-            result = subprocess.run(["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path)
+            result = subprocess.run(
+                ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
+            )
             if result.stdout.strip() == "false":
                 logger.log("Installing Solargraph...", logging.INFO)
                 subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
-            
+
             # Get the gem executable path directly
             result = subprocess.run(["gem", "which", "solargraph"], check=True, capture_output=True, text=True, cwd=repository_root_path)
             gem_path = result.stdout.strip()
             bin_dir = os.path.join(os.path.dirname(os.path.dirname(gem_path)), "bin")
             executable_path = os.path.join(bin_dir, "solargraph")
-            
+
             if not os.path.exists(executable_path):
                 raise RuntimeError(f"Solargraph executable not found at {executable_path}")
-            
+
             # Ensure the executable has the right permissions
             os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IEXEC)
 
             return executable_path
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}")
+            raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Solargraph Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

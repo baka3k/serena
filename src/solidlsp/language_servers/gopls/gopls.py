@@ -18,7 +18,7 @@ class Gopls(SolidLanguageServer):
     """
     Provides Go specific instantiation of the LanguageServer class using gopls.
     """
-    
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         # For Go projects, we should ignore:
@@ -31,7 +31,7 @@ class Gopls(SolidLanguageServer):
     def _get_go_version():
         """Get the installed Go version or None if not found."""
         try:
-            result = subprocess.run(['go', 'version'], capture_output=True, text=True)
+            result = subprocess.run(["go", "version"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
@@ -42,7 +42,7 @@ class Gopls(SolidLanguageServer):
     def _get_gopls_version():
         """Get the installed gopls version or None if not found."""
         try:
-            result = subprocess.run(['gopls', 'version'], capture_output=True, text=True)
+            result = subprocess.run(["gopls", "version"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
@@ -57,8 +57,10 @@ class Gopls(SolidLanguageServer):
         """
         go_version = cls._get_go_version()
         if not go_version:
-            raise RuntimeError("Go is not installed. Please install Go from https://golang.org/doc/install and make sure it is added to your PATH.")
-        
+            raise RuntimeError(
+                "Go is not installed. Please install Go from https://golang.org/doc/install and make sure it is added to your PATH."
+            )
+
         gopls_version = cls._get_gopls_version()
         if not gopls_version:
             raise RuntimeError(
@@ -66,12 +68,12 @@ class Gopls(SolidLanguageServer):
                 "Please install gopls as described in https://pkg.go.dev/golang.org/x/tools/gopls#section-readme\n\n"
                 "After installation, make sure it is added to your PATH (it might be installed in a different location than Go)."
             )
-        
+
         return True
 
     def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
         self.setup_runtime_dependency()
-        
+
         super().__init__(
             config,
             logger,
@@ -86,7 +88,7 @@ class Gopls(SolidLanguageServer):
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]
@@ -108,6 +110,7 @@ class Gopls(SolidLanguageServer):
 
     def _start_server(self):
         """Start gopls server process"""
+
         def register_capability_handler(params):
             return
 

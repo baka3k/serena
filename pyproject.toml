@@ -83,7 +83,6 @@ target-version = [
 exclude = '''
 /(
     src/multilspy
-  | src/solidlsp
 )/
 '''
 
@@ -140,7 +139,6 @@ target-version = "py311"
 line-length = 140
 exclude = [
   "src/multilspy",
-  "src/solidlsp"
 ]
 
 [tool.ruff.format]
@@ -240,6 +238,9 @@ ignore = [
   "SIM110",  # requires use of any(...) instead of for-loop
   "G001",  # forbids str.format in log statements
   "E722",  # forbids unspecific except clause
+  "SIM105",  # forbids empty/general except clause
+  "SIM113",  # wants to enforce use of enumerate
+  "E712",  # forbids equality comparison with True/False
 ]
 unfixable = [
   "F841",

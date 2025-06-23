@@ -20,8 +20,7 @@ from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
 from multilspy.multilspy_config import MultilspyConfig
 from multilspy.multilspy_logger import MultilspyLogger
 from multilspy.multilspy_settings import MultilspySettings
-from multilspy.multilspy_utils import FileUtils
-from multilspy.multilspy_utils import PlatformUtils
+from multilspy.multilspy_utils import FileUtils, PlatformUtils
 from solidlsp.ls import SolidLanguageServer
 
 
@@ -51,7 +50,6 @@ class EclipseJDTLS(SolidLanguageServer):
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-
         runtime_dependency_paths = self.setupRuntimeDependencies(logger, config)
         self.runtime_dependency_paths = runtime_dependency_paths
 
@@ -66,9 +64,7 @@ class EclipseJDTLS(SolidLanguageServer):
         )
 
         # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
-        shared_cache_location = str(
-            PurePath(MultilspySettings.get_global_cache_directory(), "lsp", "EclipseJDTLS", "sharedIndex")
-        )
+        shared_cache_location = str(PurePath(MultilspySettings.get_global_cache_directory(), "lsp", "EclipseJDTLS", "sharedIndex"))
 
         jre_path = self.runtime_dependency_paths.jre_path
         lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
@@ -138,7 +134,7 @@ class EclipseJDTLS(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
 
         super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java")
-    
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         # Ignore common Java build directories from different build tools:
@@ -148,13 +144,13 @@ class EclipseJDTLS(SolidLanguageServer):
         # - IntelliJ IDEA: out, .idea
         # - General: classes, dist, lib
         return super().is_ignored_dirname(dirname) or dirname in [
-            "target",      # Maven
-            "build",       # Gradle
-            "bin",         # Eclipse
-            "out",         # IntelliJ IDEA
-            "classes",     # General
-            "dist",        # General
-            "lib"          # General
+            "target",  # Maven
+            "build",  # Gradle
+            "bin",  # Eclipse
+            "out",  # IntelliJ IDEA
+            "classes",  # General
+            "dist",  # General
+            "lib",  # General
         ]
 
     def setupRuntimeDependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> RuntimeDependencyPaths:
@@ -163,7 +159,7 @@ class EclipseJDTLS(SolidLanguageServer):
         """
         platformId = PlatformUtils.get_platform_id()
 
-        with open(str(PurePath(os.path.dirname(__file__), "runtime_dependencies.json")), "r", encoding="utf-8") as f:
+        with open(str(PurePath(os.path.dirname(__file__), "runtime_dependencies.json")), encoding="utf-8") as f:
             runtimeDependencies = json.load(f)
             del runtimeDependencies["_description"]
 
@@ -192,9 +188,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(gradle_path)
 
         dependency = runtimeDependencies["vscode-java"][platformId.value]
-        vscode_java_path = str(
-            PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"])
-        )
+        vscode_java_path = str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"]))
         os.makedirs(vscode_java_path, exist_ok=True)
         jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
         jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
@@ -211,9 +205,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 os.path.exists(jdtls_readonly_config_path),
             ]
         ):
-            FileUtils.download_and_extract_archive(
-                logger, dependency["url"], vscode_java_path, dependency["archiveType"]
-            )
+            FileUtils.download_and_extract_archive(logger, dependency["url"], vscode_java_path, dependency["archiveType"])
 
         os.chmod(jre_path, stat.S_IEXEC)
 
@@ -238,9 +230,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 os.path.exists(intellisense_members_path),
             ]
         ):
-            FileUtils.download_and_extract_archive(
-                logger, dependency["url"], intellicode_directory_path, dependency["archiveType"]
-            )
+            FileUtils.download_and_extract_archive(logger, dependency["url"], intellicode_directory_path, dependency["archiveType"])
 
         assert os.path.exists(intellicode_directory_path)
         assert os.path.exists(intellicode_jar_path)
@@ -262,7 +252,7 @@ class EclipseJDTLS(SolidLanguageServer):
         Returns the initialize parameters for the EclipseJDTLS server.
         """
         # Look into https://github.com/eclipse/eclipse.jdt.ls/blob/master/org.eclipse.jdt.ls.core/src/org/eclipse/jdt/ls/core/internal/preferences/Preferences.java to understand all the options available
-        with open(str(PurePath(os.path.dirname(__file__), "initialize_params.json")), "r", encoding="utf-8") as f:
+        with open(str(PurePath(os.path.dirname(__file__), "initialize_params.json")), encoding="utf-8") as f:
             d: InitializeParams = json.load(f)
 
         del d["_description"]
@@ -307,18 +297,12 @@ class EclipseJDTLS(SolidLanguageServer):
         for runtime in d["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
             assert "name" in runtime
             assert "path" in runtime
-            assert os.path.exists(
-                runtime["path"]
-            ), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
+            assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
         assert d["initializationOptions"]["settings"]["java"]["import"]["gradle"]["home"] == "abs(static/gradle-7.3.3)"
-        d["initializationOptions"]["settings"]["java"]["import"]["gradle"][
-            "home"
-        ] = self.runtime_dependency_paths.gradle_path
+        d["initializationOptions"]["settings"]["java"]["import"]["gradle"]["home"] = self.runtime_dependency_paths.gradle_path
 
-        d["initializationOptions"]["settings"]["java"]["import"]["gradle"]["java"][
-            "home"
-        ] = self.runtime_dependency_paths.jre_path
+        d["initializationOptions"]["settings"]["java"]["import"]["gradle"]["java"]["home"] = self.runtime_dependency_paths.jre_path
 
         return d
 
@@ -386,9 +370,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
-        self.server.notify.workspace_did_change_configuration(
-            {"settings": initialize_params["initializationOptions"]["settings"]}
-        )
+        self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})
 
         self.intellicode_enable_command_available.wait()
 
