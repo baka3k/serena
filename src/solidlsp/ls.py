@@ -144,7 +144,7 @@ class SolidLanguageServer(ABC):
 
             return OmniSharp(config, logger, repository_root_path)
 
-        elif config.code_language in [Language.TYPESCRIPT, Language.JAVASCRIPT]:
+        elif config.code_language == Language.TYPESCRIPT:
             from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
