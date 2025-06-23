@@ -2131,7 +2131,7 @@ class SearchForPatternTool(Tool):
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
-        only_in_code_files: bool = True,
+        restrict_search_to_code_files: bool = False,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
@@ -2144,15 +2144,22 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search; if not provided, search globally.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search (takes precedence over paths_include_glob).
-        :param only_in_code_files: whether to search only in code files or in the entire code base.
-            The explicitly ignored files (from serena config and gitignore) are never searched.
         :param max_answer_chars: if the output is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
+        :param restrict_search_to_code_files: whether to restrict the search to only those files where
+            analyzed code symbols can be found. Otherwise, will search all non-ignored files.
+            Set this to True if your search is only meant to discover code that can be manipulated with symbolic tools.
+            For example, for finding classes or methods from a name pattern.
+            Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
+            which is why it is the default.
         :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
         """
-        if only_in_code_files:
+        # this was previously a kwarg and was true by default
+        # However, the LLM doesn't really know which files are taken into account by the language server
+        # and which onees
+        if restrict_search_to_code_files:
             matches = self.language_server.search_files_for_pattern(
                 pattern=pattern,
                 context_lines_before=context_lines_before,
@@ -2165,6 +2172,7 @@ class SearchForPatternTool(Tool):
             project_root = self.get_project_root()
             rel_paths_to_search = []
             for root, dirs, files in os.walk(project_root):
+                # don't explore ignored dirs
                 dirs[:] = [d for d in dirs if not self.agent.path_is_gitignored(os.path.join(root, d))]
                 for file in files:
                     file_path = os.path.join(root, file)
