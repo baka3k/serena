@@ -1,11 +1,11 @@
 import json
 import logging
 import os
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Reversible, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union, Iterable, Reversible
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
 from sensai.util.string import ToStringMixin
 
@@ -781,13 +781,18 @@ class SymbolManager:
             # start at beginning of next line
             col = 0
             line += 1
-            # strip preceding newlines, re-adding one or more empty lines before the new symbol if appropriate
+            # make sure a suitable number of leading empty lines is used (at least 0/1 depending on the symbol type,
+            # otherweise as many as the caller wanted to insert)
             original_leading_newlines = self._count_leading_newlines(body)
             body = body.lstrip("\r\n")
+            min_empty_lines = 0
             if symbol.is_neighbouring_definition_separated_by_empty_line():
-                num_leading_newlines = max(1, original_leading_newlines)
-                body = ("\n" * num_leading_newlines) + body
-            # make sure the one line break succeeding the original symbol, which we repurposed as prefix, is replaced
+                min_empty_lines = 1
+            num_leading_empty_lines = max(min_empty_lines, original_leading_newlines)
+            if num_leading_empty_lines:
+                body = ("\n" * num_leading_empty_lines) + body
+            # make sure the one line break succeeding the original symbol, which we repurposed as prefix via
+            # `line += 1`, is replaced
             body = body.rstrip("\r\n") + "\n"
 
         if use_same_indentation:
@@ -866,10 +871,13 @@ class SymbolManager:
                 original_trailing_empty_lines = self._count_trailing_newlines(body) - 1
                 # ensure eol is present at end
                 body = body.rstrip() + "\n"
-                # add one or more empty lines if appropriate
+                # add suitable number of trailing empty lines after the body (at least 0/1 depending on the symbol type,
+                # otherwise as many as the caller wanted to insert)
+                min_trailing_empty_lines = 0
                 if symbol.is_neighbouring_definition_separated_by_empty_line():
-                    num_trailing_newlines = max(1, original_trailing_empty_lines)
-                    body += "\n" * num_trailing_newlines
+                    min_trailing_empty_lines = 1
+                num_trailing_newlines = max(min_trailing_empty_lines, original_trailing_empty_lines)
+                body += "\n" * num_trailing_newlines
 
             assert location.relative_path is not None
 
