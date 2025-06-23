@@ -73,7 +73,7 @@ google = [
 Homepage = "https://github.com/oraios/serena"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/serena", "src/multilspy", "src/interprompt", "src/solidlsp"]
+packages = ["src/serena", "src/interprompt", "src/solidlsp"]
 
 [tool.black]
 line-length = 140
@@ -82,7 +82,7 @@ target-version = [
 ]
 exclude = '''
 /(
-    src/multilspy
+    src/solidlsp/language_servers/.*/static,
 )/
 '''
 
@@ -138,7 +138,7 @@ type-check = [
 target-version = "py311"
 line-length = 140
 exclude = [
-  "src/multilspy",
+    "src/solidlsp/language_servers/**/static",
 ]
 
 [tool.ruff.format]

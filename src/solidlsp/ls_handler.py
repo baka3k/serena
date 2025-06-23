@@ -12,6 +12,8 @@ from typing import Any
 
 import psutil
 
+from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
 from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
 from solidlsp.lsp_protocol_handler.server import (
@@ -28,8 +30,6 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from solidlsp.ls_request import LanguageServerRequest
-from solidlsp.ls_exceptions import LanguageServerException
 
 log = logging.getLogger(__name__)
 

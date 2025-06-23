@@ -20,7 +20,11 @@ import tqdm
 
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import ls_types
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_exceptions import LanguageServerException
 from solidlsp.ls_handler import SolidLanguageServerHandler
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
@@ -30,10 +34,6 @@ from solidlsp.lsp_protocol_handler.server import (
     ProcessLaunchInfo,
     StringDict,
 )
-from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_exceptions import LanguageServerException
-from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
 
@@ -409,9 +409,7 @@ class SolidLanguageServer(ABC):
             )
             del self.open_file_buffers[uri]
 
-    def insert_text_at_position(
-        self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str
-    ) -> ls_types.Position:
+    def insert_text_at_position(self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str) -> ls_types.Position:
         """
         Insert text at the given line and column in the given file and return
         the updated cursor position after inserting the text.
@@ -1035,9 +1033,7 @@ class SolidLanguageServer(ABC):
         lines = file_content.split("\n")
         end_line = len(lines)
         end_column = len(lines[-1])
-        return ls_types.Range(
-            start=ls_types.Position(line=0, character=0), end=ls_types.Position(line=end_line, character=end_column)
-        )
+        return ls_types.Range(start=ls_types.Position(line=0, character=0), end=ls_types.Position(line=end_line, character=end_column))
 
     def request_dir_overview(self, relative_dir_path: str) -> dict[str, list[tuple[str, ls_types.SymbolKind, int, int]]]:
         """
@@ -1139,9 +1135,7 @@ class SolidLanguageServer(ABC):
 
     # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
 
-    def retrieve_symbol_body(
-        self, symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation
-    ) -> str:
+    def retrieve_symbol_body(self, symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation) -> str:
         """
         Load the body of the given symbol. If the body is already contained in the symbol, just return it.
         """

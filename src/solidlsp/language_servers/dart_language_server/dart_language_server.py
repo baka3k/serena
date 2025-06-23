@@ -5,9 +5,9 @@ import pathlib
 import stat
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
 
 class DartLanguageServer(SolidLanguageServer):

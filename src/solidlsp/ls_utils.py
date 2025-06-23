@@ -54,7 +54,7 @@ class TextUtils:
         idx = 0
         while line > 0:
             if idx >= len(text):
-                raise InvalidTextLocationError()
+                raise InvalidTextLocationError
             if text[idx] == "\n":
                 line -= 1
             idx += 1
@@ -95,7 +95,7 @@ class TextUtils:
         """
         try:
             change_index = TextUtils.get_index_from_line_col(text, line, col)
-        except InvalidTextLocationError as e:
+        except InvalidTextLocationError:
             num_lines_in_text = text.count("\n") + 1
             max_line = num_lines_in_text - 1
             if line == max_line + 1 and col == 0:  # trying to insert at new line after full text
