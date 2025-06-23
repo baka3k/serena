@@ -82,7 +82,7 @@ target-version = [
 ]
 exclude = '''
 /(
-    src/solidlsp/language_servers/.*/static,
+    src/solidlsp/language_servers/.*/static|src/multilspy
 )/
 '''
 
@@ -139,6 +139,7 @@ target-version = "py311"
 line-length = 140
 exclude = [
     "src/solidlsp/language_servers/**/static",
+    "src/multilspy",
 ]
 
 [tool.ruff.format]
