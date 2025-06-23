@@ -177,12 +177,18 @@ class ProjectConfig(ToStringMixin):
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
+        language_str = data["language"].lower()
+        project_name = data["project_name"]
+        # backwards compatibility
+        if language_str == "javascript":
+            log.warning(f"Found deprecated project language `javascript` in project {project_name}, please change to `typescript`")
+            language_str = "typescript"
         try:
-            language = Language(data["language"].lower())
+            language = Language(language_str)
         except ValueError as e:
             raise ValueError(f"Invalid language: {data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
         return cls(
-            project_name=data["project_name"],
+            project_name=project_name,
             language=language,
             ignored_paths=data.get("ignored_paths", []),
             excluded_tools=set(data.get("excluded_tools", [])),
