@@ -1533,7 +1533,7 @@ class SolidLanguageServer(ABC):
         """
         The path to the cache file for the document symbols.
         """
-        return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v20-05-25.pkl"
+        return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v23-06-25.pkl"
 
     def index_repository(self, progress_bar: bool = True, save_after_n_files: int = 10) -> None:
         """Will go through the entire repository and "index" all files, meaning save their symbols to the cache.
