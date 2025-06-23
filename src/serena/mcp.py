@@ -36,7 +36,7 @@ from serena.agent import (
     show_fatal_exception_safe,
 )
 from serena.config import RegisteredContext, SerenaAgentContext, SerenaAgentMode
-from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, USE_SOLID_LSP
+from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, USE_PROCESS_ISOLATION
 from serena.process_isolated_agent import (
     ProcessIsolatedDashboard,
     ProcessIsolatedSerenaAgent,
@@ -587,10 +587,9 @@ def start_mcp_server(
     project_file = project_file_arg if project_file_arg is not None else project
 
     mcp_factory: SerenaMCPFactory
-    if USE_SOLID_LSP:
+    if not USE_PROCESS_ISOLATION:
         mcp_factory = SerenaMCPFactorySingleProcess(context=context, project=project_file)
     else:
-        # using multilspy requires process isolation to prevent asyncio contamination
         mcp_factory = SerenaMCPFactoryWithProcessIsolation(context=context, project=project_file)
 
     # Use process isolation by default to prevent asyncio event loop contamination

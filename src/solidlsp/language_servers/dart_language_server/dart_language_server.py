@@ -4,10 +4,10 @@ import os
 import pathlib
 import stat
 
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import FileUtils, PlatformUtils
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PlatformUtils
 
 
 class DartLanguageServer(SolidLanguageServer):
@@ -19,7 +19,6 @@ class DartLanguageServer(SolidLanguageServer):
         """
         Creates a DartServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-
         executable_path = self.setup_runtime_dependencies(logger)
         super().__init__(
             config,
@@ -29,17 +28,15 @@ class DartLanguageServer(SolidLanguageServer):
             "dart",
         )
 
-    def setup_runtime_dependencies(self, logger: "MultilspyLogger") -> str:
+    def setup_runtime_dependencies(self, logger: "LanguageServerLogger") -> str:
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
             d = json.load(f)
             del d["_description"]
 
         runtime_dependencies = d["runtimeDependencies"]
-        runtime_dependencies = [
-            dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value
-        ]
+        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
 
         assert len(runtime_dependencies) == 1
         dependency = runtime_dependencies[0]
@@ -49,24 +46,18 @@ class DartLanguageServer(SolidLanguageServer):
 
         if not os.path.exists(dart_ls_dir):
             os.makedirs(dart_ls_dir)
-            FileUtils.download_and_extract_archive(
-                logger, dependency["url"], dart_ls_dir, dependency["archiveType"]
-            )
-
+            FileUtils.download_and_extract_archive(logger, dependency["url"], dart_ls_dir, dependency["archiveType"])
 
         assert os.path.exists(dart_executable_path)
         os.chmod(dart_executable_path, stat.S_IEXEC)
 
         return f"{dart_executable_path} language-server --client-id multilspy.dart --client-version 1.2"
 
-
     def _get_initialize_params(self, repository_absolute_path: str):
         """
         Returns the initialize params for the Dart Language Server.
         """
-        with open(
-            os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r"
-        ) as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
             d = json.load(f)
 
         del d["_description"]
@@ -79,9 +70,7 @@ class DartLanguageServer(SolidLanguageServer):
         d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
 
         assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(
-            repository_absolute_path
-        ).as_uri()
+        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
 
         assert d["workspaceFolders"][0]["name"] == "$name"
         d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
@@ -108,28 +97,20 @@ class DartLanguageServer(SolidLanguageServer):
         self.server.on_request("client/registerCapability", do_nothing)
         self.server.on_notification("language/status", do_nothing)
         self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_request(
-            "workspace/executeClientCommand", execute_client_command_handler
-        )
+        self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
-        self.server.on_notification(
-            "experimental/serverStatus", check_experimental_status
-        )
+        self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        self.logger.log(
-            "Starting dart-language-server server process", logging.INFO
-        )
+        self.logger.log("Starting dart-language-server server process", logging.INFO)
         self.server.start()
         initialize_params = self._get_initialize_params(self.repository_root_path)
         self.logger.log(
             "Sending initialize request to dart-language-server",
             logging.DEBUG,
         )
-        init_response = self.server.send_request(
-            "initialize", initialize_params
-        )
+        init_response = self.server.send_request("initialize", initialize_params)
         self.logger.log(
             f"Received initialize response from dart-language-server: {init_response}",
             logging.INFO,

@@ -33,10 +33,6 @@ from sensai.util import logging
 from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
-from multilspy import SyncLanguageServer
-from multilspy.multilspy_config import Language, MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_types import SymbolKind
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import (
@@ -45,7 +41,6 @@ from serena.constants import (
     REPO_ROOT,
     SELENA_CONFIG_TEMPLATE_FILE,
     SERENA_MANAGED_DIR_NAME,
-    USE_SOLID_LSP,
 )
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
@@ -56,7 +51,10 @@ from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
 from serena.util.thread import ExecutionResult, execute_with_timeout
-from solidlsp.ls import SolidLanguageServer
+from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import SymbolKind
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
@@ -641,7 +639,7 @@ def create_ls_for_project(
     log_level: int = logging.INFO,
     ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
     trace_lsp_communication: bool = False,
-) -> SyncLanguageServer:
+) -> SolidLanguageServer:
     """
     Create a language server for a project. Note that you will have to start it
     before performing any LS operations.
@@ -671,28 +669,19 @@ def create_ls_for_project(
             log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
             ignored_paths.extend(spec.patterns)
     log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
-    multilspy_config = MultilspyConfig(
+    multilspy_config = LanguageServerConfig(
         code_language=project_instance.language,
         ignored_paths=ignored_paths,
         trace_lsp_communication=trace_lsp_communication,
     )
-    ls_logger = MultilspyLogger(log_level=log_level)
+    ls_logger = LanguageServerLogger(log_level=log_level)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
-    if USE_SOLID_LSP:
-        ls = SolidLanguageServer.create(
-            multilspy_config,
-            ls_logger,
-            project_instance.project_root,
-            timeout=ls_timeout,
-        )
-        return cast(SyncLanguageServer, ls)  # TODO: Fix type
-    else:
-        return SyncLanguageServer.create(
-            multilspy_config,
-            ls_logger,
-            project_instance.project_root,
-            timeout=ls_timeout,
-        )
+    return SolidLanguageServer.create(
+        multilspy_config,
+        ls_logger,
+        project_instance.project_root,
+        timeout=ls_timeout,
+    )
 
 
 @click.command()
@@ -799,7 +788,7 @@ class SerenaAgent:
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
         self._active_project_root: str | None = None
-        self.language_server: SyncLanguageServer | None = None
+        self.language_server: SolidLanguageServer | None = None
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
@@ -1145,7 +1134,7 @@ class Component(ABC):
         self.agent = agent
 
     @property
-    def language_server(self) -> SyncLanguageServer:
+    def language_server(self) -> SolidLanguageServer:
         assert self.agent.language_server is not None
         return self.agent.language_server
 

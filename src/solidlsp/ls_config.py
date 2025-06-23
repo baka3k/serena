@@ -1,10 +1,10 @@
 """
 Configuration parameters for Multilspy.
 """
+
 import fnmatch
-from enum import Enum
-from typing import List
 from dataclasses import dataclass, field
+from enum import Enum
 
 
 class FilenameMatcher:
@@ -73,10 +73,11 @@ class Language(str, Enum):
 
 
 @dataclass
-class MultilspyConfig:
+class LanguageServerConfig:
     """
     Configuration parameters
     """
+
     code_language: Language
     trace_lsp_communication: bool = False
     start_independent_lsp_process: bool = True
@@ -89,7 +90,5 @@ class MultilspyConfig:
         Create a MultilspyConfig instance from a dictionary
         """
         import inspect
-        return cls(**{
-            k: v for k, v in env.items() 
-            if k in inspect.signature(cls).parameters
-        })
+
+        return cls(**{k: v for k, v in env.items() if k in inspect.signature(cls).parameters})

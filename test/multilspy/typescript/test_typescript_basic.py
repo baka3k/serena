@@ -2,22 +2,22 @@ import os
 
 import pytest
 
-from multilspy import SyncLanguageServer
-from multilspy.multilspy_config import Language
-from multilspy.multilspy_utils import SymbolUtils
+from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language
+from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.typescript
 class TestTypescriptLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
-    def test_find_symbol(self, language_server: SyncLanguageServer) -> None:
+    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "DemoClass"), "DemoClass not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "printValue"), "printValue method not found in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
-    def test_find_referencing_symbols(self, language_server: SyncLanguageServer) -> None:
+    def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("index.ts")
         symbols = language_server.request_document_symbols(file_path)
         helper_symbol = None

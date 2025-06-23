@@ -11,13 +11,12 @@ import threading
 
 from overrides import override
 
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import FileUtils
-from multilspy.multilspy_utils import PlatformUtils
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PlatformUtils
 
 
 class RustAnalyzer(SolidLanguageServer):
@@ -25,7 +24,7 @@ class RustAnalyzer(SolidLanguageServer):
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a RustAnalyzer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -46,13 +45,13 @@ class RustAnalyzer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
 
-    def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for rust_analyzer.
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -62,9 +61,7 @@ class RustAnalyzer(SolidLanguageServer):
         # ], "Only linux-x64 and win-x64 platform is supported for in multilspy at the moment"
 
         runtime_dependencies = d["runtimeDependencies"]
-        runtime_dependencies = [
-            dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value
-        ]
+        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
         assert len(runtime_dependencies) == 1
         dependency = runtime_dependencies[0]
 
@@ -73,13 +70,9 @@ class RustAnalyzer(SolidLanguageServer):
         if not os.path.exists(rustanalyzer_ls_dir):
             os.makedirs(rustanalyzer_ls_dir)
             if dependency["archiveType"] == "gz":
-                FileUtils.download_and_extract_archive(
-                    logger, dependency["url"], rustanalyzer_executable_path, dependency["archiveType"]
-                )
+                FileUtils.download_and_extract_archive(logger, dependency["url"], rustanalyzer_executable_path, dependency["archiveType"])
             else:
-                FileUtils.download_and_extract_archive(
-                    logger, dependency["url"], rustanalyzer_ls_dir, dependency["archiveType"]
-                )
+                FileUtils.download_and_extract_archive(logger, dependency["url"], rustanalyzer_ls_dir, dependency["archiveType"])
         assert os.path.exists(rustanalyzer_executable_path)
         os.chmod(rustanalyzer_executable_path, stat.S_IEXEC)
 
@@ -89,7 +82,7 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Returns the initialize params for the Rust Analyzer Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

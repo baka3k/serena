@@ -9,13 +9,12 @@ import pathlib
 import stat
 import threading
 
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import FileUtils
-from multilspy.multilspy_utils import PlatformUtils
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PlatformUtils
 
 
 class ClangdLanguageServer(SolidLanguageServer):
@@ -25,7 +24,7 @@ class ClangdLanguageServer(SolidLanguageServer):
     Also make sure compile_commands.json is created at root of the source directory. Check clangd test case for example.
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -42,13 +41,13 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
 
-    def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for ClangdLanguageServer.
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
             d = json.load(f)
             del d["_description"]
 
@@ -56,12 +55,12 @@ class ClangdLanguageServer(SolidLanguageServer):
             "linux-x64",
             "win-x64",
             "osx-arm64",
-        ], "Unsupported platform: " + platform_id.value
+        ], (
+            "Unsupported platform: " + platform_id.value
+        )
 
         runtime_dependencies = d["runtimeDependencies"]
-        runtime_dependencies = [
-            dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value
-        ]
+        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
         assert len(runtime_dependencies) == 1
         # Select dependency matching the current platform
         dependency = next((dep for dep in runtime_dependencies if dep["platformId"] == platform_id.value), None)
@@ -75,9 +74,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             logger.log(f"Clangd executable not found at {clangd_executable_path}. Downloading from {clangd_url}", logging.INFO)
             os.makedirs(clangd_ls_dir, exist_ok=True)
             if dependency["archiveType"] == "zip":
-                FileUtils.download_and_extract_archive(
-                    logger, clangd_url, clangd_ls_dir, dependency["archiveType"]
-                )
+                FileUtils.download_and_extract_archive(logger, clangd_url, clangd_ls_dir, dependency["archiveType"])
             else:
                 raise RuntimeError(f"Unsupported archive type: {dependency['archiveType']}")
         if not os.path.exists(clangd_executable_path):
@@ -93,7 +90,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the clangd Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
             d = json.load(f)
 
         del d["_description"]
@@ -126,6 +123,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             # Shutdown the LanguageServer on exit from scope
         # LanguageServer has been shutdown
         """
+
         def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
@@ -175,7 +173,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
-            "triggerCharacters": ['.', '<', '>', ':', '"', '/', '*'],
+            "triggerCharacters": [".", "<", ">", ":", '"', "/", "*"],
             "resolveProvider": False,
         }
 
@@ -185,4 +183,3 @@ class ClangdLanguageServer(SolidLanguageServer):
         # set ready flag
         self.server_ready.set()
         self.server_ready.wait()
-

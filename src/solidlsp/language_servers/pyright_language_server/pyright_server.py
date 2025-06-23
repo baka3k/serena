@@ -10,11 +10,11 @@ import threading
 
 from overrides import override
 
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
 
 
 class PyrightServer(SolidLanguageServer):
@@ -22,7 +22,8 @@ class PyrightServer(SolidLanguageServer):
     Provides Python specific instantiation of the LanguageServer class using Pyright.
     Contains various configurations and settings specific to Python.
     """
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a PyrightServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
@@ -50,7 +51,7 @@ class PyrightServer(SolidLanguageServer):
         Returns the initialize params for the Pyright Language Server.
         """
         # Create basic initialization parameters
-        initialize_params: InitializeParams = { # type: ignore
+        initialize_params: InitializeParams = {  # type: ignore
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": pathlib.Path(repository_absolute_path).as_uri(),

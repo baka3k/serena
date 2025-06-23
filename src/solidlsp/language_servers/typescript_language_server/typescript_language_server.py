@@ -13,22 +13,22 @@ from time import sleep
 
 from overrides import override
 
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import PlatformId, PlatformUtils
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import PlatformId, PlatformUtils
 
 # Platform-specific imports
-if os.name != 'nt':  # Unix-like systems
+if os.name != "nt":  # Unix-like systems
     import pwd
 else:
     # Dummy pwd module for Windows
     class pwd:
         @staticmethod
         def getpwuid(uid):
-            return type('obj', (), {'pw_name': os.environ.get('USERNAME', 'unknown')})()
+            return type("obj", (), {"pw_name": os.environ.get("USERNAME", "unknown")})()
 
 
 # Conditionally import pwd module (Unix-only)
@@ -41,7 +41,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -65,7 +65,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
-    def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for TypeScript Language Server.
         """
@@ -91,9 +91,9 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "typescript-language-server")
 
         # Verify both node and npm are installed
-        is_node_installed = shutil.which('node') is not None
+        is_node_installed = shutil.which("node") is not None
         assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which('npm') is not None
+        is_npm_installed = shutil.which("npm") is not None
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install typescript and typescript-language-server if not already installed
@@ -108,7 +108,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                         check=True,
                         cwd=tsserver_ls_dir,
                         stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
+                        stderr=subprocess.DEVNULL,
                     )
                 else:
                     # On Unix-like systems, run as non-root user
@@ -120,12 +120,14 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                         user=user,
                         cwd=tsserver_ls_dir,
                         stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
+                        stderr=subprocess.DEVNULL,
                     )
-        
+
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
-        assert os.path.exists(tsserver_executable_path), "typescript-language-server executable not found. Please install typescript-language-server and try again."
+        assert os.path.exists(
+            tsserver_executable_path
+        ), "typescript-language-server executable not found. Please install typescript-language-server and try again."
         return f"{tsserver_executable_path} --stdio"
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
@@ -184,8 +186,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
-            
-        
+
         def check_experimental_status(params):
             """
             Also listen for experimental/serverStatus as a backup signal
@@ -215,8 +216,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         assert init_response["capabilities"]["textDocumentSync"] == 2
         assert "completionProvider" in init_response["capabilities"]
         assert init_response["capabilities"]["completionProvider"] == {
-            "triggerCharacters": ['.', '"', "'", '/', '@', '<'],
-            "resolveProvider": True
+            "triggerCharacters": [".", '"', "'", "/", "@", "<"],
+            "resolveProvider": True,
         }
 
         self.server.notify.initialized({})

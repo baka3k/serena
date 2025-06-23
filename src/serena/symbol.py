@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
 from sensai.util.string import ToStringMixin
 
-from multilspy import SyncLanguageServer
-from multilspy.language_server import ReferenceInSymbol as LSPReferenceInSymbol
-from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
+from solidlsp import SolidLanguageServer
+from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
+from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
@@ -495,7 +495,7 @@ class ReferenceInSymbol(ToStringMixin):
 
 
 class SymbolManager:
-    def __init__(self, lang_server: SyncLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
+    def __init__(self, lang_server: SolidLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
         """
         :param lang_server: the language server to use for symbol retrieval as well as editing operations.
         :param agent: the agent to use (only needed for marking files as modified). You can pass None if you don't
@@ -504,7 +504,7 @@ class SymbolManager:
         self._lang_server = lang_server
         self.agent = agent
 
-    def set_language_server(self, lang_server: SyncLanguageServer) -> None:
+    def set_language_server(self, lang_server: SolidLanguageServer) -> None:
         """
         Set the language server to use for symbol retrieval and editing operations.
         This is useful if you want to change the language server after initializing the SymbolManager.

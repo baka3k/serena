@@ -1,9 +1,11 @@
 """
 Multilspy logger module.
 """
+
 import inspect
 import logging
 from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -20,7 +22,7 @@ class LogLine(BaseModel):
     message: str
 
 
-class MultilspyLogger:
+class LanguageServerLogger:
     """
     Logger class
     """
@@ -34,7 +36,6 @@ class MultilspyLogger:
         """
         Log the debug and sanitized messages using the logger
         """
-
         debug_message = debug_message.replace("'", '"').replace("\n", " ")
         sanitized_error_message = sanitized_error_message.replace("'", '"').replace("\n", " ")
 

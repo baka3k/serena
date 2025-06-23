@@ -3,7 +3,8 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * **Reduce the use of asyncio to a minimum**, improving stability and reducing the need for workarounds
-   * Switch to newly developed fully synchronous LSP library `solidlsp` (derived from `multilspy`)
+   * Switch to newly developed fully synchronous LSP library `solidlsp` (derived from `multilspy`),
+     removing our fork of `multilspy` (src/multilspy)
    * Switch from fastapi (which uses asyncio) to Flask in the Serena dashboard
    * The MCP server is the only asynchronous component now, which resolves cross-component loop contamination,
      such that process isolation is no longer required.

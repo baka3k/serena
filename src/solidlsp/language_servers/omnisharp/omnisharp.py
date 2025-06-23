@@ -8,17 +8,17 @@ import os
 import pathlib
 import stat
 import threading
-from typing import Iterable
+from collections.abc import Iterable
 
 from overrides import override
 
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_exceptions import MultilspyException
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import FileUtils, PlatformUtils, PlatformId, DotnetVersion
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
 
 
 def breadth_first_file_scan(root) -> Iterable[str]:
@@ -28,7 +28,7 @@ def breadth_first_file_scan(root) -> Iterable[str]:
     """
     dirs = [root]
     # while we has dirs to scan
-    while len(dirs):
+    while dirs:
         next_dirs = []
         for parent in dirs:
             # scan each dir
@@ -59,7 +59,7 @@ class OmniSharp(SolidLanguageServer):
     Provides C# specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C#.
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates an OmniSharp instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -68,7 +68,7 @@ class OmniSharp(SolidLanguageServer):
         slnfilename = find_least_depth_sln_file(repository_root_path)
         if slnfilename is None:
             logger.log("No *.sln file found in repository", logging.ERROR)
-            raise MultilspyException("No SLN file found in repository")
+            raise LanguageServerException("No SLN file found in repository")
 
         cmd = " ".join(
             [
@@ -102,14 +102,12 @@ class OmniSharp(SolidLanguageServer):
                 "formattingOptions:indentationSize=4",
             ]
         )
-        super().__init__(
-            config, logger, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp"
-        )
+        super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp")
 
         self.server_ready = threading.Event()
         self.definition_available = threading.Event()
         self.references_available = threading.Event()
-        
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj"]
@@ -118,7 +116,7 @@ class OmniSharp(SolidLanguageServer):
         """
         Returns the initialize params for the Omnisharp Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]
@@ -138,14 +136,14 @@ class OmniSharp(SolidLanguageServer):
 
         return d
 
-    def setupRuntimeDependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> tuple[str, str]:
+    def setupRuntimeDependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
         """
         Setup runtime dependencies for OmniSharp.
         """
         platform_id = PlatformUtils.get_platform_id()
         dotnet_version = PlatformUtils.get_dotnet_version()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -156,7 +154,7 @@ class OmniSharp(SolidLanguageServer):
         assert dotnet_version in [
             DotnetVersion.V6,
             DotnetVersion.V7,
-            DotnetVersion.V8
+            DotnetVersion.V8,
         ], "Only dotnet version 6 and 7 are supported in multilspy at the moment"
 
         # TODO: Do away with this assumption
@@ -165,13 +163,11 @@ class OmniSharp(SolidLanguageServer):
             dotnet_version = DotnetVersion.V6
 
         runtime_dependencies = d["runtimeDependencies"]
-        runtime_dependencies = [
-            dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value
-        ]
+        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
         runtime_dependencies = [
             dependency
             for dependency in runtime_dependencies
-            if not ("dotnet_version" in dependency) or dependency["dotnet_version"] == dotnet_version.value
+            if "dotnet_version" not in dependency or dependency["dotnet_version"] == dotnet_version.value
         ]
         assert len(runtime_dependencies) == 2
         runtime_dependencies = {
@@ -185,9 +181,7 @@ class OmniSharp(SolidLanguageServer):
         omnisharp_ls_dir = os.path.join(os.path.dirname(__file__), "static", "OmniSharp")
         if not os.path.exists(omnisharp_ls_dir):
             os.makedirs(omnisharp_ls_dir)
-            FileUtils.download_and_extract_archive(
-                logger, runtime_dependencies["OmniSharp"]["url"], omnisharp_ls_dir, "zip"
-            )
+            FileUtils.download_and_extract_archive(logger, runtime_dependencies["OmniSharp"]["url"], omnisharp_ls_dir, "zip")
         omnisharp_executable_path = os.path.join(omnisharp_ls_dir, runtime_dependencies["OmniSharp"]["binaryName"])
         assert os.path.exists(omnisharp_executable_path)
         os.chmod(omnisharp_executable_path, stat.S_IEXEC)
@@ -195,12 +189,8 @@ class OmniSharp(SolidLanguageServer):
         razor_omnisharp_ls_dir = os.path.join(os.path.dirname(__file__), "static", "RazorOmnisharp")
         if not os.path.exists(razor_omnisharp_ls_dir):
             os.makedirs(razor_omnisharp_ls_dir)
-            FileUtils.download_and_extract_archive(
-                logger, runtime_dependencies["RazorOmnisharp"]["url"], razor_omnisharp_ls_dir, "zip"
-            )
-        razor_omnisharp_dll_path = os.path.join(
-            razor_omnisharp_ls_dir, runtime_dependencies["RazorOmnisharp"]["dll_path"]
-        )
+            FileUtils.download_and_extract_archive(logger, runtime_dependencies["RazorOmnisharp"]["url"], razor_omnisharp_ls_dir, "zip")
+        razor_omnisharp_dll_path = os.path.join(razor_omnisharp_ls_dir, runtime_dependencies["RazorOmnisharp"]["dll_path"])
         assert os.path.exists(razor_omnisharp_dll_path)
 
         return omnisharp_executable_path, razor_omnisharp_dll_path
@@ -373,20 +363,12 @@ class OmniSharp(SolidLanguageServer):
         )
         init_response = self.server.send.initialize(initialize_params)
         self.server.notify.initialized({})
-        with open(os.path.join(os.path.dirname(__file__), "workspace_did_change_configuration.json"), "r", encoding="utf-8") as f:
-            self.server.notify.workspace_did_change_configuration({
-                "settings": json.load(f)
-            })
+        with open(os.path.join(os.path.dirname(__file__), "workspace_did_change_configuration.json"), encoding="utf-8") as f:
+            self.server.notify.workspace_did_change_configuration({"settings": json.load(f)})
         assert "capabilities" in init_response
-        if (
-            "definitionProvider" in init_response["capabilities"]
-            and init_response["capabilities"]["definitionProvider"]
-        ):
+        if "definitionProvider" in init_response["capabilities"] and init_response["capabilities"]["definitionProvider"]:
             self.definition_available.set()
-        if (
-            "referencesProvider" in init_response["capabilities"]
-            and init_response["capabilities"]["referencesProvider"]
-        ):
+        if "referencesProvider" in init_response["capabilities"] and init_response["capabilities"]["referencesProvider"]:
             self.references_available.set()
 
         self.definition_available.wait()

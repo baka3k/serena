@@ -9,11 +9,11 @@ import pathlib
 
 from overrides import override
 
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
 
 
 class JediServer(SolidLanguageServer):
@@ -21,7 +21,7 @@ class JediServer(SolidLanguageServer):
     Provides Python specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Python.
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a JediServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -32,7 +32,7 @@ class JediServer(SolidLanguageServer):
             ProcessLaunchInfo(cmd="jedi-language-server", cwd=repository_root_path),
             "python",
         )
-        
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["venv", "__pycache__"]
@@ -41,7 +41,7 @@ class JediServer(SolidLanguageServer):
         """
         Returns the initialize params for the Jedi Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]

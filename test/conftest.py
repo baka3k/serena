@@ -1,16 +1,13 @@
 import logging
 from pathlib import Path
-from typing import cast
 
 import pytest
 from sensai.util.logging import configure
 
-from multilspy.language_server import SyncLanguageServer
-from multilspy.multilspy_config import Language, MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
-from serena.constants import USE_SOLID_LSP
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
 
 configure(level=logging.DEBUG)
 
@@ -36,24 +33,19 @@ def create_ls(
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
     log_level: int = logging.INFO,
-) -> SyncLanguageServer:
+) -> SolidLanguageServer:
     ignored_paths = ignored_paths or []
     if repo_path is None:
         repo_path = str(get_repo_path(language))
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
-    config = MultilspyConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
-    logger = MultilspyLogger(log_level=log_level)
-
-    if USE_SOLID_LSP:
-        ls = SolidLanguageServer.create(config, logger, repo_path)
-        return cast(SyncLanguageServer, ls)  # TODO: Fix type
-    else:
-        return SyncLanguageServer.create(config, logger, repo_path)
+    config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
+    logger = LanguageServerLogger(log_level=log_level)
+    return SolidLanguageServer.create(config, logger, repo_path)
 
 
-def create_default_ls(language: Language) -> SyncLanguageServer:
+def create_default_ls(language: Language) -> SolidLanguageServer:
     repo_path = str(get_repo_path(language))
     return create_ls(language, repo_path)
 

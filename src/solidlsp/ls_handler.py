@@ -5,18 +5,31 @@ import os
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Queue
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 import psutil
 
-from multilspy.lsp_protocol_handler.lsp_requests import LspNotification
-from multilspy.lsp_protocol_handler.lsp_types import ErrorCodes
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo, StringDict, content_length, ENCODING, Error, MessageType, \
-    make_notification, PayloadLike, make_response, make_error_response, make_request, create_message
-from multilspy.multilspy_exceptions import MultilspyException
-from solidlsp.lsp_request import SolidLspRequest
+from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
+from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
+from solidlsp.lsp_protocol_handler.server import (
+    ENCODING,
+    Error,
+    MessageType,
+    PayloadLike,
+    ProcessLaunchInfo,
+    StringDict,
+    content_length,
+    create_message,
+    make_error_response,
+    make_notification,
+    make_request,
+    make_response,
+)
+from solidlsp.ls_request import LanguageServerRequest
+from solidlsp.ls_exceptions import LanguageServerException
 
 log = logging.getLogger(__name__)
 
@@ -25,8 +38,8 @@ class Request:
 
     @dataclass
     class Result:
-        payload: Optional[PayloadLike] = None
-        error: Optional[Error] = None
+        payload: PayloadLike | None = None
+        error: Error | None = None
 
         def is_error(self) -> bool:
             return self.error is not None
@@ -81,13 +94,14 @@ class SolidLanguageServerHandler:
         language server process in an independent process group. Default is `True`. Setting it to
         `False` means that the language server process will be in the same process group as the
         the current process, and any SIGINT and SIGTERM signals will be sent to both processes.
+
     """
 
     def __init__(
-            self,
-            process_launch_info: ProcessLaunchInfo,
-            logger: Optional[Callable[[str, str, StringDict | str], None]] = None,
-            start_independent_lsp_process=True,
+        self,
+        process_launch_info: ProcessLaunchInfo,
+        logger: Callable[[str, str, StringDict | str], None] | None = None,
+        start_independent_lsp_process=True,
     ) -> None:
         """
         Params:
@@ -95,7 +109,7 @@ class SolidLanguageServerHandler:
             logger: An optional function that takes two strings (source and destination) and
                 a payload dictionary, and logs the communication between the client and the server.
         """
-        self.send = SolidLspRequest(self.send_request)
+        self.send = LanguageServerRequest(self.send_request)
         self.notify = LspNotification(self.send_notification)
 
         self.process_launch_info = process_launch_info
@@ -103,7 +117,7 @@ class SolidLanguageServerHandler:
         self._received_shutdown = False
 
         self.request_id = 1
-        self._response_handlers: Dict[Any, Request] = {}
+        self._response_handlers: dict[Any, Request] = {}
         self.on_request_handlers = {}
         self.on_notification_handlers = {}
         self.logger = logger
@@ -141,7 +155,7 @@ class SolidLanguageServerHandler:
             env=child_proc_env,
             cwd=self.process_launch_info.cwd,
             start_new_session=self.start_independent_lsp_process,
-            shell=True
+            shell=True,
         )
 
         # Check if process terminated immediately
@@ -149,7 +163,7 @@ class SolidLanguageServerHandler:
             log.error("Language server has already terminated/could not be started")
             # Process has already terminated
             stderr_data = self.process.stderr.read()
-            error_message = stderr_data.decode('utf-8', errors='replace')
+            error_message = stderr_data.decode("utf-8", errors="replace")
             raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
 
         # start threads to read stdout and stderr of the process
@@ -284,7 +298,7 @@ class SolidLanguageServerHandler:
             # Process has terminated, check if we can still read
             pass
 
-        data = b''
+        data = b""
         while len(data) < num_bytes:
             chunk = stream.read(num_bytes - len(data))
             if not chunk:
@@ -332,7 +346,7 @@ class SolidLanguageServerHandler:
                 line = self.process.stderr.readline()
                 if not line:
                     continue
-                self._log("LSP stderr: " + line.decode(ENCODING, errors='replace'))
+                self._log("LSP stderr: " + line.decode(ENCODING, errors="replace"))
         except (BrokenPipeError, ConnectionResetError):
             pass
 
@@ -342,7 +356,7 @@ class SolidLanguageServerHandler:
         """
         try:
             self._receive_payload(json.loads(body))
-        except IOError as ex:
+        except OSError as ex:
             self._log(f"malformed {ENCODING}: {ex}")
         except UnicodeDecodeError as ex:
             self._log(f"malformed {ENCODING}: {ex}")
@@ -368,7 +382,7 @@ class SolidLanguageServerHandler:
         except Exception as err:
             self._log(f"Error handling server payload: {err}")
 
-    def send_notification(self, method: str, params: Optional[dict] = None) -> None:
+    def send_notification(self, method: str, params: dict | None = None) -> None:
         """
         Send notification pertaining to the given method to the server with the given parameters
         """
@@ -387,7 +401,7 @@ class SolidLanguageServerHandler:
         # Use lock to prevent race conditions on tasks and task_counter
         self._send_payload(make_error_response(request_id, err))
 
-    def send_request(self, method: str, params: Optional[dict] = None) -> PayloadLike:
+    def send_request(self, method: str, params: dict | None = None) -> PayloadLike:
         """
         Send request to the server, register the request id, and wait for the response
         """
@@ -406,10 +420,12 @@ class SolidLanguageServerHandler:
         self._log(f"Waiting for response to request {method} with params:\n{params}")
         result = request.get_result()
 
-        self._log(f"Processing result")
+        self._log("Processing result")
         if result.is_error():
-            raise MultilspyException(f"Could not process request {method} with params:\n{params}.\n  Language server error: {result.error}") from result.error
-        
+            raise LanguageServerException(
+                f"Could not process request {method} with params:\n{params}.\n  Language server error: {result.error}"
+            ) from result.error
+
         self._log(f"Returning non-error result, which is:\n{result.payload}")
         return result.payload
 
@@ -472,7 +488,7 @@ class SolidLanguageServerHandler:
                 request_id,
                 Error(
                     ErrorCodes.MethodNotFound,
-                    "method '{}' not handled on client.".format(method),
+                    f"method '{method}' not handled on client.",
                 ),
             )
             return
