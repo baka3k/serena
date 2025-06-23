@@ -22,7 +22,7 @@ class LogLine(BaseModel):
     message: str
 
 
-class MultilspyLogger:
+class LanguageServerLogger:
     """
     Logger class
     """

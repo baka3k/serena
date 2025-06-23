@@ -52,9 +52,9 @@ from serena.util.inspection import determine_programming_language_composition, i
 from serena.util.shell import execute_shell_command
 from serena.util.thread import ExecutionResult, execute_with_timeout
 from solidlsp import SolidLanguageServer
-from solidlsp.multilspy_config import Language, MultilspyConfig
-from solidlsp.multilspy_logger import MultilspyLogger
-from solidlsp.multilspy_types import SymbolKind
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import SymbolKind
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
@@ -669,12 +669,12 @@ def create_ls_for_project(
             log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
             ignored_paths.extend(spec.patterns)
     log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
-    multilspy_config = MultilspyConfig(
+    multilspy_config = LanguageServerConfig(
         code_language=project_instance.language,
         ignored_paths=ignored_paths,
         trace_lsp_communication=trace_lsp_communication,
     )
-    ls_logger = MultilspyLogger(log_level=log_level)
+    ls_logger = LanguageServerLogger(log_level=log_level)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
     return SolidLanguageServer.create(
         multilspy_config,

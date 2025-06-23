@@ -14,9 +14,9 @@ from pathlib import Path, PurePath
 
 import requests
 
-from solidlsp.multilspy_exceptions import MultilspyException
-from solidlsp.multilspy_logger import MultilspyLogger
-from solidlsp.multilspy_types import UnifiedSymbolInformation
+from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_types import UnifiedSymbolInformation
 
 
 class TextUtils:
@@ -147,22 +147,22 @@ class FileUtils:
     """
 
     @staticmethod
-    def read_file(logger: MultilspyLogger, file_path: str) -> str:
+    def read_file(logger: LanguageServerLogger, file_path: str) -> str:
         """
         Reads the file at the given path and returns the contents as a string.
         """
         if not os.path.exists(file_path):
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
-            raise MultilspyException(f"File read '{file_path}' failed: File does not exist.")
+            raise LanguageServerException(f"File read '{file_path}' failed: File does not exist.")
         try:
             with open(file_path, encoding="utf-8") as inp_file:
                 return inp_file.read()
         except Exception as exc:
             logger.log(f"File read '{file_path}' failed to read with encoding 'utf-8': {exc}", logging.ERROR)
-            raise MultilspyException("File read failed.") from None
+            raise LanguageServerException("File read failed.") from None
 
     @staticmethod
-    def download_file(logger: MultilspyLogger, url: str, target_path: str) -> None:
+    def download_file(logger: LanguageServerLogger, url: str, target_path: str) -> None:
         """
         Downloads the file from the given URL to the given {target_path}
         """
@@ -170,15 +170,15 @@ class FileUtils:
             response = requests.get(url, stream=True, timeout=60)
             if response.status_code != 200:
                 logger.log(f"Error downloading file '{url}': {response.status_code} {response.text}", logging.ERROR)
-                raise MultilspyException("Error downloading file.")
+                raise LanguageServerException("Error downloading file.")
             with open(target_path, "wb") as f:
                 shutil.copyfileobj(response.raw, f)
         except Exception as exc:
             logger.log(f"Error downloading file '{url}': {exc}", logging.ERROR)
-            raise MultilspyException("Error downloading file.") from None
+            raise LanguageServerException("Error downloading file.") from None
 
     @staticmethod
-    def download_and_extract_archive(logger: MultilspyLogger, url: str, target_path: str, archive_type: str) -> None:
+    def download_and_extract_archive(logger: LanguageServerLogger, url: str, target_path: str, archive_type: str) -> None:
         """
         Downloads the archive from the given URL having format {archive_type} and extracts it to the given {target_path}
         """
@@ -203,10 +203,10 @@ class FileUtils:
                     shutil.copyfileobj(f_in, f_out)
             else:
                 logger.log(f"Unknown archive type '{archive_type}' for extraction", logging.ERROR)
-                raise MultilspyException(f"Unknown archive type '{archive_type}'")
+                raise LanguageServerException(f"Unknown archive type '{archive_type}'")
         except Exception as exc:
             logger.log(f"Error extracting archive '{tmp_file_name}' obtained from '{url}': {exc}", logging.ERROR)
-            raise MultilspyException("Error extracting archive.") from exc
+            raise LanguageServerException("Error extracting archive.") from exc
         finally:
             for tmp_file_name in tmp_files:
                 if os.path.exists(tmp_file_name):
@@ -268,7 +268,7 @@ class PlatformUtils:
                     platform_id += "-" + libc
             return PlatformId(platform_id)
         else:
-            raise MultilspyException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
+            raise LanguageServerException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
 
     @staticmethod
     def _determine_windows_machine_type():
@@ -324,7 +324,7 @@ class PlatformUtils:
                     available_version_cmd_output.append(version_cmd_output)
 
             if not available_version_cmd_output:
-                raise MultilspyException("dotnet not found on the system")
+                raise LanguageServerException("dotnet not found on the system")
 
             # Check for supported versions in order of preference (latest first)
             for version_cmd_output in available_version_cmd_output:
@@ -341,7 +341,7 @@ class PlatformUtils:
                     return DotnetVersion.V4
 
             # If no supported version found, raise exception with all available versions
-            raise MultilspyException(
+            raise LanguageServerException(
                 f"No supported dotnet version found. Available versions: {', '.join(available_version_cmd_output)}. Supported versions: 4, 6, 7, 8"
             )
         except (FileNotFoundError, subprocess.CalledProcessError):
@@ -349,7 +349,7 @@ class PlatformUtils:
                 result = subprocess.run(["mono", "--version"], capture_output=True, check=True)
                 return DotnetVersion.VMONO
             except (FileNotFoundError, subprocess.CalledProcessError):
-                raise MultilspyException("dotnet or mono not found on the system")
+                raise LanguageServerException("dotnet or mono not found on the system")
 
 
 class SymbolUtils:

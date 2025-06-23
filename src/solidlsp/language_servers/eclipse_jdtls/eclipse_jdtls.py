@@ -18,10 +18,10 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from solidlsp.multilspy_config import MultilspyConfig
-from solidlsp.multilspy_logger import MultilspyLogger
-from solidlsp.multilspy_settings import MultilspySettings
-from solidlsp.multilspy_utils import FileUtils, PlatformUtils
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.settings import SolidLSPSettings
+from solidlsp.ls_utils import FileUtils, PlatformUtils
 
 
 @dataclasses.dataclass
@@ -45,7 +45,7 @@ class EclipseJDTLS(SolidLanguageServer):
     The EclipseJDTLS class provides a Java specific implementation of the LanguageServer class
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
@@ -56,7 +56,7 @@ class EclipseJDTLS(SolidLanguageServer):
         # ws_dir is the workspace directory for the EclipseJDTLS server
         ws_dir = str(
             PurePath(
-                MultilspySettings.get_language_server_directory(),
+                SolidLSPSettings.get_language_server_directory(),
                 "EclipseJDTLS",
                 "workspaces",
                 uuid.uuid4().hex,
@@ -64,7 +64,7 @@ class EclipseJDTLS(SolidLanguageServer):
         )
 
         # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
-        shared_cache_location = str(PurePath(MultilspySettings.get_global_cache_directory(), "lsp", "EclipseJDTLS", "sharedIndex"))
+        shared_cache_location = str(PurePath(SolidLSPSettings.get_global_cache_directory(), "lsp", "EclipseJDTLS", "sharedIndex"))
 
         jre_path = self.runtime_dependency_paths.jre_path
         lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
@@ -153,7 +153,7 @@ class EclipseJDTLS(SolidLanguageServer):
             "lib",  # General
         ]
 
-    def setupRuntimeDependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> RuntimeDependencyPaths:
+    def setupRuntimeDependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> RuntimeDependencyPaths:
         """
         Setup runtime dependencies for EclipseJDTLS.
         """

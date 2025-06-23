@@ -3,8 +3,8 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.multilspy_config import Language
-from solidlsp.multilspy_utils import SymbolUtils
+from solidlsp.ls_config import Language
+from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.go

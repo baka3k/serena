@@ -15,9 +15,9 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.lsp_protocol_handler.lsp_types import DefinitionParams, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from solidlsp.multilspy_config import MultilspyConfig
-from solidlsp.multilspy_logger import MultilspyLogger
-from solidlsp.multilspy_utils import PlatformId, PlatformUtils
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import PlatformId, PlatformUtils
 
 
 class Intelephense(SolidLanguageServer):
@@ -33,7 +33,7 @@ class Intelephense(SolidLanguageServer):
         # - cache: commonly used for caching
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]
 
-    def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for Intelephense.
         """
@@ -97,7 +97,7 @@ class Intelephense(SolidLanguageServer):
 
         return f"{intelephense_executable_path} --stdio"
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         # Setup runtime dependencies before initializing
         intelephense_cmd = self.setup_runtime_dependencies(logger, config)
 

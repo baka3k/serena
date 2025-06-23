@@ -6,8 +6,8 @@ from sensai.util.logging import configure
 
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.multilspy_config import Language, MultilspyConfig
-from solidlsp.multilspy_logger import MultilspyLogger
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
 
 configure(level=logging.DEBUG)
 
@@ -40,8 +40,8 @@ def create_ls(
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
-    config = MultilspyConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
-    logger = MultilspyLogger(log_level=log_level)
+    config = LanguageServerConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
+    logger = LanguageServerLogger(log_level=log_level)
     return SolidLanguageServer.create(config, logger, repo_path)
 
 

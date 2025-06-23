@@ -15,10 +15,10 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from solidlsp.multilspy_config import MultilspyConfig
-from solidlsp.multilspy_exceptions import MultilspyException
-from solidlsp.multilspy_logger import MultilspyLogger
-from solidlsp.multilspy_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
 
 
 def breadth_first_file_scan(root) -> Iterable[str]:
@@ -59,7 +59,7 @@ class OmniSharp(SolidLanguageServer):
     Provides C# specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C#.
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates an OmniSharp instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -68,7 +68,7 @@ class OmniSharp(SolidLanguageServer):
         slnfilename = find_least_depth_sln_file(repository_root_path)
         if slnfilename is None:
             logger.log("No *.sln file found in repository", logging.ERROR)
-            raise MultilspyException("No SLN file found in repository")
+            raise LanguageServerException("No SLN file found in repository")
 
         cmd = " ".join(
             [
@@ -136,7 +136,7 @@ class OmniSharp(SolidLanguageServer):
 
         return d
 
-    def setupRuntimeDependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> tuple[str, str]:
+    def setupRuntimeDependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
         """
         Setup runtime dependencies for OmniSharp.
         """

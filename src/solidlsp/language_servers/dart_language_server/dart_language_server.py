@@ -6,8 +6,8 @@ import stat
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from solidlsp.multilspy_logger import MultilspyLogger
-from solidlsp.multilspy_utils import FileUtils, PlatformUtils
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PlatformUtils
 
 
 class DartLanguageServer(SolidLanguageServer):
@@ -28,7 +28,7 @@ class DartLanguageServer(SolidLanguageServer):
             "dart",
         )
 
-    def setup_runtime_dependencies(self, logger: "MultilspyLogger") -> str:
+    def setup_runtime_dependencies(self, logger: "LanguageServerLogger") -> str:
         platform_id = PlatformUtils.get_platform_id()
 
         with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:

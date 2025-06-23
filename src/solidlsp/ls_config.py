@@ -73,7 +73,7 @@ class Language(str, Enum):
 
 
 @dataclass
-class MultilspyConfig:
+class LanguageServerConfig:
     """
     Configuration parameters
     """

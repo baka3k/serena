@@ -6,7 +6,7 @@ import os
 import pathlib
 
 
-class MultilspySettings:
+class SolidLSPSettings:
     """
     Provides the various settings for multilspy.
     """

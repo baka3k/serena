@@ -11,8 +11,8 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.multilspy_config import Language
-from solidlsp.multilspy_types import SymbolKind
+from solidlsp.ls_config import Language
+from solidlsp.ls_types import SymbolKind
 
 pytestmark = pytest.mark.python
 

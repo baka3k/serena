@@ -28,8 +28,8 @@ from solidlsp.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from solidlsp.lsp_request import SolidLspRequest
-from solidlsp.multilspy_exceptions import MultilspyException
+from solidlsp.ls_request import LanguageServerRequest
+from solidlsp.ls_exceptions import LanguageServerException
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class SolidLanguageServerHandler:
             logger: An optional function that takes two strings (source and destination) and
                 a payload dictionary, and logs the communication between the client and the server.
         """
-        self.send = SolidLspRequest(self.send_request)
+        self.send = LanguageServerRequest(self.send_request)
         self.notify = LspNotification(self.send_notification)
 
         self.process_launch_info = process_launch_info
@@ -422,7 +422,7 @@ class SolidLanguageServerHandler:
 
         self._log("Processing result")
         if result.is_error():
-            raise MultilspyException(
+            raise LanguageServerException(
                 f"Could not process request {method} with params:\n{params}.\n  Language server error: {result.error}"
             ) from result.error
 
