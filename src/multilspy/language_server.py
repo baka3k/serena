@@ -51,44 +51,6 @@ from serena.text_utils import MatchedConsecutiveLines, search_files
 
 
 
-GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, multilspy_types.UnifiedSymbolInformation]
-
-@dataclasses.dataclass(kw_only=True)
-class ReferenceInSymbol:
-    """A symbol retrieved when requesting reference to a symbol, together with the location of the reference"""
-    symbol: multilspy_types.UnifiedSymbolInformation
-    line: int
-    character: int
-    
-@dataclasses.dataclass
-class LSPFileBuffer:
-    """
-    This class is used to store the contents of an open LSP file in memory.
-    """
-
-    # uri of the file
-    uri: str
-
-    # The contents of the file
-    contents: str
-
-    # The version of the file
-    version: int
-
-    # The language id of the file
-    language_id: str
-
-    # reference count of the file
-    ref_count: int
-
-    # --------------------------------- MODIFICATIONS BY MISCHA ---------------------------------
-
-    content_hash: str = ""
-
-    def __post_init__(self):
-        self.content_hash = hashlib.md5(self.contents.encode('utf-8')).hexdigest()
-
-
 class LanguageServer:
     """
     The LanguageServer class provides a language agnostic interface to the Language Server Protocol.

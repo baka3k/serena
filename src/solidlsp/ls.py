@@ -1,3 +1,5 @@
+import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -11,12 +13,11 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-from typing import Self, cast
+from typing import Self, Union, cast
 
 import pathspec
 import tqdm
 
-from multilspy.language_server import GenericDocumentSymbol, LSPFileBuffer, ReferenceInSymbol
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import multilspy_types
 from solidlsp.ls_handler import SolidLanguageServerHandler
@@ -33,6 +34,44 @@ from solidlsp.multilspy_config import Language, MultilspyConfig
 from solidlsp.multilspy_exceptions import MultilspyException
 from solidlsp.multilspy_logger import MultilspyLogger
 from solidlsp.multilspy_utils import FileUtils, PathUtils, TextUtils
+
+GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, multilspy_types.UnifiedSymbolInformation]
+
+
+@dataclasses.dataclass(kw_only=True)
+class ReferenceInSymbol:
+    """A symbol retrieved when requesting reference to a symbol, together with the location of the reference"""
+
+    symbol: multilspy_types.UnifiedSymbolInformation
+    line: int
+    character: int
+
+
+@dataclasses.dataclass
+class LSPFileBuffer:
+    """
+    This class is used to store the contents of an open LSP file in memory.
+    """
+
+    # uri of the file
+    uri: str
+
+    # The contents of the file
+    contents: str
+
+    # The version of the file
+    version: int
+
+    # The language id of the file
+    language_id: str
+
+    # reference count of the file
+    ref_count: int
+
+    content_hash: str = ""
+
+    def __post_init__(self):
+        self.content_hash = hashlib.md5(self.contents.encode("utf-8")).hexdigest()
 
 
 class SolidLanguageServer(ABC):
