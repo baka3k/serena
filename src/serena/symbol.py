@@ -11,7 +11,7 @@ from sensai.util.string import ToStringMixin
 
 from multilspy import SyncLanguageServer
 from multilspy.language_server import ReferenceInSymbol as LSPReferenceInSymbol
-from multilspy.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
+from solidlsp.multilspy_types import Position, SymbolKind, UnifiedSymbolInformation
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent

@@ -3,8 +3,8 @@ import os
 import pytest
 
 from multilspy import SyncLanguageServer
-from multilspy.multilspy_config import Language
-from multilspy.multilspy_utils import SymbolUtils
+from solidlsp.multilspy_config import Language
+from solidlsp.multilspy_utils import SymbolUtils
 
 
 @pytest.mark.typescript

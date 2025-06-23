@@ -12,9 +12,9 @@ from typing import Any
 
 import psutil
 
-from multilspy.lsp_protocol_handler.lsp_requests import LspNotification
-from multilspy.lsp_protocol_handler.lsp_types import ErrorCodes
-from multilspy.lsp_protocol_handler.server import (
+from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
+from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
+from solidlsp.lsp_protocol_handler.server import (
     ENCODING,
     Error,
     MessageType,
@@ -28,7 +28,7 @@ from multilspy.lsp_protocol_handler.server import (
     make_request,
     make_response,
 )
-from multilspy.multilspy_exceptions import MultilspyException
+from solidlsp.multilspy_exceptions import MultilspyException
 from solidlsp.lsp_request import SolidLspRequest
 
 log = logging.getLogger(__name__)

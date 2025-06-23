@@ -4,9 +4,9 @@ import os
 import pathlib
 import stat
 
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import FileUtils, PlatformUtils
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_utils import FileUtils, PlatformUtils
 from solidlsp.ls import SolidLanguageServer
 
 

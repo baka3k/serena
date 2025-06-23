@@ -34,9 +34,9 @@ from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
 from multilspy import SyncLanguageServer
-from multilspy.multilspy_config import Language, MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_types import SymbolKind
+from solidlsp.multilspy_config import Language, MultilspyConfig
+from solidlsp.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_types import SymbolKind
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import (

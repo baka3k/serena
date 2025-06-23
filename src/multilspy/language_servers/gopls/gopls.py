@@ -5,18 +5,15 @@ import os
 import pathlib
 import subprocess
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, List
+from typing import AsyncIterator
 
 from overrides import override
 
-from multilspy import multilspy_types
-from multilspy.lsp_protocol_handler import lsp_types
-from multilspy.multilspy_exceptions import MultilspyException
-from multilspy.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import Error, ProcessLaunchInfo
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.multilspy_config import MultilspyConfig
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.multilspy_config import MultilspyConfig
 
 
 class Gopls(LanguageServer):

@@ -19,28 +19,26 @@ from collections import defaultdict
 from contextlib import asynccontextmanager, contextmanager
 from copy import copy
 from pathlib import Path, PurePath
-import time
 from typing import AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 import pathspec
 import tqdm
 
-from . import multilspy_types
-from .lsp_protocol_handler import lsp_types as LSPTypes
-from .lsp_protocol_handler.lsp_constants import LSPConstants
-from .lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
-from .lsp_protocol_handler.server import (
+from solidlsp import multilspy_types
+from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes, lsp_types
+from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
+from solidlsp.lsp_protocol_handler.server import (
     Error,
     LanguageServerHandler,
     ProcessLaunchInfo,
     StringDict,
 )
-from .multilspy_config import Language, MultilspyConfig
-from .multilspy_exceptions import MultilspyException
-from .multilspy_logger import MultilspyLogger
-from .multilspy_utils import FileUtils, PathUtils, TextUtils
-from .type_helpers import ensure_all_methods_implemented
-from .lsp_protocol_handler import lsp_types
+from solidlsp.multilspy_config import Language, MultilspyConfig
+from solidlsp.multilspy_exceptions import MultilspyException
+from solidlsp.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_utils import FileUtils, PathUtils, TextUtils
+from solidlsp.type_helpers import ensure_all_methods_implemented
 
 # Serena dependencies
 # We will need to watch out for circular imports, but it's probably better to not
@@ -49,7 +47,7 @@ from .lsp_protocol_handler import lsp_types
 # since it caches (in-memory) file contents, so we can avoid reading from disk.
 # Moreover, the way we want to use the language server (for retrieving actual content),
 # it makes sense to have more content-related utils directly in it.
-from serena.text_utils import LineType, MatchedConsecutiveLines, TextLine, search_files
+from serena.text_utils import MatchedConsecutiveLines, search_files
 
 
 
@@ -217,7 +215,8 @@ class LanguageServer:
         self.language = Language(language_id)
         
         # load cache first to prevent any racing conditions due to asyncio stuff
-        self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]]] = {}
+        self._document_symbols_cache:  dict[str, Tuple[str, Tuple[List[multilspy_types.UnifiedSymbolInformation], List[
+            multilspy_types.UnifiedSymbolInformation]]]] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self._cache_lock = threading.Lock()
         self._cache_has_changed: bool = False
@@ -629,7 +628,8 @@ class LanguageServer:
         return ret
 
     # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
-    async def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[lsp_types.Location] | None:
+    async def _send_references_request(self, relative_file_path: str, line: int, column: int) -> List[
+                                                                                                     lsp_types.Location] | None:
         return await self.server.send.references(
             {
                 "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
@@ -830,7 +830,8 @@ class LanguageServer:
                 for json_repr in set([json.dumps(item, sort_keys=True) for item in completions_list])
             ]
 
-    async def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
+    async def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[
+        multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
         """
         Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
         to find symbols in the given file. Wait for the response and return the result.
@@ -926,7 +927,8 @@ class LanguageServer:
             if LSPConstants.CHILDREN in root_symbol:
                 # TODO: l_tree should be a list of TreeRepr. Define the following function to return TreeRepr as well
                 
-                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> List[multilspy_types.UnifiedSymbolInformation]:
+                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> List[
+                    multilspy_types.UnifiedSymbolInformation]:
                     node = cast(multilspy_types.UnifiedSymbolInformation, node)
                     l: List[multilspy_types.UnifiedSymbolInformation] = []
                     turn_item_into_symbol_with_children(node)
@@ -948,7 +950,8 @@ class LanguageServer:
             self._cache_has_changed = True
         return result
 
-    async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+    async def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[
+        multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols. 
         Note: this may be slow the first time it is called, especially if `within_relative_path` is not used to restrict the search.
@@ -1817,7 +1820,7 @@ class SyncLanguageServer:
                 self.language_server.request_references(file_path, line, column), self.loop
             ).result(timeout=self.timeout)
         except Exception as e:
-            from multilspy.lsp_protocol_handler.server import Error
+            from solidlsp.lsp_protocol_handler.server import Error
             if isinstance(e, Error) and getattr(e, 'code', None) == -32603:
                 raise RuntimeError(
                     f"LSP internal error (-32603) when requesting references for {file_path}:{line}:{column}. "
@@ -1865,7 +1868,8 @@ class SyncLanguageServer:
         ).result(timeout=self.timeout)
         return result
 
-    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
+    def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> Tuple[List[
+        multilspy_types.UnifiedSymbolInformation], List[multilspy_types.UnifiedSymbolInformation]]:
         """
         Raise a [textDocument/documentSymbol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_documentSymbol) request to the Language Server
         to find symbols in the given file. Wait for the response and return the result.
@@ -1879,7 +1883,8 @@ class SyncLanguageServer:
         ).result()
         return result
 
-    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[multilspy_types.UnifiedSymbolInformation]:
+    def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> List[
+        multilspy_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project and build a tree of symbols. Note: this may be slow the first time it is called.
 

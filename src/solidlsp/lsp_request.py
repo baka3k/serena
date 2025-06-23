@@ -1,6 +1,6 @@
 from typing import Union
 
-from multilspy.lsp_protocol_handler import lsp_types
+from solidlsp.lsp_protocol_handler import lsp_types
 
 
 class SolidLspRequest:

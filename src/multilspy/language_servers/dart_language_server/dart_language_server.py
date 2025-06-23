@@ -2,13 +2,12 @@ from contextlib import asynccontextmanager
 import logging
 import os
 import pathlib
-import shutil
 import stat
 from typing import AsyncIterator
 from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 import json
-from multilspy.multilspy_utils import FileUtils, PlatformUtils
+from solidlsp.multilspy_utils import FileUtils, PlatformUtils
 
 
 class DartLanguageServer(LanguageServer):

@@ -16,21 +16,20 @@ from typing import Self, cast
 import pathspec
 import tqdm
 
-from multilspy import multilspy_types
+from solidlsp import multilspy_types
 from multilspy.language_server import GenericDocumentSymbol, LSPFileBuffer, ReferenceInSymbol
-from multilspy.lsp_protocol_handler import lsp_types
-from multilspy.lsp_protocol_handler import lsp_types as LSPTypes
-from multilspy.lsp_protocol_handler.lsp_constants import LSPConstants
-from multilspy.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
-from multilspy.lsp_protocol_handler.server import (
+from solidlsp.lsp_protocol_handler import lsp_types, lsp_types as LSPTypes
+from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
+from solidlsp.lsp_protocol_handler.server import (
     Error,
     ProcessLaunchInfo,
     StringDict,
 )
-from multilspy.multilspy_config import Language, MultilspyConfig
-from multilspy.multilspy_exceptions import MultilspyException
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_utils import FileUtils, PathUtils, TextUtils
+from solidlsp.multilspy_config import Language, MultilspyConfig
+from solidlsp.multilspy_exceptions import MultilspyException
+from solidlsp.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_utils import FileUtils, PathUtils, TextUtils
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp.ls_handler import SolidLanguageServerHandler
 
@@ -175,7 +174,8 @@ class SolidLanguageServer(ABC):
 
         # load cache first to prevent any racing conditions due to asyncio stuff
         self._document_symbols_cache: dict[
-            str, tuple[str, tuple[list[multilspy_types.UnifiedSymbolInformation], list[multilspy_types.UnifiedSymbolInformation]]]
+            str, tuple[str, tuple[list[multilspy_types.UnifiedSymbolInformation], list[
+                multilspy_types.UnifiedSymbolInformation]]]
         ] = {}
         """Maps file paths to a tuple of (file_content_hash, result_of_request_document_symbols)"""
         self._cache_lock = threading.Lock()
@@ -543,7 +543,8 @@ class SolidLanguageServer(ABC):
         return ret
 
     # Some LS cause problems with this, so the call is isolated from the rest to allow overriding in subclasses
-    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
+    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[
+                                                                                               lsp_types.Location] | None:
         return self.server.send.references(
             {
                 "textDocument": {"uri": PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))},
@@ -839,7 +840,8 @@ class SolidLanguageServer(ABC):
             if LSPConstants.CHILDREN in root_symbol:
                 # TODO: l_tree should be a list of TreeRepr. Define the following function to return TreeRepr as well
 
-                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> list[multilspy_types.UnifiedSymbolInformation]:
+                def visit_tree_nodes_and_build_tree_repr(node: GenericDocumentSymbol) -> list[
+                    multilspy_types.UnifiedSymbolInformation]:
                     node = cast(multilspy_types.UnifiedSymbolInformation, node)
                     l: list[multilspy_types.UnifiedSymbolInformation] = []
                     turn_item_into_symbol_with_children(node)

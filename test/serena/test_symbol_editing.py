@@ -11,7 +11,7 @@ from typing import Literal
 
 import pytest
 
-from multilspy.multilspy_config import Language
+from solidlsp.multilspy_config import Language
 from serena.symbol import CodeDiff
 from src.serena.symbol import SymbolManager
 from test.conftest import create_ls, get_repo_path

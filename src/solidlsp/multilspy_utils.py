@@ -14,10 +14,10 @@ import platform
 import subprocess
 from enum import Enum
 
-from multilspy.multilspy_exceptions import MultilspyException
+from solidlsp.multilspy_exceptions import MultilspyException
 from pathlib import PurePath, Path
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.multilspy_types import UnifiedSymbolInformation
+from solidlsp.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_types import UnifiedSymbolInformation
 
 
 class TextUtils:

@@ -11,13 +11,13 @@ import pathlib
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from multilspy.multilspy_logger import MultilspyLogger
+from solidlsp.multilspy_logger import MultilspyLogger
 from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_utils import FileUtils
-from multilspy.multilspy_utils import PlatformUtils
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.multilspy_config import MultilspyConfig
+from solidlsp.multilspy_utils import FileUtils
+from solidlsp.multilspy_utils import PlatformUtils
 
 
 class ClangdLanguageServer(LanguageServer):

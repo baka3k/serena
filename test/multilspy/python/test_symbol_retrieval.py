@@ -11,8 +11,8 @@ import os
 import pytest
 
 from multilspy.language_server import SyncLanguageServer
-from multilspy.multilspy_config import Language
-from multilspy.multilspy_types import SymbolKind
+from solidlsp.multilspy_config import Language
+from solidlsp.multilspy_types import SymbolKind
 
 pytestmark = pytest.mark.python
 

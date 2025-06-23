@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from multilspy.language_server import SyncLanguageServer
-from multilspy.multilspy_config import Language
+from solidlsp.multilspy_config import Language
 from test.conftest import create_ls
 
 # This mark will be applied to all tests in this module

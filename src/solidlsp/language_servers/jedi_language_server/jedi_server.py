@@ -9,10 +9,10 @@ import pathlib
 
 from overrides import override
 
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_logger import MultilspyLogger
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.multilspy_config import MultilspyConfig
+from solidlsp.multilspy_logger import MultilspyLogger
 from solidlsp.ls import SolidLanguageServer
 
 
