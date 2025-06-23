@@ -1738,12 +1738,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
         """
-        self.symbol_manager.insert_after_symbol(
-            name_path,
-            relative_file_path=relative_path,
-            body=body,
-            use_same_indentation=False,
-        )
+        self.symbol_manager.insert_after_symbol(name_path, relative_file_path=relative_path, body=body, use_same_indentation=False)
         return SUCCESS_RESULT
 
 
@@ -1767,12 +1762,7 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        self.symbol_manager.insert_before_symbol(
-            name_path,
-            relative_file_path=relative_path,
-            body=body,
-            use_same_indentation=False,
-        )
+        self.symbol_manager.insert_before_symbol(name_path, relative_file_path=relative_path, body=body, use_same_indentation=False)
         return SUCCESS_RESULT
 
 
