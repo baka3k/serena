@@ -19,6 +19,10 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_types import UnifiedSymbolInformation
 
 
+class InvalidTextLocationError(Exception):
+    pass
+
+
 class TextUtils:
     """
     Utilities for text operations.
@@ -49,7 +53,8 @@ class TextUtils:
         """
         idx = 0
         while line > 0:
-            assert idx < len(text), (idx, len(text), text)
+            if idx >= len(text):
+                raise InvalidTextLocationError
             if text[idx] == "\n":
                 line -= 1
             idx += 1
@@ -88,7 +93,17 @@ class TextUtils:
         Inserts the given text at the given line and column.
         Returns the modified text and the new line and column.
         """
-        change_index = TextUtils.get_index_from_line_col(text, line, col)
+        try:
+            change_index = TextUtils.get_index_from_line_col(text, line, col)
+        except InvalidTextLocationError:
+            num_lines_in_text = text.count("\n") + 1
+            max_line = num_lines_in_text - 1
+            if line == max_line + 1 and col == 0:  # trying to insert at new line after full text
+                # insert at end, adding missing newline
+                change_index = len(text)
+                text_to_be_inserted = "\n" + text_to_be_inserted
+            else:
+                raise
         new_text = text[:change_index] + text_to_be_inserted + text[change_index:]
         new_l, new_c = TextUtils._get_updated_position_from_line_and_column_and_edit(line, col, text_to_be_inserted)
         return new_text, new_l, new_c

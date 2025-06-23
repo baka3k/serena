@@ -16,12 +16,12 @@ from pathlib import PurePath
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.settings import SolidLSPSettings
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 @dataclasses.dataclass

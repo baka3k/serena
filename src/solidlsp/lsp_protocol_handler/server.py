@@ -28,19 +28,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import asyncio
 import dataclasses
 import json
 import logging
 import os
-import threading
-from collections.abc import Callable
 from typing import Any, Union
 
-import psutil
-
-from ..ls_exceptions import LanguageServerException
-from .lsp_requests import LspNotification, LspRequest
 from .lsp_types import ErrorCodes
 
 StringDict = dict[str, Any]
@@ -127,4 +120,3 @@ def content_length(line: bytes) -> int | None:
         except ValueError:
             raise ValueError(f"Invalid Content-Length header: {value}")
     return None
-
