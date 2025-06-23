@@ -69,7 +69,7 @@ With Serena, we provide
  * direct, out-of-the-box support for:
      * Python 
      * TypeScript/Javascript
-     * PhP
+     * PHP
      * Go (need to install go and gopls first)
      * Rust
      * C/C++
@@ -80,8 +80,8 @@ With Serena, we provide
      * Kotlin (untested)
      * Dart (untested)
      
-   These languages are supported by the language server library [multilspy](https://github.com/microsoft/multilspy), which Serena uses under the hood.
-   But we did not explicitly test whether the support for these languages actually works.
+   These languages are supported by the language server library, but
+   we did not explicitly test whether the support for these languages actually works flawlessly.
        
 Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
 implementation.
@@ -786,17 +786,16 @@ larger codebases.
 We built Serena on top of multiple existing open-source technologies, the most important ones being:
 
 1. [multilspy](https://github.com/microsoft/multilspy).
-   A beautifully designed wrapper around language servers following the LSP. It
-   was not easily extendable with the symbolic
-   logic that Serena required, so instead of incorporating it as dependency, we
-   copied the source code
-   and adapted it to our needs.
+   A library which wraps language server implementations and adapts them for interaction via Python
+   and which provided the basis for our library Solid-LSP (src/solidlsp). 
+   Solid-LSP provides pure synchronous LSP calls and extends the original library with the symbolic logic 
+   that Serena required.
 2. [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)
 3. [Agno](https://github.com/agno-agi/agno) and
    the associated [agent-ui](https://github.com/agno-agi/agent-ui),
    which we use to allow Serena to work with any model, beyond the ones
    supporting the MCP.
-4. All the language servers that we use through multilspy.
+4. All the language servers that we use through Solid-LSP.
 
 Without these projects, Serena would not have been possible (or would have been significantly more difficult to build).
 

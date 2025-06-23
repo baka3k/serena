@@ -1,5 +1,5 @@
 """
-Defines the settings for multilspy.
+Defines settings for Solid-LSP
 """
 
 import os
@@ -7,10 +7,6 @@ import pathlib
 
 
 class SolidLSPSettings:
-    """
-    Provides the various settings for multilspy.
-    """
-
     @staticmethod
     def get_language_server_directory() -> str:
         """Returns the directory for language servers"""
