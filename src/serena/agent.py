@@ -33,7 +33,6 @@ from sensai.util import logging
 from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler
 from sensai.util.string import ToStringMixin, dict_string
 
-from solidlsp import SolidLanguageServer as SyncLanguageServer
 from serena import serena_version
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import (
@@ -42,7 +41,6 @@ from serena.constants import (
     REPO_ROOT,
     SELENA_CONFIG_TEMPLATE_FILE,
     SERENA_MANAGED_DIR_NAME,
-    USE_SOLID_LSP,
 )
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.prompt_factory import PromptFactory, SerenaPromptFactory
@@ -53,6 +51,7 @@ from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
 from serena.util.thread import ExecutionResult, execute_with_timeout
+from solidlsp import SolidLanguageServer as SyncLanguageServer
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.multilspy_config import Language, MultilspyConfig
 from solidlsp.multilspy_logger import MultilspyLogger
@@ -678,21 +677,12 @@ def create_ls_for_project(
     )
     ls_logger = MultilspyLogger(log_level=log_level)
     log.info(f"Creating language server instance for {project_instance.project_root}.")
-    if USE_SOLID_LSP:
-        ls = SolidLanguageServer.create(
-            multilspy_config,
-            ls_logger,
-            project_instance.project_root,
-            timeout=ls_timeout,
-        )
-        return cast(SyncLanguageServer, ls)  # TODO: Fix type
-    else:
-        return SyncLanguageServer.create(
-            multilspy_config,
-            ls_logger,
-            project_instance.project_root,
-            timeout=ls_timeout,
-        )
+    return SolidLanguageServer.create(
+        multilspy_config,
+        ls_logger,
+        project_instance.project_root,
+        timeout=ls_timeout,
+    )
 
 
 @click.command()

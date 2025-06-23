@@ -45,12 +45,7 @@ def create_ls(
         ignored_paths.extend(spec.patterns)
     config = MultilspyConfig(code_language=language, ignored_paths=ignored_paths, trace_lsp_communication=trace_lsp_communication)
     logger = MultilspyLogger(log_level=log_level)
-
-    if USE_SOLID_LSP:
-        ls = SolidLanguageServer.create(config, logger, repo_path)
-        return cast(SyncLanguageServer, ls)  # TODO: Fix type
-    else:
-        return SyncLanguageServer.create(config, logger, repo_path)
+    return SolidLanguageServer.create(config, logger, repo_path)
 
 
 def create_default_ls(language: Language) -> SyncLanguageServer:
