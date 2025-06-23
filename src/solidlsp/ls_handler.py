@@ -53,9 +53,8 @@ class Request:
     def on_error(self, err: Error) -> None:
         self._result_queue.put(Request.Result(error=err))
 
-    def get_result(self) -> Result:
-        # TODO could add timeout
-        return self._result_queue.get()
+    def get_result(self, timeout: float | None = None) -> Result:
+        return self._result_queue.get(timeout=timeout)
 
 
 class SolidLanguageServerHandler:
@@ -102,13 +101,8 @@ class SolidLanguageServerHandler:
         process_launch_info: ProcessLaunchInfo,
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process=True,
+        request_timeout: float | None = None,
     ) -> None:
-        """
-        Params:
-            cmd: A string that represents the command to launch the language server process.
-            logger: An optional function that takes two strings (source and destination) and
-                a payload dictionary, and logs the communication between the client and the server.
-        """
         self.send = LanguageServerRequest(self.send_request)
         self.notify = LspNotification(self.send_notification)
 
@@ -125,12 +119,19 @@ class SolidLanguageServerHandler:
         self.task_counter = 0
         self.loop = None
         self.start_independent_lsp_process = start_independent_lsp_process
+        self._request_timeout = request_timeout
 
         # Add thread locks for shared resources to prevent race conditions
         self._stdin_lock = threading.Lock()
         self._request_id_lock = threading.Lock()
         self._response_handlers_lock = threading.Lock()
         self._tasks_lock = threading.Lock()
+
+    def set_request_timeout(self, timeout: float | None) -> None:
+        """
+        :param timeout: the timeout, in seconds, for all requests sent to the language server.
+        """
+        self._request_timeout = timeout
 
     def is_running(self) -> bool:
         """
@@ -418,7 +419,7 @@ class SolidLanguageServerHandler:
         self._send_payload(make_request(method, request_id, params))
 
         self._log(f"Waiting for response to request {method} with params:\n{params}")
-        result = request.get_result()
+        result = request.get_result(timeout=self._request_timeout)
 
         self._log("Processing result")
         if result.is_error():

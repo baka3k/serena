@@ -101,84 +101,82 @@ class SolidLanguageServer(ABC):
         :param repository_root_path: The root path of the repository.
         :param config: The Multilspy configuration.
         :param logger: The logger to use.
+        :param timeout: the timeout for requests to the language server. If None, no timeout will be used.
         :return LanguageServer: A language specific LanguageServer instance.
         """
-        # TODO: Apply timeout
+        ls: SolidLanguageServer
+
         if config.code_language == Language.PYTHON:
             from solidlsp.language_servers.pyright_language_server.pyright_server import (
                 PyrightServer,
             )
 
-            return PyrightServer(config, logger, repository_root_path)
-            # It used to be jedi, but pyright is a bit faster, and also more actively maintained
-            # Keeping the previous code for reference
-            # from multilspy.language_servers.jedi_language_server.jedi_server import (
-            #     JediServer,
-            # )
-
-            # return JediServer(config, logger, repository_root_path)
+            ls = PyrightServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.JAVA:
             from solidlsp.language_servers.eclipse_jdtls.eclipse_jdtls import (
                 EclipseJDTLS,
             )
 
-            return EclipseJDTLS(config, logger, repository_root_path)
+            ls = EclipseJDTLS(config, logger, repository_root_path)
 
         elif config.code_language == Language.KOTLIN:
             from solidlsp.language_servers.kotlin_language_server.kotlin_language_server import (
                 KotlinLanguageServer,
             )
 
-            return KotlinLanguageServer(config, logger, repository_root_path)
+            ls = KotlinLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.RUST:
             from solidlsp.language_servers.rust_analyzer.rust_analyzer import (
                 RustAnalyzer,
             )
 
-            return RustAnalyzer(config, logger, repository_root_path)
+            ls = RustAnalyzer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CSHARP:
             from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
 
-            return OmniSharp(config, logger, repository_root_path)
+            ls = OmniSharp(config, logger, repository_root_path)
 
         elif config.code_language in [Language.TYPESCRIPT, Language.JAVASCRIPT]:
             from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
 
-            return TypeScriptLanguageServer(config, logger, repository_root_path)
+            ls = TypeScriptLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.GO:
             from solidlsp.language_servers.gopls.gopls import Gopls
 
-            return Gopls(config, logger, repository_root_path)
+            ls = Gopls(config, logger, repository_root_path)
 
         elif config.code_language == Language.RUBY:
             from solidlsp.language_servers.solargraph.solargraph import Solargraph
 
-            return Solargraph(config, logger, repository_root_path)
+            ls = Solargraph(config, logger, repository_root_path)
 
         elif config.code_language == Language.DART:
             from solidlsp.language_servers.dart_language_server.dart_language_server import DartLanguageServer
 
-            return DartLanguageServer(config, logger, repository_root_path)
+            ls = DartLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CPP:
             from solidlsp.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
 
-            return ClangdLanguageServer(config, logger, repository_root_path)
+            ls = ClangdLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.PHP:
             from solidlsp.language_servers.intelephense.intelephense import Intelephense
 
-            return Intelephense(config, logger, repository_root_path)
+            ls = Intelephense(config, logger, repository_root_path)
 
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise LanguageServerException(f"Language {config.code_language} is not supported")
+
+        ls.set_request_timeout(timeout)
+        return ls
 
     def __init__(
         self,
@@ -255,6 +253,13 @@ class SolidLanguageServer(ABC):
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
 
         self._server_context = None
+        self._request_timeout: float | None = None
+
+    def set_request_timeout(self, timeout: float | None) -> None:
+        """
+        :param timeout: the timeout, in seconds, for requests to the language server.
+        """
+        self.server.set_request_timeout(timeout)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """Returns the pathspec matcher for the paths that were configured to be ignored through
@@ -1132,8 +1137,6 @@ class SolidLanguageServer(ABC):
         assert isinstance(response, dict)
 
         return ls_types.Hover(**response)
-
-    # ----------------------------- FROM HERE ON MODIFICATIONS BY MISCHA --------------------
 
     def retrieve_symbol_body(self, symbol: ls_types.UnifiedSymbolInformation | LSPTypes.DocumentSymbol | LSPTypes.SymbolInformation) -> str:
         """
