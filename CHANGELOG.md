@@ -9,6 +9,7 @@ Status of the `main` branch. Changes prior to the next official version change w
    * The MCP server is the only asynchronous component now, which resolves cross-component loop contamination,
      such that process isolation is no longer required.
      Neither are non-graceful shutdowns on Windows.
+* Better default and description for restricting the search in `search_for_pattern`
 
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows
