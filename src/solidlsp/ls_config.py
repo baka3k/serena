@@ -32,7 +32,6 @@ class Language(str, Enum):
     JAVA = "java"
     KOTLIN = "kotlin"
     TYPESCRIPT = "typescript"
-    JAVASCRIPT = "javascript"
     GO = "go"
     RUBY = "ruby"
     DART = "dart"
@@ -49,9 +48,13 @@ class Language(str, Enum):
             case self.JAVA:
                 return FilenameMatcher("*.java")
             case self.TYPESCRIPT:
-                return FilenameMatcher("*.ts", "*.js", "*.jsx", "*.tsx")
-            case self.JAVASCRIPT:
-                return FilenameMatcher("*.js", "*.jsx")
+                # see https://github.com/oraios/serena/issues/204
+                path_patterns = []
+                for prefix in ["c", "m", ""]:
+                    for postfix in ["x", ""]:
+                        for base_pattern in ["ts", "js"]:
+                            path_patterns.append(f"*.{prefix}{base_pattern}{postfix}")
+                return FilenameMatcher(*path_patterns)
             case self.CSHARP:
                 return FilenameMatcher("*.cs")
             case self.RUST:
