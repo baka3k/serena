@@ -954,21 +954,22 @@ class SerenaAgent:
 
         log.info(f"Active tools after all exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
-    def issue_task(self, task: Callable[[], Any]) -> Future:
+    def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
         """
         Issue a task to the executor for asynchronous execution.
         :param task: the task to execute
+        :param name: the name of the task for logging purposes; if None, use the task function's name
         :return: a Future object representing the execution of the task
         """
         with self._task_executor_lock:
-            task_name = f"Task-{self._task_executor_task_index}"
+            task_name = f"Task-{self._task_executor_task_index}[{name or task.__name__}]"
             self._task_executor_task_index += 1
 
             def task_execution_wrapper() -> Any:
                 with LogTime(task_name, logger=log):
                     return task()
 
-            log.info(f"Scheduling {task_name} ({task.__name__})")
+            log.info(f"Scheduling {task_name}")
             return self._task_executor.submit(task_execution_wrapper)
 
     def _activate_project(self, project: Project) -> None:
@@ -1403,7 +1404,7 @@ class Tool(Component, ToolInterface):
 
             return result
 
-        future = self.agent.issue_task(task)
+        future = self.agent.issue_task(task, name=self.__class__.__name__)
         return future.result(timeout=self.agent.serena_config.tool_timeout)
 
 
