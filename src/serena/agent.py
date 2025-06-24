@@ -31,7 +31,7 @@ from overrides import override
 from pathspec import PathSpec
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
-from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler, LogTime
+from sensai.util.logging import FallbackHandler, LogTime
 from sensai.util.string import ToStringMixin, dict_string
 
 from serena import serena_version
@@ -41,6 +41,7 @@ from serena.constants import (
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
     SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_LOG_FORMAT,
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
@@ -60,7 +61,6 @@ if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
 
 log = logging.getLogger(__name__)
-LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 TTool = TypeVar("TTool", bound="Tool")
 SUCCESS_RESULT = "OK"
 DEFAULT_TOOL_TIMEOUT: float = 240
@@ -751,8 +751,6 @@ class SerenaAgent:
         if Logger.root.level > serena_log_level:
             log.info(f"Changing the root logger level to {serena_log_level}")
             Logger.root.setLevel(serena_log_level)
-            # Override existing configuration (needed to configure multilspy logger as desired)
-            logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=serena_log_level, force=True)
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
@@ -765,7 +763,7 @@ class SerenaAgent:
                 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 
                 self._gui_log_handler = GuiLogViewerHandler(
-                    GuiLogViewer("dashboard", title="Serena Logs"), level=serena_log_level, format_string=LOG_FORMAT
+                    GuiLogViewer("dashboard", title="Serena Logs"), level=serena_log_level, format_string=SERENA_LOG_FORMAT
                 )
                 Logger.root.addHandler(self._gui_log_handler)
 

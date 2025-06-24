@@ -170,12 +170,12 @@ class SolidLanguageServerHandler:
         # start threads to read stdout and stderr of the process
         threading.Thread(
             target=self.run_forever,
-            name="LSP stdout reader",
+            name="LSP-stdout-reader",
             daemon=True,
         ).start()
         threading.Thread(
             target=self.run_forever_stderr,
-            name="LSP stderr reader",
+            name="LSP-stderr-reader",
             daemon=True,
         ).start()
 
