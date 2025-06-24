@@ -9,6 +9,7 @@ import platform
 import re
 import shutil
 import sys
+import threading
 import traceback
 import webbrowser
 from abc import ABC, abstractmethod
@@ -788,6 +789,8 @@ class SerenaAgent:
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
         self._task_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SerenaAgentExecutor")
+        self._task_executor_lock = threading.Lock()
+        self._task_executor_task_index = 1
 
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
@@ -957,7 +960,16 @@ class SerenaAgent:
         :param task: the task to execute
         :return: a Future object representing the execution of the task
         """
-        return self._task_executor.submit(task)
+        with self._task_executor_lock:
+            task_name = f"Task-{self._task_executor_task_index}"
+            self._task_executor_task_index += 1
+
+            def task_execution_wrapper() -> Any:
+                with LogTime(task_name, logger=log):
+                    return task()
+
+            log.info(f"Scheduling {task_name} ({task.__name__})")
+            return self._task_executor.submit(task_execution_wrapper)
 
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
