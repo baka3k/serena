@@ -1168,7 +1168,7 @@ class SolidLanguageServer(ABC):
             )
             raise LanguageServerException("Language Server not started")
         rel_file_paths = []
-        for root, dirs, files in os.walk(self.repository_root_path):
+        for root, dirs, files in os.walk(self.repository_root_path, followlinks=True):
             dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
             for file in files:
                 rel_file_path = os.path.relpath(os.path.join(root, file), start=self.repository_root_path)
