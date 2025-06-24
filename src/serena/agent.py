@@ -63,6 +63,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 TTool = TypeVar("TTool", bound="Tool")
+T = TypeVar("T")
 SUCCESS_RESULT = "OK"
 DEFAULT_TOOL_TIMEOUT: float = 240
 
@@ -957,6 +958,8 @@ class SerenaAgent:
     def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
         """
         Issue a task to the executor for asynchronous execution.
+        It is ensured that tasks are executed in the order they are issued, one after another.
+
         :param task: the task to execute
         :param name: the name of the task for logging purposes; if None, use the task function's name
         :return: a Future object representing the execution of the task
@@ -971,6 +974,17 @@ class SerenaAgent:
 
             log.info(f"Scheduling {task_name}")
             return self._task_executor.submit(task_execution_wrapper)
+
+    def execute_task(self, task: Callable[[], T]) -> T:
+        """
+        Executes the given task synchronously via the agent's task executor.
+        This is useful for tasks that need to be executed immediately and whose results are needed right away.
+
+        :param task: the task to execute
+        :return: the result of the task execution
+        """
+        future = self.issue_task(task)
+        return future.result()
 
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
