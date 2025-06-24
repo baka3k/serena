@@ -9,11 +9,13 @@ import platform
 import re
 import shutil
 import sys
+import threading
 import traceback
 import webbrowser
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
 from fnmatch import fnmatch
@@ -30,7 +32,7 @@ from overrides import override
 from pathspec import PathSpec
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
-from sensai.util.logging import LOG_DEFAULT_FORMAT, FallbackHandler
+from sensai.util.logging import FallbackHandler, LogTime
 from sensai.util.string import ToStringMixin, dict_string
 
 from serena import serena_version
@@ -40,6 +42,7 @@ from serena.constants import (
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
     SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_LOG_FORMAT,
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
@@ -50,7 +53,6 @@ from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition, iter_subclasses
 from serena.util.shell import execute_shell_command
-from serena.util.thread import ExecutionResult, execute_with_timeout
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -60,8 +62,8 @@ if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
 
 log = logging.getLogger(__name__)
-LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 TTool = TypeVar("TTool", bound="Tool")
+T = TypeVar("T")
 SUCCESS_RESULT = "OK"
 DEFAULT_TOOL_TIMEOUT: float = 240
 
@@ -751,8 +753,6 @@ class SerenaAgent:
         if Logger.root.level > serena_log_level:
             log.info(f"Changing the root logger level to {serena_log_level}")
             Logger.root.setLevel(serena_log_level)
-            # Override existing configuration (needed to configure multilspy logger as desired)
-            logging.basicConfig(format=LOG_DEFAULT_FORMAT, level=serena_log_level, force=True)
 
         # open GUI log window if enabled
         self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
@@ -765,7 +765,7 @@ class SerenaAgent:
                 from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
 
                 self._gui_log_handler = GuiLogViewerHandler(
-                    GuiLogViewer("dashboard", title="Serena Logs"), level=serena_log_level, format_string=LOG_FORMAT
+                    GuiLogViewer("dashboard", title="Serena Logs"), level=serena_log_level, format_string=SERENA_LOG_FORMAT
                 )
                 Logger.root.addHandler(self._gui_log_handler)
 
@@ -786,6 +786,12 @@ class SerenaAgent:
 
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
+
+        # create executor for starting the language server and running tools in another thread
+        # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
+        self._task_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SerenaAgentExecutor")
+        self._task_executor_lock = threading.Lock()
+        self._task_executor_task_index = 1
 
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
@@ -949,21 +955,62 @@ class SerenaAgent:
 
         log.info(f"Active tools after all exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
+    def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
+        """
+        Issue a task to the executor for asynchronous execution.
+        It is ensured that tasks are executed in the order they are issued, one after another.
+
+        :param task: the task to execute
+        :param name: the name of the task for logging purposes; if None, use the task function's name
+        :return: a Future object representing the execution of the task
+        """
+        with self._task_executor_lock:
+            task_name = f"Task-{self._task_executor_task_index}[{name or task.__name__}]"
+            self._task_executor_task_index += 1
+
+            def task_execution_wrapper() -> Any:
+                with LogTime(task_name, logger=log):
+                    return task()
+
+            log.info(f"Scheduling {task_name}")
+            return self._task_executor.submit(task_execution_wrapper)
+
+    def execute_task(self, task: Callable[[], T]) -> T:
+        """
+        Executes the given task synchronously via the agent's task executor.
+        This is useful for tasks that need to be executed immediately and whose results are needed right away.
+
+        :param task: the task to execute
+        :return: the result of the task execution
+        """
+        future = self.issue_task(task)
+        return future.result()
+
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
         self._active_project = project
         self._update_active_tools()
 
-        # start the language server
-        self.reset_language_server()
-        assert self.language_server is not None
-        self.ignore_spec = self.language_server.get_ignore_spec()
-
-        # initialize project-specific instances
-        log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")
-        self.symbol_manager = SymbolManager(self.language_server, self)
+        # initialize project-specific instances which do not depend on the language server
         self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
         self.lines_read = LinesRead()
+
+        # reset project-specific instances that depend on the language server
+        self.symbol_manager = None
+
+        def init_language_server() -> None:
+            # start the language server
+            with LogTime("Language server initialization", logger=log):
+                self.reset_language_server()
+                assert self.language_server is not None
+                self.ignore_spec = self.language_server.get_ignore_spec()
+
+            # initialize project-specific instances which depend on the language server
+            log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")
+            self.symbol_manager = SymbolManager(self.language_server, self)
+
+        # initialize the language server in the background
+        self.issue_task(init_language_server)
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
@@ -1323,57 +1370,56 @@ class Tool(Component, ToolInterface):
         """
         Applies the tool with the given arguments
         """
-        apply_fn = self.get_apply_fn()
 
-        try:
-            if not self.is_active():
-                return f"Error: Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
-        except Exception as e:
-            return f"RuntimeError while checking if tool {self.get_name_from_cls()} is active: {e}"
+        def task() -> str:
+            apply_fn = self.get_apply_fn()
 
-        if log_call:
-            self._log_tool_application(inspect.currentframe())
-        try:
-            # check whether the tool requires an active project and language server
-            if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
-                if self.agent._active_project is None:
-                    return (
-                        "Error: No active project. Ask to user to select a project from this list: "
-                        + f"{self.agent.serena_config.project_names}"
-                    )
-                if not self.agent.is_language_server_running():
-                    log.info("Language server is not running. Starting it ...")
-                    self.agent.reset_language_server()
+            try:
+                if not self.is_active():
+                    return f"Error: Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
+            except Exception as e:
+                return f"RuntimeError while checking if tool {self.get_name_from_cls()} is active: {e}"
 
-            # apply the actual tool with a timeout
-            execution_fn = lambda: apply_fn(**kwargs)
-            execution_result = execute_with_timeout(execution_fn, self.agent.serena_config.tool_timeout, self.get_name_from_cls())
-            if execution_result.status == ExecutionResult.Status.SUCCESS:
-                result = cast(str, execution_result.result_value)
-            else:
-                assert execution_result.exception is not None
-                raise execution_result.exception
+            if log_call:
+                self._log_tool_application(inspect.currentframe())
+            try:
+                # check whether the tool requires an active project and language server
+                if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
+                    if self.agent._active_project is None:
+                        return (
+                            "Error: No active project. Ask to user to select a project from this list: "
+                            + f"{self.agent.serena_config.project_names}"
+                        )
+                    if not self.agent.is_language_server_running():
+                        log.info("Language server is not running. Starting it ...")
+                        self.agent.reset_language_server()
 
-        except Exception as e:
-            if not catch_exceptions:
-                raise
-            msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
-            log.error(
-                f"Error executing tool: {e}. "
-                f"Consider restarting the language server to solve this (especially, if it's a timeout of a symbolic operation)",
-                exc_info=e,
-            )
-            result = msg
+                # apply the actual tool
+                result = apply_fn(**kwargs)
 
-        if log_call:
-            log.info(f"Result: {result}")
+            except Exception as e:
+                if not catch_exceptions:
+                    raise
+                msg = f"Error executing tool: {e}\n{traceback.format_exc()}"
+                log.error(
+                    f"Error executing tool: {e}. "
+                    f"Consider restarting the language server to solve this (especially, if it's a timeout of a symbolic operation)",
+                    exc_info=e,
+                )
+                result = msg
 
-        try:
-            self.language_server.save_cache()
-        except Exception as e:
-            log.error(f"Error saving language server cache: {e}")
+            if log_call:
+                log.info(f"Result: {result}")
 
-        return result
+            try:
+                self.language_server.save_cache()
+            except Exception as e:
+                log.error(f"Error saving language server cache: {e}")
+
+            return result
+
+        future = self.agent.issue_task(task, name=self.__class__.__name__)
+        return future.result(timeout=self.agent.serena_config.tool_timeout)
 
 
 class RestartLanguageServerTool(Tool):

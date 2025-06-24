@@ -9,7 +9,7 @@ from flask import Flask, Response, request, send_from_directory
 from pydantic import BaseModel
 from sensai.util import logging
 
-from serena.constants import SERENA_DASHBOARD_DIR
+from serena.constants import SERENA_DASHBOARD_DIR, SERENA_LOG_FORMAT
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logging.getLogger("werkzeug").setLevel(logging.WARNING)
 class MemoryLogHandler(logging.Handler):
     def __init__(self, level: int = logging.NOTSET) -> None:
         super().__init__(level=level)
-        self.setFormatter(logging.Formatter(logging.LOG_DEFAULT_FORMAT))
+        self.setFormatter(logging.Formatter(SERENA_LOG_FORMAT))
         self._log_buffer = LogBuffer()
         self._log_queue: queue.Queue[str] = queue.Queue()
         self._stop_event = threading.Event()
