@@ -16,6 +16,5 @@ def get_git_status() -> GitStatus | None:
         return GitStatus(
             commit=commit_hash, has_unstaged_changes=unstaged, has_staged_uncommitted_changes=staged, has_untracked_files=untracked
         )
-    except Exception as e:
-        log.error("Error determining Git status", exc_info=e)
+    except:
         return None
