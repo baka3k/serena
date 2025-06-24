@@ -976,6 +976,13 @@ class SerenaAgent:
         self._active_project = project
         self._update_active_tools()
 
+        # initialize project-specific instances which do not depend on the language server
+        self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
+        self.lines_read = LinesRead()
+
+        # reset project-specific instances that depend on the language server
+        self.symbol_manager = None
+
         def init_language_server() -> None:
             # start the language server
             with LogTime("Language server initialization", logger=log):
@@ -983,11 +990,9 @@ class SerenaAgent:
                 assert self.language_server is not None
                 self.ignore_spec = self.language_server.get_ignore_spec()
 
-            # initialize project-specific instances (some of which depend on the language server)
+            # initialize project-specific instances which depend on the language server
             log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")
             self.symbol_manager = SymbolManager(self.language_server, self)
-            self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
-            self.lines_read = LinesRead()
 
         # initialize the language server in the background
         self.issue_task(init_language_server)
