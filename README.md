@@ -45,7 +45,6 @@ Serena can be integrated with an LLM in several ways:
      * Claude Code and Claude Desktop, 
      * IDEs like VSCode, Cursor or IntelliJ,
      * Extensions like Cline or Roo Code
-     * Goose (for a nice CLI experience)
      * and many others, including [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
  * by using **Agno – the model-agnostic agent framework**.  
    Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
@@ -173,7 +172,7 @@ We thus built Serena with the prospect of being able to cancel most other subscr
 Serena can be used in various ways, below you will find instructions for selected integrations.
 
 - If you just want to turn Claude into a free-to-use coding agent, we recommend using Serena through [Claude Code](#claude-code) or [Claude Desktop](#claude-desktop).
-- If you want to use Gemini or any other model, and you want a GUI experience, you can use [Agno](#agno-agent). On macOS, you can also use the GUI of [goose](#goose).
+- If you want to use Gemini or any other model, and you want a GUI experience, you can use [Agno](#agno-agent) or one of the many other GUIs that support MCP servers.
 - If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
 
 Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/)).
@@ -429,8 +428,7 @@ e.g., for one of the following reasons:
 
 Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
 (independent of the MCP technology) with a large number of underlying LLMs. Agno is currently
-the simplest way of running Serena in a chat GUI with an LLM of your choice 
-(unless you are using a Mac, then you might prefer goose, which requires almost no setup).
+the simplest way of running Serena in a chat GUI with an LLM of your choice.
 
 While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
 making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
@@ -714,9 +712,7 @@ platform and from client to client. We recommend always using absolute paths, as
 errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
 a client may make it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
 
-Some clients (like goose) may not properly terminate MCP servers,
-look out for hanging python processes and terminate them
-manually, if needed.
+Some clients may not properly terminate MCP servers, look out for hanging python processes and terminate them manually, if needed.
 
 ## Comparison with Other Coding Agents
 
