@@ -5,18 +5,24 @@ CSharp Language Server using csharp-ls (Roslyn-based LSP server)
 import logging
 import os
 import pathlib
+import platform
 import shutil
+import stat
 import subprocess
+import tempfile
 import threading
+import urllib.request
+import zipfile
+from pathlib import Path
 
 from overrides import override
 
+from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import LanguageServerException
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_handler import ProcessLaunchInfo
-from solidlsp.ls_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
 
 def breadth_first_file_scan(root_dir):
@@ -113,10 +119,6 @@ class CSharpLanguageServer(SolidLanguageServer):
         Set up Microsoft.CodeAnalysis.LanguageServer by downloading the NuGet package.
         Returns the path to the language server DLL.
         """
-        import platform
-        import tempfile
-        from pathlib import Path
-        
         # Determine the runtime ID based on the platform
         system = platform.system().lower()
         machine = platform.machine().lower()
@@ -136,7 +138,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         
         # Package configuration
         package_name = f"Microsoft.CodeAnalysis.LanguageServer.{runtime_id}"
-        package_version = "4.13.0-2.final"  # Latest stable version as of search
+        package_version = "5.0.0-1.25277.114"  # Latest version (requires .NET 9)
         
         # Check if already downloaded
         cache_dir = Path.home() / ".cache" / "serena" / "language-servers" / "csharp"
@@ -165,36 +167,90 @@ class CSharpLanguageServer(SolidLanguageServer):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
-            if dotnet_cmd:
+            # Try to download directly from the NuGet API first
+            direct_download_url = f"https://api.nuget.org/v3-flatcontainer/{package_name.lower()}/{package_version}/{package_name.lower()}.{package_version}.nupkg"
+            
+            try:
+                nupkg_path = temp_path / f"{package_name}.{package_version}.nupkg"
+                logger.log(f"Attempting direct download from {direct_download_url}", logging.INFO)
+                
+                urllib.request.urlretrieve(direct_download_url, nupkg_path)
+                
+                # Extract the nupkg (it's a zip file)
+                package_path = temp_path / f"{package_name}.{package_version}"
+                with zipfile.ZipFile(nupkg_path, 'r') as zip_ref:
+                    zip_ref.extractall(package_path)
+                
+                logger.log("Successfully downloaded and extracted package", logging.INFO)
+                
+            except Exception as e:
+                logger.log(f"Direct download failed: {e}, falling back to package manager", logging.WARNING)
+                package_path = None
+            
+            if package_path is None and dotnet_cmd:
                 # Use dotnet restore to download the package
                 project_content = f"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="{package_name}" Version="{package_version}" />
   </ItemGroup>
+  <PropertyGroup>
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json;
+      https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json;
+      https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json
+    </RestoreAdditionalProjectSources>
+  </PropertyGroup>
 </Project>"""
                 
                 project_file = temp_path / "temp.csproj"
                 project_file.write_text(project_content)
                 
                 try:
-                    # Restore the package
-                    subprocess.run(
-                        [dotnet_cmd, "restore", str(project_file), "--packages", str(temp_path)],
-                        check=True,
-                        capture_output=True,
-                        text=True
-                    )
+                    # Download the package without dependencies using nuget CLI if available
+                    nuget_config = temp_path / "nuget.config"
+                    nuget_config_content = """<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+    <add key="vs-impl" value="https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json" />
+    <add key="dotnet-tools" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json" />
+    <add key="dotnet-public" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json" />
+  </packageSources>
+</configuration>"""
+                    nuget_config.write_text(nuget_config_content)
                     
-                    # Find the downloaded package
-                    package_path = temp_path / package_name.lower() / package_version
+                    # Try direct download with nuget if available
+                    if shutil.which("nuget"):
+                        subprocess.run(
+                            ["nuget", "install", package_name, "-Version", package_version, 
+                             "-OutputDirectory", str(temp_path), "-DependencyVersion", "Ignore",
+                             "-ConfigFile", str(nuget_config)],
+                            check=True,
+                            capture_output=True,
+                            text=True
+                        )
+                        package_path = temp_path / f"{package_name}.{package_version}"
+                    else:
+                        # Use dotnet restore with no dependencies
+                        subprocess.run(
+                            [dotnet_cmd, "restore", str(project_file), "--packages", str(temp_path),
+                             "--no-dependencies", "--ignore-failed-sources"],
+                            check=True,
+                            capture_output=True,
+                            text=True
+                        )
+                        package_path = temp_path / package_name.lower() / package_version
                     
                 except subprocess.CalledProcessError as e:
-                    raise LanguageServerException(f"Failed to download package: {e.stderr}")
+                    logger.log(f"Dotnet restore stdout: {e.stdout}", logging.ERROR)
+                    logger.log(f"Dotnet restore stderr: {e.stderr}", logging.ERROR)
+                    raise LanguageServerException(f"Failed to download package: stdout={e.stdout}, stderr={e.stderr}")
             
-            else:
+            elif package_path is None and nuget_cmd:
                 # Use nuget to download the package
                 try:
                     subprocess.run(
@@ -215,10 +271,13 @@ class CSharpLanguageServer(SolidLanguageServer):
                 except subprocess.CalledProcessError as e:
                     raise LanguageServerException(f"Failed to download package: {e.stderr}")
             
+            if package_path is None or not package_path.exists():
+                raise LanguageServerException("Failed to download Microsoft.CodeAnalysis.LanguageServer package")
+            
             # Extract the language server files
             if runtime_id == "neutral":
-                # For neutral package, files are in lib/net8.0
-                source_dir = package_path / "lib" / "net8.0"
+                # For neutral package, files are in lib/net9.0
+                source_dir = package_path / "lib" / "net9.0"
             else:
                 # For runtime-specific packages, files are in content/LanguageServer/{runtime-id}
                 source_dir = package_path / "content" / "LanguageServer" / runtime_id
@@ -226,9 +285,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             if not source_dir.exists():
                 # Try alternative locations
                 for possible_dir in [
-                    package_path / "tools" / "net8.0" / "any",
-                    package_path / "lib" / "net8.0",
-                    package_path / "contentFiles" / "any" / "net8.0"
+                    package_path / "tools" / "net9.0" / "any",
+                    package_path / "lib" / "net9.0",
+                    package_path / "contentFiles" / "any" / "net9.0"
                 ]:
                     if possible_dir.exists():
                         source_dir = possible_dir
@@ -242,8 +301,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Copy files to cache directory
             server_dir.mkdir(parents=True, exist_ok=True)
             
-            import shutil as shutil_module
-            shutil_module.copytree(source_dir, server_dir, dirs_exist_ok=True)
+            shutil.copytree(source_dir, server_dir, dirs_exist_ok=True)
             
             if not server_dll.exists():
                 raise LanguageServerException(
@@ -252,7 +310,6 @@ class CSharpLanguageServer(SolidLanguageServer):
             
             # Make the DLL executable on Unix-like systems
             if system != "windows":
-                import stat
                 server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
             
             logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
