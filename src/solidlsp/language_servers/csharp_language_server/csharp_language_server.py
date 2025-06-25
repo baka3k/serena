@@ -100,14 +100,9 @@ class CSharpLanguageServer(SolidLanguageServer):
         else:
             logger.log("No .sln or .csproj file found, language server will attempt auto-discovery", logging.WARNING)
         
-        # Use shlex to properly quote the command parts for shell safety
-        if platform.system() == "Windows":
-            # Windows doesn't use shell=True by default, so we can join with spaces
-            # But we still quote each part to handle spaces in paths
-            cmd = " ".join(shlex.quote(part) for part in cmd_parts)
-        else:
-            # Unix-like systems - use shlex for proper quoting
-            cmd = " ".join(shlex.quote(part) for part in cmd_parts)
+        # Join command parts with spaces
+        # ProcessLaunchInfo expects a simple string command, not shell-quoted
+        cmd = " ".join(cmd_parts)
         
         logger.log(f"Language server command: {cmd}", logging.DEBUG)
         
@@ -616,6 +611,9 @@ class CSharpLanguageServer(SolidLanguageServer):
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
         
         self.logger.log("Starting Microsoft.CodeAnalysis.LanguageServer process", logging.INFO)
+        self.logger.log(f"Command: {self.process_launch_info.cmd}", logging.DEBUG)
+        self.logger.log(f"Working directory: {self.process_launch_info.cwd}", logging.DEBUG)
+        
         try:
             self.server.start()
         except Exception as e:
