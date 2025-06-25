@@ -399,106 +399,27 @@ class CSharpLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the Microsoft.CodeAnalysis.LanguageServer.
         """
-        initialize_params: InitializeParams = {  # type: ignore
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
-            "capabilities": {
-                "window": {
-                    "workDoneProgress": True,
-                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
-                    "showDocument": {"support": True}
-                },
-                "workspace": {
-                    "applyEdit": True,
-                    "workspaceEdit": {"documentChanges": True},
-                    "didChangeConfiguration": {"dynamicRegistration": True},
-                    "didChangeWatchedFiles": {"dynamicRegistration": True},
-                    "symbol": {
-                        "dynamicRegistration": True,
-                        "symbolKind": {
-                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                        },
-                    },
-                    "executeCommand": {"dynamicRegistration": True},
-                    "configuration": True,
-                    "workspaceFolders": True,
-                    "workDoneProgress": True,
-                },
-                "textDocument": {
-                    "synchronization": {
-                        "dynamicRegistration": True,
-                        "willSave": True,
-                        "willSaveWaitUntil": True,
-                        "didSave": True
-                    },
-                    "completion": {
-                        "dynamicRegistration": True,
-                        "contextSupport": True,
-                        "completionItem": {
-                            "snippetSupport": True,
-                            "commitCharactersSupport": True,
-                            "documentationFormat": ["markdown", "plaintext"],
-                            "deprecatedSupport": True,
-                            "preselectSupport": True,
-                        },
-                        "completionItemKind": {
-                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-                        },
-                    },
-                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
-                    "signatureHelp": {
-                        "dynamicRegistration": True,
-                        "signatureInformation": {
-                            "documentationFormat": ["markdown", "plaintext"],
-                            "parameterInformation": {"labelOffsetSupport": True},
-                        },
-                    },
-                    "definition": {"dynamicRegistration": True},
-                    "references": {"dynamicRegistration": True},
-                    "documentHighlight": {"dynamicRegistration": True},
-                    "documentSymbol": {
-                        "dynamicRegistration": True,
-                        "symbolKind": {
-                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                        },
-                        "hierarchicalDocumentSymbolSupport": True,
-                    },
-                    "codeAction": {
-                        "dynamicRegistration": True,
-                        "codeActionLiteralSupport": {
-                            "codeActionKind": {
-                                "valueSet": [
-                                    "",
-                                    "quickfix",
-                                    "refactor",
-                                    "refactor.extract",
-                                    "refactor.inline",
-                                    "refactor.rewrite",
-                                    "source",
-                                    "source.organizeImports",
-                                ]
-                            }
-                        },
-                    },
-                    "codeLens": {"dynamicRegistration": True},
-                    "formatting": {"dynamicRegistration": True},
-                    "rangeFormatting": {"dynamicRegistration": True},
-                    "onTypeFormatting": {"dynamicRegistration": True},
-                    "rename": {"dynamicRegistration": True},
-                    "publishDiagnostics": {"relatedInformation": True},
-                    "foldingRange": {
-                        "dynamicRegistration": True,
-                        "rangeLimit": 5000,
-                        "lineFoldingOnly": True
-                    },
-                },
-            },
-            "workspaceFolders": [
-                {"uri": pathlib.Path(repository_absolute_path).as_uri(), "name": os.path.basename(repository_absolute_path)}
-            ],
-        }
-
+        import json
+        
+        # Load initialization parameters from JSON file
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
+            initialize_params_template = json.load(f)
+        
+        # Convert the template string to actual values
+        initialize_params_str = json.dumps(initialize_params_template)
+        
+        # Replace template variables
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        root_name = os.path.basename(repository_absolute_path)
+        
+        initialize_params_str = initialize_params_str.replace("$rootPath", repository_absolute_path)
+        initialize_params_str = initialize_params_str.replace("$rootUri", root_uri)
+        initialize_params_str = initialize_params_str.replace("$rootName", root_name)
+        initialize_params_str = initialize_params_str.replace('"os.getpid()"', str(os.getpid()))
+        
+        # Parse back to dictionary
+        initialize_params = json.loads(initialize_params_str)
+        
         return initialize_params
 
     def _start_server(self):
