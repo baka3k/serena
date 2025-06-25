@@ -624,9 +624,15 @@ class CSharpLanguageServer(SolidLanguageServer):
                             result.append("openFiles")  # CompilerDiagnosticsScope
                         else:
                             result.append("openFiles")
+                    elif section == "dotnet_member_insertion_location":
+                        # ImplementTypeInsertionBehavior enum
+                        result.append("with_other_members_of_the_same_kind")
+                    elif section == "dotnet_property_generation_behavior":
+                        # ImplementTypePropertyGenerationBehavior enum  
+                        result.append("prefer_throwing_properties")
                     elif "location" in section or "behavior" in section:
-                        # Enum settings
-                        result.append(0)  # Default to first enum value
+                        # Other enum settings - return null to avoid parsing errors
+                        result.append(None)
                     else:
                         # Default for other dotnet/csharp settings
                         result.append(None)
