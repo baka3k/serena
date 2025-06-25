@@ -553,11 +553,18 @@ class CSharpLanguageServer(SolidLanguageServer):
             }
             
             self.logger.log(f"LSP: {message_text}", level_map.get(level, logging.DEBUG))
+            
+            # Also print important messages to console
+            if level <= 3:  # Error, Warning, or Info
+                print(f"C# Language Server: {message_text}")
 
         def handle_progress(params):
             """Handle progress notifications from the language server."""
             token = params.get("token", "")
             value = params.get("value", {})
+            
+            # Log raw progress for debugging
+            self.logger.log(f"Progress notification received: {params}", logging.DEBUG)
             
             # Handle different progress notification types
             kind = value.get("kind")
@@ -569,8 +576,10 @@ class CSharpLanguageServer(SolidLanguageServer):
                 
                 if percentage is not None:
                     self.logger.log(f"Progress [{token}]: {title} - {message} ({percentage}%)", logging.INFO)
+                    print(f"C# Language Server: {title} - {message} ({percentage}%)")
                 else:
                     self.logger.log(f"Progress [{token}]: {title} - {message}", logging.INFO)
+                    print(f"C# Language Server: {title} - {message}")
                     
             elif kind == "report":
                 message = value.get("message", "")
@@ -578,12 +587,15 @@ class CSharpLanguageServer(SolidLanguageServer):
                 
                 if percentage is not None:
                     self.logger.log(f"Progress [{token}]: {message} ({percentage}%)", logging.INFO)
+                    if percentage % 10 == 0:  # Print every 10%
+                        print(f"C# Language Server: {message} ({percentage}%)")
                 elif message:
                     self.logger.log(f"Progress [{token}]: {message}", logging.INFO)
                     
             elif kind == "end":
                 message = value.get("message", "Operation completed")
                 self.logger.log(f"Progress [{token}]: {message}", logging.INFO)
+                print(f"C# Language Server: {message}")
 
         def handle_workspace_configuration(params):
             """Handle workspace/configuration requests from the server."""
@@ -638,3 +650,5 @@ class CSharpLanguageServer(SolidLanguageServer):
         self.completions_available.set()
         
         self.logger.log("Microsoft.CodeAnalysis.LanguageServer initialized and ready", logging.INFO)
+        self.logger.log("Waiting for language server to index project files...", logging.INFO)
+        self.logger.log("This may take a while for large projects", logging.INFO)
