@@ -1,5 +1,5 @@
 """
-CSharp Language Server using csharp-ls (Roslyn-based LSP server)
+CSharp Language Server using Microsoft.CodeAnalysis.LanguageServer (Official Roslyn-based LSP server)
 """
 
 import logging
@@ -99,13 +99,12 @@ class CSharpLanguageServer(SolidLanguageServer):
         else:
             logger.log("No .sln or .csproj file found, language server will attempt auto-discovery", logging.WARNING)
         
-        cmd = " ".join(cmd_parts)
-        
+        # Pass command parts as array to avoid shell injection vulnerabilities
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd_parts, cwd=repository_root_path),
             "csharp",
         )
         
