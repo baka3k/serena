@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__serena__initial_instructions",
+      "mcp__serena__switch_modes",
+      "mcp__serena__find_file",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__find_symbol",
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__think_about_task_adherence",
+      "mcp__serena__replace_regex",
+      "Bash(uv run:*)",
+      "mcp__serena__list_dir",
+      "Bash(uv sync:*)",
+      "mcp__serena__check_onboarding_performed",
+      "mcp__serena__read_memory",
+      "mcp__serena__read_file",
+      "mcp__zen__thinkdeep",
+      "mcp__serena__replace_symbol_body",
+      "Bash(uv pip:*)",
+      "mcp__serena__summarize_changes",
+      "Bash(grep:*)",
+      "mcp__serena__think_about_collected_information",
+      "mcp__serena__think_about_whether_you_are_done",
+      "mcp__zen__planner",
+      "Bash(python test_csharp_indexing.py:*)",
+      "Bash(rm:*)",
+      "mcp__serena__list_memories",
+      "mcp__serena__execute_shell_command",
+      "mcp__zen__debug",
+      "Bash(find:*)",
+      "mcp__serena__activate_project",
+      "mcp__serena__get_current_config",
+      "mcp__zen__chat",
+      "Bash(mkdir:*)",
+      "Bash(python -m pytest test/solidlsp/csharp/test_csharp_basic.py::TestCSharpBasic::test_language_server_starts -v --no-header)"
+    ],
+    "deny": []
+  }
+}

@@ -135,9 +135,9 @@ class SolidLanguageServer(ABC):
             ls = RustAnalyzer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CSHARP:
-            from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
+            from solidlsp.language_servers.csharp_language_server.csharp_language_server import CSharpLanguageServer
 
-            ls = OmniSharp(config, logger, repository_root_path)
+            ls = CSharpLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.TYPESCRIPT:
             from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
