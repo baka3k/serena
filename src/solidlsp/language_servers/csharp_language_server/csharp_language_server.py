@@ -613,12 +613,18 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Just acknowledge the request
             return None
 
+        def handle_register_capability(params):
+            """Handle client/registerCapability requests."""
+            # Just acknowledge the request - we don't need to track these for now
+            return None
+
         # Set up notification handlers
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", handle_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
+        self.server.on_request("client/registerCapability", handle_register_capability)
         
         self.logger.log("Starting Microsoft.CodeAnalysis.LanguageServer process", logging.INFO)
         
