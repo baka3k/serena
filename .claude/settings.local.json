@@ -33,7 +33,12 @@
       "mcp__serena__get_current_config",
       "mcp__zen__chat",
       "Bash(mkdir:*)",
-      "Bash(python -m pytest test/solidlsp/csharp/test_csharp_basic.py::TestCSharpBasic::test_language_server_starts -v --no-header)"
+      "Bash(python -m pytest test/solidlsp/csharp/test_csharp_basic.py::TestCSharpBasic::test_language_server_starts -v --no-header)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
