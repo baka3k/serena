@@ -16,7 +16,12 @@ from test.conftest import create_ls
 def csharp_ls() -> SolidLanguageServer:
     """Create a C# language server instance for testing."""
     repo_path = Path(__file__).parent.parent.parent / "resources" / "repos" / "csharp" / "test_repo"
-    return create_ls(Language.CSHARP, str(repo_path))
+    server = create_ls(Language.CSHARP, str(repo_path))
+    server.start()
+    try:
+        yield server
+    finally:
+        server.stop()
 
 
 class TestCSharpBasic:
@@ -27,7 +32,6 @@ class TestCSharpBasic:
         assert csharp_ls is not None
         assert csharp_ls.language == Language.CSHARP
 
-    @pytest.mark.skip(reason="Requires running language server")
     def test_get_document_symbols(self, csharp_ls: SolidLanguageServer):
         """Test getting document symbols from a C# file."""
         file_path = os.path.join("Program.cs")
@@ -45,7 +49,6 @@ class TestCSharpBasic:
         assert "Program" in class_names
         assert "Calculator" in class_names
 
-    @pytest.mark.skip(reason="Requires running language server")
     def test_find_definition(self, csharp_ls: SolidLanguageServer):
         """Test finding definition of a symbol."""
         file_path = os.path.join("Program.cs")
@@ -59,7 +62,6 @@ class TestCSharpBasic:
             assert len(definitions) > 0
             assert any("Calculator" in str(d) for d in definitions)
 
-    @pytest.mark.skip(reason="Requires running language server")
     def test_find_references(self, csharp_ls: SolidLanguageServer):
         """Test finding references to a symbol."""
         file_path = os.path.join("Program.cs")
@@ -72,7 +74,6 @@ class TestCSharpBasic:
             # Should find at least the definition and one usage
             assert len(references) >= 2
 
-    @pytest.mark.skip(reason="Requires running language server")
     def test_nested_namespace_symbols(self, csharp_ls: SolidLanguageServer):
         """Test getting symbols from nested namespace."""
         file_path = os.path.join("Models", "Person.cs")

@@ -82,17 +82,27 @@ class CSharpLanguageServer(SolidLanguageServer):
         Creates a CSharpLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        dotnet_path, language_server_path = self.setup_runtime_dependencies(logger, config)
+        dotnet_path, language_server_path, cache_dir = self.setup_runtime_dependencies(logger, config)
         
         # Find solution or project file
         solution_or_project = find_solution_or_project_file(repository_root_path)
         
-        # Build command - Microsoft.CodeAnalysis.LanguageServer uses stdio by default
+        # Build command - Microsoft.CodeAnalysis.LanguageServer requires specific parameters
         cmd_parts = [dotnet_path, language_server_path]
         
-        # Add logging level if debug is enabled
+        # Required parameters
+        cmd_parts.extend(["--stdio"])  # Use stdio for communication
+        
+        # Set log level based on logger settings
         if logger.logger.level <= logging.DEBUG:
             cmd_parts.extend(["--logLevel", "Information"])
+        else:
+            cmd_parts.extend(["--logLevel", "Warning"])
+        
+        # Create log directory
+        log_dir = cache_dir / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        cmd_parts.extend(["--extensionLogDirectory", str(log_dir)])
         
         # The language server will discover the solution/project from the workspace root
         if solution_or_project:
@@ -120,10 +130,10 @@ class CSharpLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
         """
         Set up .NET 9 runtime and Microsoft.CodeAnalysis.LanguageServer by downloading the NuGet package.
-        Returns a tuple of (dotnet_path, language_server_dll_path).
+        Returns a tuple of (dotnet_path, language_server_dll_path, cache_dir).
         """
         # Determine the runtime ID based on the platform
         system = platform.system().lower()
@@ -158,7 +168,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         
         if server_dll.exists():
             logger.log(f"Using cached Microsoft.CodeAnalysis.LanguageServer from {server_dll}", logging.INFO)
-            return dotnet_path, str(server_dll)
+            return dotnet_path, str(server_dll), cache_dir
         
         # Download the package
         logger.log(f"Downloading {package_name} version {package_version}...", logging.INFO)
@@ -322,7 +332,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                 server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
             
             logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
-            return dotnet_path, str(server_dll)
+            return dotnet_path, str(server_dll), cache_dir
 
     def _ensure_dotnet_runtime(self, logger: LanguageServerLogger, cache_dir: Path, runtime_id: str) -> str:
         """
@@ -611,8 +621,6 @@ class CSharpLanguageServer(SolidLanguageServer):
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
         
         self.logger.log("Starting Microsoft.CodeAnalysis.LanguageServer process", logging.INFO)
-        self.logger.log(f"Command: {self.process_launch_info.cmd}", logging.DEBUG)
-        self.logger.log(f"Working directory: {self.process_launch_info.cwd}", logging.DEBUG)
         
         try:
             self.server.start()
