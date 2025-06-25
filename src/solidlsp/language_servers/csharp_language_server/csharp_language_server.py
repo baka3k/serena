@@ -604,9 +604,43 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         def handle_workspace_configuration(params):
             """Handle workspace/configuration requests from the server."""
-            # Return empty configuration for now
             items = params.get("items", [])
-            return [{}] * len(items)
+            result = []
+            
+            for item in items:
+                section = item.get("section", "")
+                
+                # Provide default values based on the configuration section
+                if section.startswith("dotnet") or section.startswith("csharp"):
+                    # Default configuration for C# settings
+                    if "enable" in section or "show" in section or "suppress" in section or "navigate" in section:
+                        # Boolean settings
+                        result.append(False)
+                    elif "scope" in section:
+                        # Scope settings - use appropriate enum values
+                        if "analyzer_diagnostics_scope" in section:
+                            result.append("openFiles")  # BackgroundAnalysisScope
+                        elif "compiler_diagnostics_scope" in section:
+                            result.append("openFiles")  # CompilerDiagnosticsScope
+                        else:
+                            result.append("openFiles")
+                    elif "location" in section or "behavior" in section:
+                        # Enum settings
+                        result.append(0)  # Default to first enum value
+                    else:
+                        # Default for other dotnet/csharp settings
+                        result.append(None)
+                elif section == "tab_width" or section == "indent_size":
+                    # Tab and indent settings
+                    result.append(4)
+                elif section == "insert_final_newline":
+                    # Editor settings
+                    result.append(True)
+                else:
+                    # Unknown configuration - return null
+                    result.append(None)
+                    
+            return result
 
         def handle_work_done_progress_create(params):
             """Handle work done progress create requests."""
