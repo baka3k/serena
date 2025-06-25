@@ -55,21 +55,18 @@ An example script for running tools is provided in [scripts/demo_run_tools.py](s
 ## Adding a New Supported Language
 
 Serena interacts with code through language servers which are included in
-the `multilspy` package. It is rather easy to include a new supported language
+the `solidlsp` package. It is rather easy to include a new supported language
 if an LSP implementation for it exists. You just need to:
 
-1. create a new subclass of `LanguageServer`
+1. create a new subclass of `SolidLanguageServer`
 2. add a new value to the `Language` enum
-3. make a new `elif` case in the `LanguageServer.create` method
-4. write minor tests
+3. make a new `elif` case in the `SolidLanguageServer.create` method
+4. add a test repo of the new language to `test/resources/repos/<new_language>/test_repo`
+   and new tests in `test/solidlsp/<new_language>`. Similar to existing tests for other languages
+5. also add a new case to the parameterized tests in `test/serena/test_serena_agent`
 
 The subclasses are typically easy to write, have a look at the 
 [PyrightLanguageServer](src/multilspy/language_servers/pyright_language_server/pyright_server.py) 
 for an example, or at any other implementation to see how non-python
 dependencies for language servers are handled there.
 There are also some tips from the multilspy admin [here](https://github.com/microsoft/multilspy/issues/5).
-
-⚠️ Important: The LSP allows for lot of optional fields and symbols, so the language servers may differ
-in some details, even if they follow the LSP. Therefore you should include some code of the new
-language in `test/resources` and add tests for symbolic read operations on that code. Have a look
-at `test/multilspy/test_symbol_retrieval.py` for an example of such tests for the python LS.
