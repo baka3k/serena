@@ -1,0 +1,104 @@
+{
+    "_description": "Used to download the runtime dependencies for running Microsoft.CodeAnalysis.LanguageServer. Based on official Microsoft packages from NuGet.",
+    "runtimeDependencies": [
+        {
+            "id": "CSharpLanguageServer",
+            "description": "Microsoft.CodeAnalysis.LanguageServer for Windows (x64)",
+            "packageName": "Microsoft.CodeAnalysis.LanguageServer.win-x64",
+            "packageVersion": "5.0.0-1.25277.114",
+            "platformId": "win-x64",
+            "archiveType": "nupkg",
+            "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll",
+            "extractPath": "content/LanguageServer/win-x64"
+        },
+        {
+            "id": "CSharpLanguageServer", 
+            "description": "Microsoft.CodeAnalysis.LanguageServer for Windows (ARM64)",
+            "packageName": "Microsoft.CodeAnalysis.LanguageServer.win-arm64",
+            "packageVersion": "5.0.0-1.25277.114",
+            "platformId": "win-arm64",
+            "archiveType": "nupkg",
+            "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll",
+            "extractPath": "content/LanguageServer/win-arm64"
+        },
+        {
+            "id": "CSharpLanguageServer",
+            "description": "Microsoft.CodeAnalysis.LanguageServer for macOS (x64)",
+            "packageName": "Microsoft.CodeAnalysis.LanguageServer.osx-x64",
+            "packageVersion": "5.0.0-1.25277.114",
+            "platformId": "osx-x64", 
+            "archiveType": "nupkg",
+            "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll",
+            "extractPath": "content/LanguageServer/osx-x64"
+        },
+        {
+            "id": "CSharpLanguageServer",
+            "description": "Microsoft.CodeAnalysis.LanguageServer for macOS (ARM64)",
+            "packageName": "Microsoft.CodeAnalysis.LanguageServer.osx-arm64",
+            "packageVersion": "5.0.0-1.25277.114",
+            "platformId": "osx-arm64",
+            "archiveType": "nupkg", 
+            "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll",
+            "extractPath": "content/LanguageServer/osx-arm64"
+        },
+        {
+            "id": "CSharpLanguageServer",
+            "description": "Microsoft.CodeAnalysis.LanguageServer for Linux (x64)",
+            "packageName": "Microsoft.CodeAnalysis.LanguageServer.linux-x64",
+            "packageVersion": "5.0.0-1.25277.114",
+            "platformId": "linux-x64",
+            "archiveType": "nupkg",
+            "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll", 
+            "extractPath": "content/LanguageServer/linux-x64"
+        },
+        {
+            "id": "CSharpLanguageServer",
+            "description": "Microsoft.CodeAnalysis.LanguageServer for Linux (ARM64)",
+            "packageName": "Microsoft.CodeAnalysis.LanguageServer.linux-arm64",
+            "packageVersion": "5.0.0-1.25277.114",
+            "platformId": "linux-arm64",
+            "archiveType": "nupkg",
+            "binaryName": "Microsoft.CodeAnalysis.LanguageServer.dll",
+            "extractPath": "content/LanguageServer/linux-arm64"
+        },
+        {
+            "id": "DotNetRuntime",
+            "description": ".NET 9 Runtime for Windows (x64)",
+            "url": "https://download.visualstudio.microsoft.com/download/pr/b4e88556-0367-461e-93e6-72cf3a9c9be0/1a8bf88171dc088d47e1c0e70b81f213/dotnet-runtime-9.0.0-win-x64.zip",
+            "platformId": "win-x64",
+            "archiveType": "zip",
+            "binaryName": "dotnet.exe"
+        },
+        {
+            "id": "DotNetRuntime",
+            "description": ".NET 9 Runtime for Linux (x64)", 
+            "url": "https://download.visualstudio.microsoft.com/download/pr/e7a8dfd6-11a9-4b4f-a301-a3f9726ad3b8/b1c25a25b83b76b960fc9177bdc1f7f5/dotnet-runtime-9.0.0-linux-x64.tar.gz",
+            "platformId": "linux-x64",
+            "archiveType": "tar.gz",
+            "binaryName": "dotnet"
+        },
+        {
+            "id": "DotNetRuntime",
+            "description": ".NET 9 Runtime for macOS (x64)",
+            "url": "https://download.visualstudio.microsoft.com/download/pr/c73ddbb5-1049-413e-a64f-1cc7b3b2a201/8ab93a96dbf12074fe957c5c73e52b09/dotnet-runtime-9.0.0-osx-x64.tar.gz",
+            "platformId": "osx-x64", 
+            "archiveType": "tar.gz",
+            "binaryName": "dotnet"
+        },
+        {
+            "id": "DotNetRuntime",
+            "description": ".NET 9 Runtime for macOS (ARM64)",
+            "url": "https://download.visualstudio.microsoft.com/download/pr/bd9b3857-4ae7-4a48-9277-d44a14a9bb97/9e3ad77ea5c978d456b12bb17cf68bf5/dotnet-runtime-9.0.0-osx-arm64.tar.gz",
+            "platformId": "osx-arm64",
+            "archiveType": "tar.gz", 
+            "binaryName": "dotnet"
+        }
+    ],
+    "nugetSources": [
+        "https://api.nuget.org/v3/index.json",
+        "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json",
+        "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json",
+        "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json"
+    ]
+}
+EOF < /dev/null

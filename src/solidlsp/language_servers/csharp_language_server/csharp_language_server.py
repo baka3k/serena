@@ -132,9 +132,15 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
         """
-        Set up .NET 9 runtime and Microsoft.CodeAnalysis.LanguageServer by downloading the NuGet package.
+        Set up .NET 9 runtime and Microsoft.CodeAnalysis.LanguageServer using runtime_dependencies.json.
         Returns a tuple of (dotnet_path, language_server_dll_path, cache_dir).
         """
+        import json
+        
+        # Load runtime dependencies configuration
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
+            runtime_deps = json.load(f)
+        
         # Determine the runtime ID based on the platform
         system = platform.system().lower()
         machine = platform.machine().lower()
@@ -145,32 +151,44 @@ class CSharpLanguageServer(SolidLanguageServer):
         elif system == "darwin":
             runtime_id = "osx-x64" if machine in ["x86_64"] else "osx-arm64"
         elif system == "linux":
-            # Check if we're on musl or glibc
-            # For now, assume glibc (most common)
             runtime_id = "linux-x64" if machine in ["x86_64", "amd64"] else "linux-arm64"
         else:
-            # Fallback to neutral package
-            runtime_id = "neutral"
+            raise LanguageServerException(f"Unsupported platform: {system} {machine}")
         
         # Set up cache directory
         cache_dir = Path.home() / ".cache" / "serena" / "language-servers" / "csharp"
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # First, ensure we have .NET 9 runtime
-        dotnet_path = self._ensure_dotnet_runtime(logger, cache_dir, runtime_id)
+        # Find the appropriate language server dependency
+        lang_server_dep = None
+        dotnet_runtime_dep = None
         
-        # Package configuration
-        package_name = f"Microsoft.CodeAnalysis.LanguageServer.{runtime_id}"
-        package_version = "5.0.0-1.25277.114"  # Latest version (requires .NET 9)
+        for dep in runtime_deps["runtimeDependencies"]:
+            if dep["id"] == "CSharpLanguageServer" and dep["platformId"] == runtime_id:
+                lang_server_dep = dep
+            elif dep["id"] == "DotNetRuntime" and dep["platformId"] == runtime_id:
+                dotnet_runtime_dep = dep
+        
+        if not lang_server_dep:
+            raise LanguageServerException(f"No C# language server dependency found for platform {runtime_id}")
+        if not dotnet_runtime_dep:
+            raise LanguageServerException(f"No .NET runtime dependency found for platform {runtime_id}")
+        
+        # First, ensure we have .NET 9 runtime
+        dotnet_path = self._ensure_dotnet_runtime_from_config(logger, cache_dir, dotnet_runtime_dep)
+        
+        # Then set up the language server
+        package_name = lang_server_dep["packageName"]
+        package_version = lang_server_dep["packageVersion"]
         
         server_dir = cache_dir / f"{package_name}.{package_version}"
-        server_dll = server_dir / "Microsoft.CodeAnalysis.LanguageServer.dll"
+        server_dll = server_dir / lang_server_dep["binaryName"]
         
         if server_dll.exists():
             logger.log(f"Using cached Microsoft.CodeAnalysis.LanguageServer from {server_dll}", logging.INFO)
             return dotnet_path, str(server_dll), cache_dir
         
-        # Download the package
+        # Download the language server package
         logger.log(f"Downloading {package_name} version {package_version}...", logging.INFO)
         
         # Check if nuget or dotnet is available
@@ -189,6 +207,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Try to download directly from the NuGet API first
             direct_download_url = f"https://api.nuget.org/v3-flatcontainer/{package_name.lower()}/{package_version}/{package_name.lower()}.{package_version}.nupkg"
             
+            package_path = None
             try:
                 nupkg_path = temp_path / f"{package_name}.{package_version}.nupkg"
                 logger.log(f"Attempting direct download from {direct_download_url}", logging.INFO)
@@ -208,6 +227,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             
             if package_path is None and dotnet_cmd:
                 # Use dotnet restore to download the package
+                nuget_sources = " ".join([f"--source {src}" for src in runtime_deps["nugetSources"]])
                 project_content = f"""<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -217,10 +237,7 @@ class CSharpLanguageServer(SolidLanguageServer):
   </ItemGroup>
   <PropertyGroup>
     <RestoreAdditionalProjectSources>
-      https://api.nuget.org/v3/index.json;
-      https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json;
-      https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json;
-      https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json
+      {';'.join(runtime_deps["nugetSources"])}
     </RestoreAdditionalProjectSources>
   </PropertyGroup>
 </Project>"""
@@ -229,40 +246,15 @@ class CSharpLanguageServer(SolidLanguageServer):
                 project_file.write_text(project_content)
                 
                 try:
-                    # Download the package without dependencies using nuget CLI if available
-                    nuget_config = temp_path / "nuget.config"
-                    nuget_config_content = """<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <packageSources>
-    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-    <add key="vs-impl" value="https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json" />
-    <add key="dotnet-tools" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json" />
-    <add key="dotnet-public" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json" />
-  </packageSources>
-</configuration>"""
-                    nuget_config.write_text(nuget_config_content)
-                    
-                    # Try direct download with nuget if available
-                    if shutil.which("nuget"):
-                        subprocess.run(
-                            ["nuget", "install", package_name, "-Version", package_version, 
-                             "-OutputDirectory", str(temp_path), "-DependencyVersion", "Ignore",
-                             "-ConfigFile", str(nuget_config)],
-                            check=True,
-                            capture_output=True,
-                            text=True
-                        )
-                        package_path = temp_path / f"{package_name}.{package_version}"
-                    else:
-                        # Use dotnet restore with no dependencies
-                        subprocess.run(
-                            [dotnet_cmd, "restore", str(project_file), "--packages", str(temp_path),
-                             "--no-dependencies", "--ignore-failed-sources"],
-                            check=True,
-                            capture_output=True,
-                            text=True
-                        )
-                        package_path = temp_path / package_name.lower() / package_version
+                    # Use dotnet restore with no dependencies
+                    subprocess.run(
+                        [dotnet_cmd, "restore", str(project_file), "--packages", str(temp_path),
+                         "--no-dependencies", "--ignore-failed-sources"],
+                        check=True,
+                        capture_output=True,
+                        text=True
+                    )
+                    package_path = temp_path / package_name.lower() / package_version
                     
                 except subprocess.CalledProcessError as e:
                     logger.log(f"Dotnet restore stdout: {e.stdout}", logging.ERROR)
@@ -294,12 +286,8 @@ class CSharpLanguageServer(SolidLanguageServer):
                 raise LanguageServerException("Failed to download Microsoft.CodeAnalysis.LanguageServer package")
             
             # Extract the language server files
-            if runtime_id == "neutral":
-                # For neutral package, files are in lib/net9.0
-                source_dir = package_path / "lib" / "net9.0"
-            else:
-                # For runtime-specific packages, files are in content/LanguageServer/{runtime-id}
-                source_dir = package_path / "content" / "LanguageServer" / runtime_id
+            extract_path = lang_server_dep.get("extractPath", "lib/net9.0")
+            source_dir = package_path / extract_path
             
             if not source_dir.exists():
                 # Try alternative locations
@@ -334,9 +322,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
             return dotnet_path, str(server_dll), cache_dir
 
-    def _ensure_dotnet_runtime(self, logger: LanguageServerLogger, cache_dir: Path, runtime_id: str) -> str:
+    def _ensure_dotnet_runtime_from_config(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: dict) -> str:
         """
-        Ensure .NET 9 runtime is available. Downloads it if necessary.
+        Ensure .NET 9 runtime is available using configuration from runtime_dependencies.json.
         Returns the path to the dotnet executable.
         """
         # Check if dotnet is already available in system
@@ -356,9 +344,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             except subprocess.CalledProcessError:
                 pass
         
-        # Download .NET 9 runtime
+        # Download .NET 9 runtime using config
         dotnet_dir = cache_dir / "dotnet-runtime-9.0"
-        dotnet_exe = dotnet_dir / ("dotnet.exe" if platform.system().lower() == "windows" else "dotnet")
+        dotnet_exe = dotnet_dir / runtime_dep["binaryName"]
         
         if dotnet_exe.exists():
             # Verify it still works
@@ -374,23 +362,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         logger.log("Downloading .NET 9 runtime...", logging.INFO)
         dotnet_dir.mkdir(parents=True, exist_ok=True)
         
-        # Determine download URL based on platform
-        base_url = "https://download.visualstudio.microsoft.com/download/pr"
-        
-        if runtime_id == "win-x64":
-            url = f"{base_url}/b4e88556-0367-461e-93e6-72cf3a9c9be0/1a8bf88171dc088d47e1c0e70b81f213/dotnet-runtime-9.0.0-win-x64.zip"
-            archive_type = "zip"
-        elif runtime_id == "linux-x64":
-            url = f"{base_url}/e7a8dfd6-11a9-4b4f-a301-a3f9726ad3b8/b1c25a25b83b76b960fc9177bdc1f7f5/dotnet-runtime-9.0.0-linux-x64.tar.gz"
-            archive_type = "tar.gz"
-        elif runtime_id == "osx-x64":
-            url = f"{base_url}/c73ddbb5-1049-413e-a64f-1cc7b3b2a201/8ab93a96dbf12074fe957c5c73e52b09/dotnet-runtime-9.0.0-osx-x64.tar.gz"
-            archive_type = "tar.gz"
-        elif runtime_id == "osx-arm64":
-            url = f"{base_url}/bd9b3857-4ae7-4a48-9277-d44a14a9bb97/9e3ad77ea5c978d456b12bb17cf68bf5/dotnet-runtime-9.0.0-osx-arm64.tar.gz"
-            archive_type = "tar.gz"
-        else:
-            raise LanguageServerException(f"Unsupported runtime ID for .NET download: {runtime_id}")
+        url = runtime_dep["url"]
+        archive_type = runtime_dep["archiveType"]
         
         # Download the runtime
         download_path = dotnet_dir / f"dotnet-runtime.{archive_type}"
@@ -419,6 +392,8 @@ class CSharpLanguageServer(SolidLanguageServer):
             
         except Exception as e:
             raise LanguageServerException(f"Failed to download .NET 9 runtime: {e}")
+
+
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
