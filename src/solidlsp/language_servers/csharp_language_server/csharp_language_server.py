@@ -413,6 +413,11 @@ class CSharpLanguageServer(SolidLanguageServer):
             "rootPath": repository_absolute_path,
             "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
             "capabilities": {
+                "window": {
+                    "workDoneProgress": True,
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "showDocument": {"support": True}
+                },
                 "workspace": {
                     "applyEdit": True,
                     "workspaceEdit": {"documentChanges": True},
@@ -427,6 +432,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                     "executeCommand": {"dynamicRegistration": True},
                     "configuration": True,
                     "workspaceFolders": True,
+                    "workDoneProgress": True,
                 },
                 "textDocument": {
                     "synchronization": {
@@ -537,17 +543,54 @@ class CSharpLanguageServer(SolidLanguageServer):
             
             self.logger.log(f"LSP: {message_text}", level_map.get(level, logging.DEBUG))
 
+        def handle_progress(params):
+            """Handle progress notifications from the language server."""
+            token = params.get("token", "")
+            value = params.get("value", {})
+            
+            # Handle different progress notification types
+            kind = value.get("kind")
+            
+            if kind == "begin":
+                title = value.get("title", "Operation in progress")
+                message = value.get("message", "")
+                percentage = value.get("percentage")
+                
+                if percentage is not None:
+                    self.logger.log(f"Progress [{token}]: {title} - {message} ({percentage}%)", logging.INFO)
+                else:
+                    self.logger.log(f"Progress [{token}]: {title} - {message}", logging.INFO)
+                    
+            elif kind == "report":
+                message = value.get("message", "")
+                percentage = value.get("percentage")
+                
+                if percentage is not None:
+                    self.logger.log(f"Progress [{token}]: {message} ({percentage}%)", logging.INFO)
+                elif message:
+                    self.logger.log(f"Progress [{token}]: {message}", logging.INFO)
+                    
+            elif kind == "end":
+                message = value.get("message", "Operation completed")
+                self.logger.log(f"Progress [{token}]: {message}", logging.INFO)
+
         def handle_workspace_configuration(params):
             """Handle workspace/configuration requests from the server."""
             # Return empty configuration for now
             items = params.get("items", [])
             return [{}] * len(items)
 
+        def handle_work_done_progress_create(params):
+            """Handle work done progress create requests."""
+            # Just acknowledge the request
+            return None
+
         # Set up notification handlers
         self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_notification("$/progress", handle_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
+        self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
         
         self.logger.log("Starting Microsoft.CodeAnalysis.LanguageServer process", logging.INFO)
         self.server.start()
