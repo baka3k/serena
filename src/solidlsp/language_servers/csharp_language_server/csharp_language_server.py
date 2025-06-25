@@ -11,7 +11,7 @@ import threading
 
 from overrides import override
 
-from solidlsp.config import LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.exceptions import LanguageServerException
 from solidlsp.logger import LanguageServerLogger
 from solidlsp.ls import SolidLanguageServer
