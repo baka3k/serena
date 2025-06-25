@@ -6,6 +6,7 @@ import logging
 import os
 import pathlib
 import platform
+import shlex
 import shutil
 import stat
 import subprocess
@@ -99,12 +100,22 @@ class CSharpLanguageServer(SolidLanguageServer):
         else:
             logger.log("No .sln or .csproj file found, language server will attempt auto-discovery", logging.WARNING)
         
-        # Pass command parts as array to avoid shell injection vulnerabilities
+        # Use shlex to properly quote the command parts for shell safety
+        if platform.system() == "Windows":
+            # Windows doesn't use shell=True by default, so we can join with spaces
+            # But we still quote each part to handle spaces in paths
+            cmd = " ".join(shlex.quote(part) for part in cmd_parts)
+        else:
+            # Unix-like systems - use shlex for proper quoting
+            cmd = " ".join(shlex.quote(part) for part in cmd_parts)
+        
+        logger.log(f"Language server command: {cmd}", logging.DEBUG)
+        
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd=cmd_parts, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
             "csharp",
         )
         
@@ -593,14 +604,26 @@ class CSharpLanguageServer(SolidLanguageServer):
         self.server.on_request("window/workDoneProgress/create", handle_work_done_progress_create)
         
         self.logger.log("Starting Microsoft.CodeAnalysis.LanguageServer process", logging.INFO)
-        self.server.start()
+        try:
+            self.server.start()
+        except Exception as e:
+            self.logger.log(f"Failed to start language server process: {e}", logging.ERROR)
+            raise LanguageServerException(f"Failed to start C# language server: {e}")
         
         # Send initialization
         initialize_params = self._get_initialize_params(self.repository_root_path)
         
         self.logger.log("Sending initialize request to language server", logging.INFO)
-        init_response = self.server.send.initialize(initialize_params)
-        self.logger.log(f"Received initialize response: {init_response}", logging.DEBUG)
+        try:
+            init_response = self.server.send.initialize(initialize_params)
+            self.logger.log(f"Received initialize response: {init_response}", logging.DEBUG)
+        except Exception as e:
+            self.logger.log(f"Language server initialization failed: {e}", logging.ERROR)
+            self.logger.log("This might be due to:", logging.ERROR)
+            self.logger.log("1. .NET 9 runtime not properly installed", logging.ERROR)
+            self.logger.log("2. Microsoft.CodeAnalysis.LanguageServer not found", logging.ERROR)
+            self.logger.log("3. Project too large or complex for default timeout", logging.ERROR)
+            raise
         
         # Verify required capabilities
         capabilities = init_response.get("capabilities", {})
