@@ -9,6 +9,7 @@ import platform
 import shutil
 import stat
 import subprocess
+import tarfile
 import tempfile
 import threading
 import urllib.request
@@ -80,13 +81,13 @@ class CSharpLanguageServer(SolidLanguageServer):
         Creates a CSharpLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        language_server_path = self.setup_runtime_dependencies(logger, config)
+        dotnet_path, language_server_path = self.setup_runtime_dependencies(logger, config)
         
         # Find solution or project file
         solution_or_project = find_solution_or_project_file(repository_root_path)
         
         # Build command - Microsoft.CodeAnalysis.LanguageServer uses stdio by default
-        cmd_parts = ["dotnet", language_server_path]
+        cmd_parts = [dotnet_path, language_server_path]
         
         # Add logging level if debug is enabled
         if logger.logger.level <= logging.DEBUG:
@@ -114,10 +115,10 @@ class CSharpLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
         """
-        Set up Microsoft.CodeAnalysis.LanguageServer by downloading the NuGet package.
-        Returns the path to the language server DLL.
+        Set up .NET 9 runtime and Microsoft.CodeAnalysis.LanguageServer by downloading the NuGet package.
+        Returns a tuple of (dotnet_path, language_server_dll_path).
         """
         # Determine the runtime ID based on the platform
         system = platform.system().lower()
@@ -136,20 +137,23 @@ class CSharpLanguageServer(SolidLanguageServer):
             # Fallback to neutral package
             runtime_id = "neutral"
         
+        # Set up cache directory
+        cache_dir = Path.home() / ".cache" / "serena" / "language-servers" / "csharp"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # First, ensure we have .NET 9 runtime
+        dotnet_path = self._ensure_dotnet_runtime(logger, cache_dir, runtime_id)
+        
         # Package configuration
         package_name = f"Microsoft.CodeAnalysis.LanguageServer.{runtime_id}"
         package_version = "5.0.0-1.25277.114"  # Latest version (requires .NET 9)
-        
-        # Check if already downloaded
-        cache_dir = Path.home() / ".cache" / "serena" / "language-servers" / "csharp"
-        cache_dir.mkdir(parents=True, exist_ok=True)
         
         server_dir = cache_dir / f"{package_name}.{package_version}"
         server_dll = server_dir / "Microsoft.CodeAnalysis.LanguageServer.dll"
         
         if server_dll.exists():
             logger.log(f"Using cached Microsoft.CodeAnalysis.LanguageServer from {server_dll}", logging.INFO)
-            return str(server_dll)
+            return dotnet_path, str(server_dll)
         
         # Download the package
         logger.log(f"Downloading {package_name} version {package_version}...", logging.INFO)
@@ -313,7 +317,93 @@ class CSharpLanguageServer(SolidLanguageServer):
                 server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
             
             logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
-            return str(server_dll)
+            return dotnet_path, str(server_dll)
+
+    def _ensure_dotnet_runtime(self, logger: LanguageServerLogger, cache_dir: Path, runtime_id: str) -> str:
+        """
+        Ensure .NET 9 runtime is available. Downloads it if necessary.
+        Returns the path to the dotnet executable.
+        """
+        # Check if dotnet is already available in system
+        system_dotnet = shutil.which("dotnet")
+        if system_dotnet:
+            # Check if it's .NET 9
+            try:
+                result = subprocess.run(
+                    [system_dotnet, "--list-runtimes"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                if "Microsoft.NETCore.App 9." in result.stdout:
+                    logger.log("Found system .NET 9 runtime", logging.INFO)
+                    return system_dotnet
+            except subprocess.CalledProcessError:
+                pass
+        
+        # Download .NET 9 runtime
+        dotnet_dir = cache_dir / "dotnet-runtime-9.0"
+        dotnet_exe = dotnet_dir / ("dotnet.exe" if platform.system().lower() == "windows" else "dotnet")
+        
+        if dotnet_exe.exists():
+            # Verify it still works
+            try:
+                subprocess.run([str(dotnet_exe), "--info"], capture_output=True, check=True)
+                logger.log(f"Using cached .NET runtime from {dotnet_exe}", logging.INFO)
+                return str(dotnet_exe)
+            except subprocess.CalledProcessError:
+                logger.log("Cached .NET runtime is corrupted, re-downloading", logging.WARNING)
+                shutil.rmtree(dotnet_dir, ignore_errors=True)
+        
+        # Download .NET runtime
+        logger.log("Downloading .NET 9 runtime...", logging.INFO)
+        dotnet_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Determine download URL based on platform
+        base_url = "https://download.visualstudio.microsoft.com/download/pr"
+        
+        if runtime_id == "win-x64":
+            url = f"{base_url}/b4e88556-0367-461e-93e6-72cf3a9c9be0/1a8bf88171dc088d47e1c0e70b81f213/dotnet-runtime-9.0.0-win-x64.zip"
+            archive_type = "zip"
+        elif runtime_id == "linux-x64":
+            url = f"{base_url}/e7a8dfd6-11a9-4b4f-a301-a3f9726ad3b8/b1c25a25b83b76b960fc9177bdc1f7f5/dotnet-runtime-9.0.0-linux-x64.tar.gz"
+            archive_type = "tar.gz"
+        elif runtime_id == "osx-x64":
+            url = f"{base_url}/c73ddbb5-1049-413e-a64f-1cc7b3b2a201/8ab93a96dbf12074fe957c5c73e52b09/dotnet-runtime-9.0.0-osx-x64.tar.gz"
+            archive_type = "tar.gz"
+        elif runtime_id == "osx-arm64":
+            url = f"{base_url}/bd9b3857-4ae7-4a48-9277-d44a14a9bb97/9e3ad77ea5c978d456b12bb17cf68bf5/dotnet-runtime-9.0.0-osx-arm64.tar.gz"
+            archive_type = "tar.gz"
+        else:
+            raise LanguageServerException(f"Unsupported runtime ID for .NET download: {runtime_id}")
+        
+        # Download the runtime
+        download_path = dotnet_dir / f"dotnet-runtime.{archive_type}"
+        try:
+            logger.log(f"Downloading from {url}", logging.DEBUG)
+            urllib.request.urlretrieve(url, download_path)
+            
+            # Extract the archive
+            if archive_type == "zip":
+                with zipfile.ZipFile(download_path, 'r') as zip_ref:
+                    zip_ref.extractall(dotnet_dir)
+            else:
+                # tar.gz
+                with tarfile.open(download_path, 'r:gz') as tar_ref:
+                    tar_ref.extractall(dotnet_dir)
+            
+            # Remove the archive
+            download_path.unlink()
+            
+            # Make dotnet executable on Unix
+            if platform.system().lower() != "windows":
+                dotnet_exe.chmod(dotnet_exe.stat().st_mode | stat.S_IEXEC)
+            
+            logger.log(f"Successfully installed .NET 9 runtime to {dotnet_exe}", logging.INFO)
+            return str(dotnet_exe)
+            
+        except Exception as e:
+            raise LanguageServerException(f"Failed to download .NET 9 runtime: {e}")
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
