@@ -2,20 +2,19 @@
 Provides Clojure specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Clojure.
 """
 
-import threading
 import json
 import logging
 import os
-import stat
 import pathlib
+import stat
+import threading
 
-from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import FileUtils
-from solidlsp.ls_utils import PlatformUtils
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
 
 class ClojureLSP(SolidLanguageServer):
@@ -46,7 +45,7 @@ class ClojureLSP(SolidLanguageServer):
         """
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
 
@@ -73,7 +72,7 @@ class ClojureLSP(SolidLanguageServer):
         """
         Returns the init params for clojure-lsp.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), "r", encoding="utf-8") as f:
+        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
             d = json.load(f)
 
         del d["_description"]
