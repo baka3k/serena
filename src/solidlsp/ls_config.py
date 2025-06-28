@@ -73,7 +73,7 @@ class Language(str, Enum):
             case self.PHP:
                 return FilenameMatcher("*.php")
             case self.CLOJURE:
-                return FilenameMatcher("*.clj", "*.cljs", "*.cljc", "*.edn")
+                return FilenameMatcher("*.clj", "*.cljs", "*.cljc", "*.edn")  # codespell:ignore edn
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
