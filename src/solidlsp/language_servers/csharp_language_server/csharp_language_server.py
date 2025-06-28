@@ -14,7 +14,9 @@ import tempfile
 import threading
 import urllib.request
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from overrides import override
 
@@ -24,6 +26,212 @@ from solidlsp.ls_exceptions import LanguageServerException
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+
+@dataclass
+class RuntimeDependency:
+    """Represents a runtime dependency for the C# language server."""
+
+    id: str
+    description: str
+    platform_id: str
+    archive_type: str
+    binary_name: str
+    package_name: Optional[str] = None
+    package_version: Optional[str] = None
+    extract_path: Optional[str] = None
+    url: Optional[str] = None
+
+
+# Runtime dependencies configuration
+RUNTIME_DEPENDENCIES = [
+    RuntimeDependency(
+        id="CSharpLanguageServer",
+        description="Microsoft.CodeAnalysis.LanguageServer for Windows (x64)",
+        package_name="Microsoft.CodeAnalysis.LanguageServer.win-x64",
+        package_version="5.0.0-1.25277.114",
+        platform_id="win-x64",
+        archive_type="nupkg",
+        binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
+        extract_path="content/LanguageServer/win-x64",
+    ),
+    RuntimeDependency(
+        id="CSharpLanguageServer",
+        description="Microsoft.CodeAnalysis.LanguageServer for Windows (ARM64)",
+        package_name="Microsoft.CodeAnalysis.LanguageServer.win-arm64",
+        package_version="5.0.0-1.25277.114",
+        platform_id="win-arm64",
+        archive_type="nupkg",
+        binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
+        extract_path="content/LanguageServer/win-arm64",
+    ),
+    RuntimeDependency(
+        id="CSharpLanguageServer",
+        description="Microsoft.CodeAnalysis.LanguageServer for macOS (x64)",
+        package_name="Microsoft.CodeAnalysis.LanguageServer.osx-x64",
+        package_version="5.0.0-1.25277.114",
+        platform_id="osx-x64",
+        archive_type="nupkg",
+        binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
+        extract_path="content/LanguageServer/osx-x64",
+    ),
+    RuntimeDependency(
+        id="CSharpLanguageServer",
+        description="Microsoft.CodeAnalysis.LanguageServer for macOS (ARM64)",
+        package_name="Microsoft.CodeAnalysis.LanguageServer.osx-arm64",
+        package_version="5.0.0-1.25277.114",
+        platform_id="osx-arm64",
+        archive_type="nupkg",
+        binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
+        extract_path="content/LanguageServer/osx-arm64",
+    ),
+    RuntimeDependency(
+        id="CSharpLanguageServer",
+        description="Microsoft.CodeAnalysis.LanguageServer for Linux (x64)",
+        package_name="Microsoft.CodeAnalysis.LanguageServer.linux-x64",
+        package_version="5.0.0-1.25277.114",
+        platform_id="linux-x64",
+        archive_type="nupkg",
+        binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
+        extract_path="content/LanguageServer/linux-x64",
+    ),
+    RuntimeDependency(
+        id="CSharpLanguageServer",
+        description="Microsoft.CodeAnalysis.LanguageServer for Linux (ARM64)",
+        package_name="Microsoft.CodeAnalysis.LanguageServer.linux-arm64",
+        package_version="5.0.0-1.25277.114",
+        platform_id="linux-arm64",
+        archive_type="nupkg",
+        binary_name="Microsoft.CodeAnalysis.LanguageServer.dll",
+        extract_path="content/LanguageServer/linux-arm64",
+    ),
+    RuntimeDependency(
+        id="DotNetRuntime",
+        description=".NET 9 Runtime for Windows (x64)",
+        url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-win-x64.zip",
+        platform_id="win-x64",
+        archive_type="zip",
+        binary_name="dotnet.exe",
+    ),
+    RuntimeDependency(
+        id="DotNetRuntime",
+        description=".NET 9 Runtime for Linux (x64)",
+        url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-linux-x64.tar.gz",
+        platform_id="linux-x64",
+        archive_type="tar.gz",
+        binary_name="dotnet",
+    ),
+    RuntimeDependency(
+        id="DotNetRuntime",
+        description=".NET 9 Runtime for macOS (x64)",
+        url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-osx-x64.tar.gz",
+        platform_id="osx-x64",
+        archive_type="tar.gz",
+        binary_name="dotnet",
+    ),
+    RuntimeDependency(
+        id="DotNetRuntime",
+        description=".NET 9 Runtime for macOS (ARM64)",
+        url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-osx-arm64.tar.gz",
+        platform_id="osx-arm64",
+        archive_type="tar.gz",
+        binary_name="dotnet",
+    ),
+]
+
+# NuGet sources for package downloads
+NUGET_SOURCES = [
+    "https://api.nuget.org/v3/index.json",
+    "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json",
+    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json",
+    "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json",
+]
+
+# Initialize params template for the Microsoft.CodeAnalysis.LanguageServer
+INITIALIZE_PARAMS_TEMPLATE = {
+    "processId": "os.getpid()",
+    "rootPath": "$rootPath",
+    "rootUri": "$rootUri",
+    "capabilities": {
+        "window": {
+            "workDoneProgress": True,
+            "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+            "showDocument": {"support": True},
+        },
+        "workspace": {
+            "applyEdit": True,
+            "workspaceEdit": {"documentChanges": True},
+            "didChangeConfiguration": {"dynamicRegistration": True},
+            "didChangeWatchedFiles": {"dynamicRegistration": True},
+            "symbol": {
+                "dynamicRegistration": True,
+                "symbolKind": {"valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]},
+            },
+            "executeCommand": {"dynamicRegistration": True},
+            "configuration": True,
+            "workspaceFolders": True,
+            "workDoneProgress": True,
+        },
+        "textDocument": {
+            "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+            "completion": {
+                "dynamicRegistration": True,
+                "contextSupport": True,
+                "completionItem": {
+                    "snippetSupport": True,
+                    "commitCharactersSupport": True,
+                    "documentationFormat": ["markdown", "plaintext"],
+                    "deprecatedSupport": True,
+                    "preselectSupport": True,
+                },
+                "completionItemKind": {
+                    "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+                },
+            },
+            "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+            "signatureHelp": {
+                "dynamicRegistration": True,
+                "signatureInformation": {
+                    "documentationFormat": ["markdown", "plaintext"],
+                    "parameterInformation": {"labelOffsetSupport": True},
+                },
+            },
+            "definition": {"dynamicRegistration": True},
+            "references": {"dynamicRegistration": True},
+            "documentHighlight": {"dynamicRegistration": True},
+            "documentSymbol": {
+                "dynamicRegistration": True,
+                "symbolKind": {"valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]},
+                "hierarchicalDocumentSymbolSupport": True,
+            },
+            "codeAction": {
+                "dynamicRegistration": True,
+                "codeActionLiteralSupport": {
+                    "codeActionKind": {
+                        "valueSet": [
+                            "",
+                            "quickfix",
+                            "refactor",
+                            "refactor.extract",
+                            "refactor.inline",
+                            "refactor.rewrite",
+                            "source",
+                            "source.organizeImports",
+                        ]
+                    }
+                },
+            },
+            "codeLens": {"dynamicRegistration": True},
+            "formatting": {"dynamicRegistration": True},
+            "rangeFormatting": {"dynamicRegistration": True},
+            "onTypeFormatting": {"dynamicRegistration": True},
+            "rename": {"dynamicRegistration": True},
+            "publishDiagnostics": {"relatedInformation": True},
+            "foldingRange": {"dynamicRegistration": True, "rangeLimit": 5000, "lineFoldingOnly": True},
+        },
+    },
+    "workspaceFolders": [{"uri": "$rootUri", "name": "$rootName"}],
+}
 
 
 def breadth_first_file_scan(root_dir):
@@ -131,15 +339,9 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
         """
-        Set up .NET 9 runtime and Microsoft.CodeAnalysis.LanguageServer using runtime_dependencies.json.
+        Set up .NET 9 runtime and Microsoft.CodeAnalysis.LanguageServer using runtime dependencies.
         Returns a tuple of (dotnet_path, language_server_dll_path, cache_dir).
         """
-        import json
-
-        # Load runtime dependencies configuration
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
-            runtime_deps = json.load(f)
-
         # Determine the runtime ID based on the platform
         system = platform.system().lower()
         machine = platform.machine().lower()
@@ -162,10 +364,10 @@ class CSharpLanguageServer(SolidLanguageServer):
         lang_server_dep = None
         dotnet_runtime_dep = None
 
-        for dep in runtime_deps["runtimeDependencies"]:
-            if dep["id"] == "CSharpLanguageServer" and dep["platformId"] == runtime_id:
+        for dep in RUNTIME_DEPENDENCIES:
+            if dep.id == "CSharpLanguageServer" and dep.platform_id == runtime_id:
                 lang_server_dep = dep
-            elif dep["id"] == "DotNetRuntime" and dep["platformId"] == runtime_id:
+            elif dep.id == "DotNetRuntime" and dep.platform_id == runtime_id:
                 dotnet_runtime_dep = dep
 
         if not lang_server_dep:
@@ -177,11 +379,11 @@ class CSharpLanguageServer(SolidLanguageServer):
         dotnet_path = self._ensure_dotnet_runtime_from_config(logger, cache_dir, dotnet_runtime_dep)
 
         # Then set up the language server
-        package_name = lang_server_dep["packageName"]
-        package_version = lang_server_dep["packageVersion"]
+        package_name = lang_server_dep.package_name
+        package_version = lang_server_dep.package_version
 
         server_dir = cache_dir / f"{package_name}.{package_version}"
-        server_dll = server_dir / lang_server_dep["binaryName"]
+        server_dll = server_dir / lang_server_dep.binary_name
 
         if server_dll.exists():
             logger.log(f"Using cached Microsoft.CodeAnalysis.LanguageServer from {server_dll}", logging.INFO)
@@ -196,7 +398,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         if not nuget_cmd and not dotnet_cmd:
             raise LanguageServerException(
-                "Neither nuget nor dotnet CLI is available. " "Please install .NET SDK from https://dotnet.microsoft.com/download"
+                "Neither nuget nor dotnet CLI is available. Please install .NET SDK from https://dotnet.microsoft.com/download"
             )
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -234,7 +436,7 @@ class CSharpLanguageServer(SolidLanguageServer):
   </ItemGroup>
   <PropertyGroup>
     <RestoreAdditionalProjectSources>
-      {';'.join(runtime_deps["nugetSources"])}
+      {';'.join(NUGET_SOURCES)}
     </RestoreAdditionalProjectSources>
   </PropertyGroup>
 </Project>"""
@@ -294,7 +496,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                 raise LanguageServerException("Failed to download Microsoft.CodeAnalysis.LanguageServer package")
 
             # Extract the language server files
-            extract_path = lang_server_dep.get("extractPath", "lib/net9.0")
+            extract_path = lang_server_dep.extract_path or "lib/net9.0"
             source_dir = package_path / extract_path
 
             if not source_dir.exists():
@@ -308,7 +510,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                         source_dir = possible_dir
                         break
                 else:
-                    raise LanguageServerException(f"Could not find language server files in package. " f"Searched in {package_path}")
+                    raise LanguageServerException(f"Could not find language server files in package. Searched in {package_path}")
 
             # Copy files to cache directory
             server_dir.mkdir(parents=True, exist_ok=True)
@@ -325,9 +527,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
             return dotnet_path, str(server_dll), cache_dir
 
-    def _ensure_dotnet_runtime_from_config(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: dict) -> str:
+    def _ensure_dotnet_runtime_from_config(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
         """
-        Ensure .NET 9 runtime is available using configuration from runtime_dependencies.json.
+        Ensure .NET 9 runtime is available using runtime dependency configuration.
         Returns the path to the dotnet executable.
         """
         # Check if dotnet is already available in system
@@ -344,7 +546,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Download .NET 9 runtime using config
         dotnet_dir = cache_dir / "dotnet-runtime-9.0"
-        dotnet_exe = dotnet_dir / runtime_dep["binaryName"]
+        dotnet_exe = dotnet_dir / runtime_dep.binary_name
 
         if dotnet_exe.exists():
             # Verify it still works
@@ -360,8 +562,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         logger.log("Downloading .NET 9 runtime...", logging.INFO)
         dotnet_dir.mkdir(parents=True, exist_ok=True)
 
-        url = runtime_dep["url"]
-        archive_type = runtime_dep["archiveType"]
+        url = runtime_dep.url
+        archive_type = runtime_dep.archive_type
 
         # Download the runtime
         download_path = dotnet_dir / f"dotnet-runtime.{archive_type}"
@@ -397,12 +599,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         """
         import json
 
-        # Load initialization parameters from JSON file
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json"), encoding="utf-8") as f:
-            initialize_params_template = json.load(f)
-
         # Convert the template string to actual values
-        initialize_params_str = json.dumps(initialize_params_template)
+        initialize_params_str = json.dumps(INITIALIZE_PARAMS_TEMPLATE)
 
         # Replace template variables
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
