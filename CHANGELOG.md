@@ -10,6 +10,7 @@ Status of the `main` branch. Changes prior to the next official version change w
      such that process isolation is no longer required.
      Neither are non-graceful shutdowns on Windows.
 * Better default and description for restricting the search in `search_for_pattern`
+* Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
 
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows
