@@ -786,6 +786,9 @@ class CSharpLanguageServer(SolidLanguageServer):
         self.initialization_complete.set()
         self.completions_available.set()
 
-        self.logger.log("Microsoft.CodeAnalysis.LanguageServer initialized and ready", logging.INFO)
-        self.logger.log("Waiting for language server to index project files...", logging.INFO)
-        self.logger.log("This may take a while for large projects", logging.INFO)
+        self.logger.log(
+            "Microsoft.CodeAnalysis.LanguageServer initialized and ready\n"
+            "Waiting for language server to index project files...\n"
+            "This may take a while for large projects",
+            logging.INFO,
+        )
