@@ -36,14 +36,14 @@ class TestCSharpBasic:
         """Test getting document symbols from a C# file."""
         file_path = os.path.join("Program.cs")
         symbols = csharp_ls.request_document_symbols(file_path)
-        
+
         # Check that we have symbols
         assert len(symbols) > 0
-        
+
         # Flatten the symbols if they're nested
         if isinstance(symbols[0], list):
             symbols = symbols[0]
-        
+
         # Look for expected classes
         class_names = [s.get("name") for s in symbols if s.get("kind") == 5]  # 5 is class
         assert "Program" in class_names
@@ -52,12 +52,12 @@ class TestCSharpBasic:
     def test_find_definition(self, csharp_ls: SolidLanguageServer):
         """Test finding definition of a symbol."""
         file_path = os.path.join("Program.cs")
-        
+
         # Open the file first
         with csharp_ls.open_file(file_path):
             # Find usage of Calculator class (line 11, column 28)
             definitions = csharp_ls.request_definition(file_path, 11, 28)
-            
+
             # Should find the Calculator class definition
             assert len(definitions) > 0
             assert any("Calculator" in str(d) for d in definitions)
@@ -65,12 +65,12 @@ class TestCSharpBasic:
     def test_find_references(self, csharp_ls: SolidLanguageServer):
         """Test finding references to a symbol."""
         file_path = os.path.join("Program.cs")
-        
+
         # Open the file first
         with csharp_ls.open_file(file_path):
             # Find references to the Add method (line 19)
             references = csharp_ls.request_references(file_path, 19, 20, include_declaration=True)
-            
+
             # Should find at least the definition and one usage
             assert len(references) >= 2
 
@@ -78,17 +78,17 @@ class TestCSharpBasic:
         """Test getting symbols from nested namespace."""
         file_path = os.path.join("Models", "Person.cs")
         symbols = csharp_ls.request_document_symbols(file_path)
-        
+
         # Check that we have symbols
         assert len(symbols) > 0
-        
+
         # Flatten the symbols if they're nested
         if isinstance(symbols[0], list):
             symbols = symbols[0]
-        
+
         # Check that we have the Person class
         assert any(s.get("name") == "Person" and s.get("kind") == 5 for s in symbols)
-        
+
         # Check for properties and methods
         symbol_names = [s.get("name") for s in symbols]
         assert "Name" in symbol_names

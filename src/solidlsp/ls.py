@@ -139,7 +139,7 @@ class SolidLanguageServer(ABC):
             # But OmniSharp seems to crash and has some issues with newer C# versions
             # from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
             # ls = OmniSharp(config, logger, repository_root_path)
-            
+
             from solidlsp.language_servers.csharp_language_server.csharp_language_server import CSharpLanguageServer
 
             ls = CSharpLanguageServer(config, logger, repository_root_path)
