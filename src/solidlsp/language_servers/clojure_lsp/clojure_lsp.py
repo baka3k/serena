@@ -6,7 +6,9 @@ import json
 import logging
 import os
 import pathlib
+import shutil
 import stat
+import subprocess
 import threading
 
 from solidlsp.ls import SolidLanguageServer
@@ -15,6 +17,26 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+
+def run_command(cmd: list, capture_output: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        cmd, stdout=subprocess.PIPE if capture_output else None, stderr=subprocess.STDOUT if capture_output else None, text=True, check=True
+    )
+
+
+def verify_clojure_cli():
+    install_msg = "Please install the official Clojure CLI from:\n  https://clojure.org/guides/getting_started"
+    if shutil.which("clojure") is None:
+        raise FileNotFoundError("`clojure` not found.\n" + install_msg)
+
+    help_proc = run_command(["clojure", "--help"])
+    if "-Aaliases" not in help_proc.stdout:
+        raise RuntimeError("Detected a Clojure executable, but it does not support '-Aaliases'.\n" + install_msg)
+
+    spath_proc = run_command(["clojure", "-Spath"], capture_output=False)
+    if spath_proc.returncode != 0:
+        raise RuntimeError("`clojure -Spath` failed; please upgrade to Clojure CLI ≥ 1.10.")
 
 
 class ClojureLSP(SolidLanguageServer):
@@ -38,11 +60,10 @@ class ClojureLSP(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
         self.service_ready_event = threading.Event()
-    
+
     def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
-        """
-        Setup runtime dependencies for clojure-lsp.
-        """
+        """Setup runtime dependencies for clojure-lsp."""
+        verify_clojure_cli()
         platform_id = PlatformUtils.get_platform_id()
 
         with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
@@ -50,19 +71,15 @@ class ClojureLSP(SolidLanguageServer):
             del d["_description"]
 
         runtime_dependencies = d["runtimeDependencies"]
-        runtime_dependencies = [
-            dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value
-        ]
+        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
         assert len(runtime_dependencies) == 1
         dependency = runtime_dependencies[0]
 
         clojurelsp_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clojure-lsp")
         clojurelsp_executable_path = os.path.join(clojurelsp_ls_dir, dependency["binaryName"])
         if not os.path.exists(clojurelsp_ls_dir):
-            os.makedirs(clojurelsp_ls_dir)  
-            FileUtils.download_and_extract_archive(
-                logger, dependency["url"], clojurelsp_ls_dir, dependency["archiveType"]
-            )
+            os.makedirs(clojurelsp_ls_dir)
+            FileUtils.download_and_extract_archive(logger, dependency["url"], clojurelsp_ls_dir, dependency["archiveType"])
         assert os.path.exists(clojurelsp_executable_path)
         os.chmod(clojurelsp_executable_path, stat.S_IEXEC)
 
@@ -93,19 +110,6 @@ class ClojureLSP(SolidLanguageServer):
         return d
 
     def _start_server(self):
-        """
-        Starts the Clojure Language Server, waits for the server to be ready and yields the LanguageServer instance.
-
-        Usage:
-        ```
-        with lsp.start_server():
-            # LanguageServer has been initialized and ready to serve requests
-            await lsp.request_definition(...)
-            await lsp.request_references(...)
-            # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown
-        """
-
         def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
@@ -145,7 +149,7 @@ class ClojureLSP(SolidLanguageServer):
 
         self.logger.log("Starting clojure-lsp server process", logging.INFO)
         self.server.start()
-        
+
         initialize_params = self._get_initialize_params(self.repository_root_path)
 
         self.logger.log(
