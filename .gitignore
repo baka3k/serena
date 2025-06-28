@@ -200,8 +200,15 @@ pylint.html
 /*.yml
 !*.template.yml
 /agent-ui
+
 # dynamic LS installations
 /src/multilspy/language_servers/*/static
+
+# clojure-lsp temporary files
+.calva/
+.clj-kondo/
+.cpcache/
+.lsp/
 
 # Cache is in .multilspy 
 **/.multilspy/**
