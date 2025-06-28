@@ -4,8 +4,11 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import UnifiedSymbolInformation
 
+from . import CLOJURE_CLI_FAIL
+
 
 @pytest.mark.clojure
+@pytest.mark.skipif(CLOJURE_CLI_FAIL, reason=f"Clojure CLI not available: {CLOJURE_CLI_FAIL}")
 class TestLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_basic_definition(self, language_server: SolidLanguageServer):
