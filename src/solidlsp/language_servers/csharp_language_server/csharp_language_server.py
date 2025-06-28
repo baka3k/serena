@@ -391,7 +391,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             return str(dotnet_exe)
             
         except Exception as e:
-            raise LanguageServerException(f"Failed to download .NET 9 runtime: {e}")
+            raise LanguageServerException(f"Failed to download .NET 9 runtime from {url}: {e}") from e
 
 
 
