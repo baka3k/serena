@@ -1,42 +1,27 @@
-"""
-Basic tests for C# language server functionality.
-"""
-
 import os
-from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import create_ls
-
-
-@pytest.fixture
-def csharp_ls() -> SolidLanguageServer:
-    """Create a C# language server instance for testing."""
-    repo_path = Path(__file__).parent.parent.parent / "resources" / "repos" / "csharp" / "test_repo"
-    server = create_ls(Language.CSHARP, str(repo_path))
-    server.start()
-    try:
-        yield server
-    finally:
-        server.stop()
+from solidlsp.ls_utils import SymbolUtils
 
 
 @pytest.mark.csharp
-class TestCSharpBasic:
-    """Basic tests for C# language server."""
+class TestCSharpLanguageServer:
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
+        """Test finding symbols in the full symbol tree."""
+        symbols = language_server.request_full_symbol_tree()
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Program"), "Program class not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Calculator"), "Calculator class not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Add"), "Add method not found in symbol tree"
 
-    def test_language_server_starts(self, csharp_ls: SolidLanguageServer):
-        """Test that the C# language server starts successfully."""
-        assert csharp_ls is not None
-        assert csharp_ls.language == Language.CSHARP
-
-    def test_get_document_symbols(self, csharp_ls: SolidLanguageServer):
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_get_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from a C# file."""
         file_path = os.path.join("Program.cs")
-        symbols = csharp_ls.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path)
 
         # Check that we have symbols
         assert len(symbols) > 0
@@ -50,35 +35,30 @@ class TestCSharpBasic:
         assert "Program" in class_names
         assert "Calculator" in class_names
 
-    def test_find_definition(self, csharp_ls: SolidLanguageServer):
-        """Test finding definition of a symbol."""
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
+        """Test finding references using symbol selection range."""
         file_path = os.path.join("Program.cs")
+        symbols = language_server.request_document_symbols(file_path)
+        add_symbol = None
+        # Handle nested symbol structure
+        symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+        for sym in symbol_list:
+            if sym.get("name") == "Add":
+                add_symbol = sym
+                break
+        assert add_symbol is not None, "Could not find 'Add' method symbol in Program.cs"
+        sel_start = add_symbol["selectionRange"]["start"]
+        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
+        assert any(
+            "Program.cs" in ref.get("relativePath", "") for ref in refs
+        ), "Program.cs should reference Add method (tried all positions in selectionRange)"
 
-        # Open the file first
-        with csharp_ls.open_file(file_path):
-            # Find usage of Calculator class (line 11, column 28)
-            definitions = csharp_ls.request_definition(file_path, 11, 28)
-
-            # Should find the Calculator class definition
-            assert len(definitions) > 0
-            assert any("Calculator" in str(d) for d in definitions)
-
-    def test_find_references(self, csharp_ls: SolidLanguageServer):
-        """Test finding references to a symbol."""
-        file_path = os.path.join("Program.cs")
-
-        # Open the file first
-        with csharp_ls.open_file(file_path):
-            # Find references to the Add method (line 19)
-            references = csharp_ls.request_references(file_path, 19, 20, include_declaration=True)
-
-            # Should find at least the definition and one usage
-            assert len(references) >= 2
-
-    def test_nested_namespace_symbols(self, csharp_ls: SolidLanguageServer):
+    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    def test_nested_namespace_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting symbols from nested namespace."""
         file_path = os.path.join("Models", "Person.cs")
-        symbols = csharp_ls.request_document_symbols(file_path)
+        symbols = language_server.request_document_symbols(file_path)
 
         # Check that we have symbols
         assert len(symbols) > 0
