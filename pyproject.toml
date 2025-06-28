@@ -271,6 +271,7 @@ max-complexity = 20
 ]
 
 [tool.pytest.ini_options]
+addopts = "--snapshot-patch-pycharm-diff"
 markers = [
     "python: language server running for Python",
     "go: language server running for Go",
@@ -278,6 +279,7 @@ markers = [
     "rust: language server running for Rust",
     "typescript: language server running for TypeScript",
     "php: language server running for PHP",
+    "csharp: language server running for C#",
     "snapshot: snapshot tests for symbolic editing operations",
     "isolated_process: test runs with process isolated agent",
 ]
