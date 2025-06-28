@@ -24,6 +24,7 @@ def csharp_ls() -> SolidLanguageServer:
         server.stop()
 
 
+@pytest.mark.csharp
 class TestCSharpBasic:
     """Basic tests for C# language server."""
 
