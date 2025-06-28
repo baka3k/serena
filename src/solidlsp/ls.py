@@ -172,7 +172,7 @@ class SolidLanguageServer(ABC):
             ls = Intelephense(config, logger, repository_root_path)
 
         elif config.code_language == Language.CLOJURE:
-            from multilspy.language_servers.clojure_lsp.clojure_lsp import ClojureLSP
+            from solidlsp.language_servers.clojure_lsp.clojure_lsp import ClojureLSP
 
             ls = ClojureLSP(config, logger, repository_root_path)
 

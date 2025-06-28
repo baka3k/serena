@@ -2,7 +2,7 @@
     "_description": "Parameters sent by multilspy to initialize clojure-lsp (LSP v3.17)",
     "processId": null,
     "clientInfo": {
-        "name": "multilspy",
+        "name": "solidlsp",
         "version": "0.1.0"
     },
     "rootUri": "$rootUri",

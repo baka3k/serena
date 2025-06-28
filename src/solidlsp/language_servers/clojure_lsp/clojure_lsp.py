@@ -2,30 +2,28 @@
 Provides Clojure specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Clojure.
 """
 
-import asyncio
+import threading
 import json
 import logging
 import os
 import stat
 import pathlib
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
-from multilspy.multilspy_logger import MultilspyLogger
-from multilspy.language_server import LanguageServer
-from multilspy.lsp_protocol_handler.server import ProcessLaunchInfo
-from multilspy.lsp_protocol_handler.lsp_types import InitializeParams
-from multilspy.multilspy_config import MultilspyConfig
-from multilspy.multilspy_utils import FileUtils
-from multilspy.multilspy_utils import PlatformUtils
+from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls import SolidLanguageServer
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_utils import FileUtils
+from solidlsp.ls_utils import PlatformUtils
 
 
-class ClojureLSP(LanguageServer):
+class ClojureLSP(SolidLanguageServer):
     """
     Provides a clojure-lsp specific instantiation of the LanguageServer class. Contains various configurations and settings specific to clojure.
     """
 
-    def __init__(self, config: MultilspyConfig, logger: MultilspyLogger, repository_root_path: str):
+    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a ClojureLSP instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
@@ -37,12 +35,12 @@ class ClojureLSP(LanguageServer):
             ProcessLaunchInfo(cmd=clojure_lsp_executable_path, cwd=repository_root_path),
             "clojure",
         )
-        self.server_ready = asyncio.Event()
-        self.initialize_searcher_command_available = asyncio.Event()
-        self.resolve_main_method_available = asyncio.Event()
-        self.service_ready_event = asyncio.Event()
+        self.server_ready = threading.Event()
+        self.initialize_searcher_command_available = threading.Event()
+        self.resolve_main_method_available = threading.Event()
+        self.service_ready_event = threading.Event()
     
-    def setup_runtime_dependencies(self, logger: MultilspyLogger, config: MultilspyConfig) -> str:
+    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
         Setup runtime dependencies for clojure-lsp.
         """
@@ -95,14 +93,13 @@ class ClojureLSP(LanguageServer):
 
         return d
 
-    @asynccontextmanager
-    async def start_server(self) -> AsyncIterator["ClojureLSP"]:
+    def _start_server(self):
         """
         Starts the Clojure Language Server, waits for the server to be ready and yields the LanguageServer instance.
 
         Usage:
         ```
-        async with lsp.start_server():
+        with lsp.start_server():
             # LanguageServer has been initialized and ready to serve requests
             await lsp.request_definition(...)
             await lsp.request_references(...)
@@ -110,7 +107,7 @@ class ClojureLSP(LanguageServer):
         # LanguageServer has been shutdown
         """
 
-        async def register_capability_handler(params):
+        def register_capability_handler(params):
             assert "registrations" in params
             for registration in params["registrations"]:
                 if registration["method"] == "workspace/executeCommand":
@@ -118,24 +115,24 @@ class ClojureLSP(LanguageServer):
                     self.resolve_main_method_available.set()
             return
 
-        async def lang_status_handler(params):
+        def lang_status_handler(params):
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self.service_ready_event.set()
 
-        async def execute_client_command_handler(params):
+        def execute_client_command_handler(params):
             return []
 
-        async def do_nothing(params):
+        def do_nothing(params):
             return
 
-        async def check_experimental_status(params):
+        def check_experimental_status(params):
             if params["quiescent"] == True:
                 self.server_ready.set()
 
-        async def window_log_message(msg):
+        def window_log_message(msg):
             self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         self.server.on_request("client/registerCapability", register_capability_handler)
@@ -147,28 +144,23 @@ class ClojureLSP(LanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        async with super().start_server():
-            self.logger.log("Starting clojure-lsp server process", logging.INFO)
-            await self.server.start()
-            initialize_params = self._get_initialize_params(self.repository_root_path)
+        self.logger.log("Starting clojure-lsp server process", logging.INFO)
+        self.server.start()
+        
+        initialize_params = self._get_initialize_params(self.repository_root_path)
 
-            self.logger.log(
-                "Sending initialize request from LSP client to LSP server and awaiting response",
-                logging.INFO,
-            )
-            init_response = await self.server.send.initialize(initialize_params)
-            assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
-            assert "completionProvider" in init_response["capabilities"]
-            # Clojure-lsp completion provider capabilities are more flexible than other servers
-            completion_provider = init_response["capabilities"]["completionProvider"]
-            assert completion_provider["resolveProvider"] == True
-            assert "triggerCharacters" in completion_provider
-            self.server.notify.initialized({})
-            # after initialize, Clojure-lsp is ready to serve
-            self.server_ready.set()
-            self.completions_available.set()
-
-            yield self
-
-            await self.server.shutdown()
-            await self.server.stop()
+        self.logger.log(
+            "Sending initialize request from LSP client to LSP server and awaiting response",
+            logging.INFO,
+        )
+        init_response = self.server.send.initialize(initialize_params)
+        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2
+        assert "completionProvider" in init_response["capabilities"]
+        # Clojure-lsp completion provider capabilities are more flexible than other servers'
+        completion_provider = init_response["capabilities"]["completionProvider"]
+        assert completion_provider["resolveProvider"] == True
+        assert "triggerCharacters" in completion_provider
+        self.server.notify.initialized({})
+        # after initialize, Clojure-lsp is ready to serve
+        self.server_ready.set()
+        self.completions_available.set()
