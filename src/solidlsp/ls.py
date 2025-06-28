@@ -135,6 +135,11 @@ class SolidLanguageServer(ABC):
             ls = RustAnalyzer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CSHARP:
+            # You can also switch to OmniSharp if you prefer that
+            # But OmniSharp seems to crash and has some issues with newer C# versions
+            # from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
+            # ls = OmniSharp(config, logger, repository_root_path)
+            
             from solidlsp.language_servers.csharp_language_server.csharp_language_server import CSharpLanguageServer
 
             ls = CSharpLanguageServer(config, logger, repository_root_path)
