@@ -35,8 +35,8 @@ class TestLanguageServerBasics:
         filepath = "src/test_app/core.clj"
         result = language_server.request_references(filepath, 12, 6)
 
-        assert isinstance(result, list)
-        assert len(result) >= 2  # Should find definition + usage in utils.clj
+        assert isinstance(result, list) and len(result) >= 2, \
+            "Should find definition + usage in utils.clj"
 
         usage_found = any(
             item["relativePath"] == "src/test_app/utils.clj" and 
@@ -52,20 +52,19 @@ class TestLanguageServerBasics:
             # After "core/" in calculate-area
             result = language_server.request_completions(filepath, 6, 8)
 
-            assert isinstance(result, list)
-            assert len(result) > 0
+            assert isinstance(result, list) and len(result) > 0
 
-            # Should find multiply and other core functions
             completion_texts = [item["completionText"] for item in result]
-            assert any("multiply" in text for text in completion_texts)
+            assert any("multiply" in text for text in completion_texts), \
+                "Should find 'multiply' function in completions after 'core/'"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer):
         filepath = "src/test_app/core.clj"
         symbols, _ = language_server.request_document_symbols(filepath)
 
-        assert isinstance(symbols, list)
-        assert len(symbols) >= 4  # greet, add, multiply, -main functions
+        assert isinstance(symbols, list) and len(symbols) >= 4, \
+              "greet, add, multiply, -main functions"
 
         # Check that we find the expected function symbols
         symbol_names = [symbol["name"] for symbol in symbols]
