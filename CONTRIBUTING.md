@@ -72,4 +72,4 @@ There are also some tips from the multilspy admin [here](https://github.com/micr
 ⚠️ Important: The LSP allows for lot of optional fields and symbols, so the language servers may differ
 in some details, even if they follow the LSP. Therefore you should include some code of the new
 language in `test/resources` and add tests for symbolic read operations on that code. Have a look
-at `test/multilspy/test_symbol_retrieval.py` for an example of such tests for the python LS.
+at `test/multilspy/python/test_symbol_retrieval.py` for an example of such tests for the python LS.
