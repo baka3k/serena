@@ -1,24 +1,26 @@
 import os
 import queue
 import socket
-import sys
 import threading
+from collections.abc import Callable
+from typing import Any
 
-import uvicorn
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from flask import Flask, Response, request, send_from_directory
 from pydantic import BaseModel
 from sensai.util import logging
 
-from serena.constants import SERENA_DASHBOARD_DIR
+from serena.constants import SERENA_DASHBOARD_DIR, SERENA_LOG_FORMAT
 
 log = logging.getLogger(__name__)
+
+# disable Werkzeug's logging to avoid cluttering the output
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 
 class MemoryLogHandler(logging.Handler):
     def __init__(self, level: int = logging.NOTSET) -> None:
         super().__init__(level=level)
-        self.setFormatter(logging.Formatter(logging.LOG_DEFAULT_FORMAT))
+        self.setFormatter(logging.Formatter(SERENA_LOG_FORMAT))
         self._log_buffer = LogBuffer()
         self._log_queue: queue.Queue[str] = queue.Queue()
         self._stop_event = threading.Event()
@@ -68,33 +70,70 @@ class ResponseToolNames(BaseModel):
 class SerenaDashboardAPI:
     log = logging.getLogger(__qualname__)
 
-    def __init__(self, memory_log_handler: MemoryLogHandler, tool_names: list[str]) -> None:
+    def __init__(
+        self, memory_log_handler: MemoryLogHandler, tool_names: list[str], shutdown_callback: Callable[[], None] | None = None
+    ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
-        self._app = FastAPI(title="Serena Dashboard")
+        self._shutdown_callback = shutdown_callback
+        self._app = Flask(__name__)
         self._setup_routes()
 
+    @property
+    def memory_log_handler(self) -> MemoryLogHandler:
+        return self._memory_log_handler
+
     def _setup_routes(self) -> None:
-        self._app.mount("/dashboard", StaticFiles(directory=SERENA_DASHBOARD_DIR), name="dashboard")
+        # Static files
+        @self._app.route("/dashboard/<path:filename>")
+        def serve_dashboard(filename: str) -> Response:
+            return send_from_directory(SERENA_DASHBOARD_DIR, filename)
 
-        self._app.add_api_route("/get_log_messages", self._get_log_messages, methods=["POST"], response_model=ResponseLog)
-        self._app.add_api_route("/get_tool_names", self._get_tool_names, methods=["GET"], response_model=ResponseToolNames)
-        self._app.add_api_route("/shutdown", self._shutdown, methods=["PUT"])
+        @self._app.route("/dashboard/")
+        def serve_dashboard_index() -> Response:
+            return send_from_directory(SERENA_DASHBOARD_DIR, "index.html")
 
-    async def _get_log_messages(self, request: RequestLog) -> ResponseLog:
+        # API routes
+        @self._app.route("/get_log_messages", methods=["POST"])
+        def get_log_messages() -> dict[str, Any]:
+            request_data = request.get_json()
+            if not request_data:
+                request_log = RequestLog()
+            else:
+                request_log = RequestLog.model_validate(request_data)
+
+            result = self._get_log_messages(request_log)
+            return result.model_dump()
+
+        @self._app.route("/get_tool_names", methods=["GET"])
+        def get_tool_names() -> dict[str, Any]:
+            result = self._get_tool_names()
+            return result.model_dump()
+
+        @self._app.route("/shutdown", methods=["PUT"])
+        def shutdown() -> dict[str, str]:
+            self._shutdown()
+            return {"status": "shutting down"}
+
+    def _get_log_messages(self, request_log: RequestLog) -> ResponseLog:
         all_messages = self._memory_log_handler.get_log_messages()
-        requested_messages = all_messages[request.start_idx :] if request.start_idx <= len(all_messages) else []
+        requested_messages = all_messages[request_log.start_idx :] if request_log.start_idx <= len(all_messages) else []
         return ResponseLog(messages=requested_messages, max_idx=len(all_messages) - 1)
 
-    async def _get_tool_names(self) -> ResponseToolNames:
+    def _get_tool_names(self) -> ResponseToolNames:
         return ResponseToolNames(tool_names=self._tool_names)
 
-    async def _shutdown(self) -> None:
-        print("Shutdown initiated by dashbaord ...", file=sys.stderr)
+    def _shutdown(self) -> None:
         log.info("Shutting down Serena")
-        # noinspection PyUnresolvedReferences
-        # noinspection PyProtectedMember
-        os._exit(0)
+        if self._shutdown_callback:
+            self._shutdown_callback()
+        else:
+            # Try to use the global shutdown function from process_isolated_agent
+            from serena.process_isolated_agent import request_global_shutdown
+
+            request_global_shutdown()
+            # noinspection PyProtectedMember
+            os._exit(0)
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:
@@ -109,11 +148,16 @@ class SerenaDashboardAPI:
 
         raise RuntimeError(f"No free ports found starting from {start_port}")
 
-    def run(self, host: str = "127.0.0.1", port: int = 0x5EDA) -> int:
+    def run(self, host: str = "0.0.0.0", port: int = 0x5EDA) -> int:
         """
         Runs the dashboard on the given host and port and returns the port number.
         """
-        uvicorn.run(self._app, host=host, port=port, workers=1, log_config=None, log_level="critical")
+        # patch flask.cli.show_server to avoid printing the server info
+        from flask import cli
+
+        cli.show_server_banner = lambda *args, **kwargs: None
+
+        self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 
     def run_in_thread(self) -> tuple[threading.Thread, int]:

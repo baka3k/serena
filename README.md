@@ -37,13 +37,14 @@ https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
 Serena provides the necessary [tools](#full-list-of-tools) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.
 
+For example, **supercharge the performance of Claude Code** with a [one-line shell command](#claude-code).
+
 Serena can be integrated with an LLM in several ways:
  * by using the **model context protocol (MCP)**.  
    Serena provides an MCP server which integrates with 
-     * Claude Desktop, 
+     * Claude Code and Claude Desktop, 
      * IDEs like VSCode, Cursor or IntelliJ,
      * Extensions like Cline or Roo Code
-     * Goose (for a nice CLI experience)
      * and many others, including [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
  * by using **Agno – the model-agnostic agent framework**.  
    Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
@@ -67,7 +68,7 @@ With Serena, we provide
  * direct, out-of-the-box support for:
      * Python 
      * TypeScript/Javascript
-     * PhP
+     * PHP
      * Go (need to install go and gopls first)
      * Rust
      * C/C++
@@ -78,8 +79,8 @@ With Serena, we provide
      * Kotlin (untested)
      * Dart (untested)
      
-   These languages are supported by the language server library [multilspy](https://github.com/microsoft/multilspy), which Serena uses under the hood.
-   But we did not explicitly test whether the support for these languages actually works.
+   These languages are supported by the language server library, but
+   we did not explicitly test whether the support for these languages actually works flawlessly.
        
 Further languages can, in principle, easily be supported by providing a shallow adapter for a new language server
 implementation.
@@ -87,7 +88,7 @@ implementation.
 
 ## Table of Contents
 
-<!-- Created with  markdown-toc -i README.md -->
+<!-- Created with markdown-toc -i README.md -->
 <!-- Install it with npm install -g markdown-toc -->
 
 <!-- toc -->
@@ -95,14 +96,18 @@ implementation.
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
 - [Free Coding Agents with Serena](#free-coding-agents-with-serena)
 - [Quick Start](#quick-start)
-  * [Setup](#setup)
+  * [Running the Serena MCP Server](#running-the-serena-mcp-server)
+    + [Usage](#usage)
+        * [Local Installation](#local-installation)
+      - [Using uvx](#using-uvx)
+      - [Using Docker (Experimental)](#using-docker-experimental)
+    + [SSE Mode](#sse-mode)
+    + [Command-Line Arguments](#command-line-arguments)
   * [Configuration](#configuration)
-  * [Project Activation](#project-activation)
-  * [MCP Server (Claude Desktop)](#mcp-server-claude-desktop)
-    + [Troubleshooting](#troubleshooting)
+  * [Project Activation & Indexing](#project-activation--indexing)
   * [Claude Code](#claude-code)
+  * [Claude Desktop](#claude-desktop)
   * [Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#other-mcp-clients-cline-roo-code-cursor-windsurf-etc)
-  * [Goose](#goose)
   * [Agno Agent](#agno-agent)
   * [Other Agent Frameworks](#other-agent-frameworks)
 - [Detailed Usage and Recommendations](#detailed-usage-and-recommendations)
@@ -122,7 +127,7 @@ implementation.
   * [Running Out of Context](#running-out-of-context)
   * [Combining Serena with Other MCP Servers](#combining-serena-with-other-mcp-servers)
   * [Serena's Logs: The Dashboard and GUI Tool](#serenas-logs-the-dashboard-and-gui-tool)
-  * [Troubleshooting](#troubleshooting-1)
+  * [Troubleshooting](#troubleshooting)
 - [Comparison with Other Coding Agents](#comparison-with-other-coding-agents)
   * [Subscription-Based Coding Agents](#subscription-based-coding-agents)
   * [API-Based Coding Agents](#api-based-coding-agents)
@@ -166,42 +171,112 @@ We thus built Serena with the prospect of being able to cancel most other subscr
 
 Serena can be used in various ways, below you will find instructions for selected integrations.
 
-- If you just want to turn Claude into a free-to-use coding agent, we recommend using Serena through Claude Desktop.
-- If you want to use Gemini or any other model and you want a GUI experience, you should use [Agno](#agno-agent). On macOS you can also use the GUI of [goose](#goose).
-- If you prefer using Serena through a CLI, you can use [goose](#goose). There again almost any model is possible.
+- If you just want to turn Claude into a free-to-use coding agent, we recommend using Serena through [Claude Code](#claude-code) or [Claude Desktop](#claude-desktop).
+- If you want to use Gemini or any other model, and you want a GUI experience, you can use [Agno](#agno-agent) or one of the many other GUIs that support MCP servers.
 - If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
-
-### Setup
 
 Serena is managed by `uv`, so you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/)).
 
-Then you can either
+### Running the Serena MCP Server
 
-1. Clone the repository and cd into it.
+You have several options for running the MCP server, which are explained in the subsections below.
+
+#### Usage
+
+The typical usage involves the client (Claude Code, Claude Desktop, etc.) running
+the MCP server as a subprocess (using stdio communication), 
+so the client needs to be provided with the command to run the MCP server.
+(Alternatively, you can run the MCP server in SSE mode and tell your client 
+how to connect to it.)
+
+Note that no matter how you run the MCP server, Serena will, by default, start a small web-based dashboard on localhost that will display logs and allow shutting down the
+MCP server (since many clients fail to clean up processes correctly).
+This and other settings can be adjusted in the [configuration](#configuration) and/or by providing [command-line arguments](#command-line-arguments).
+
+###### Local Installation
+
+1. Clone the repository and change into it.
+   ```shell
+   git clone https://github.com/oraios/serena
+   cd serena
+   ```
 2. Optionally create a config file from the template and adjust it according to your preferences.
    ```shell
    cp src/serena/resources/serena_config.template.yml serena_config.yml
    ```
    If you just want the default config, you can skip this part, and a config file will be created when you first run Serena.
+3. Run the server with `uv`:
+   ```shell
+   uv run serena-mcp-server
+   ```
+   When running from outside the serena installation directory, be sure to pass it, i.e. use
+   ```shell
+    uv run --directory /abs/path/to/serena serena-mcp-server
+    ```
 
-or use `uvx` to run Serena directly by relying on
+##### Using uvx
+
+`uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
+
+* Windows:
+  ```shell
+  uvx --from git+https://github.com/oraios/serena serena-mcp-server.exe
+  ```
+* Other operating systems:
+  ```shell
+  uvx --from git+https://github.com/oraios/serena serena-mcp-server
+  ```
+
+##### Using Docker (Experimental)
+
+⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using it.
+
+You can run the Serena MCP server directly via docker as follows,
+assuming that the projects you want to work on are all located in `/path/to/your/projects`:
 
 ```shell
-uvx --from git+https://github.com/oraios/serena serena-mcp-server.exe
+docker run --rm -i --network host -v /path/to/your/projects:/workspaces/projects ghcr.io/oraios/serena:latest serena-mcp-server --transport stdio
 ```
 
-in your MCP config (delete the `.exe` on macOS or Linux).
+Replace `/path/to/your/projects` with the absolute path to your projects directory. The Docker approach provides:
+- Better security isolation for shell command execution
+- No need to install language servers and dependencies locally
+- Consistent environment across different systems
 
-You can now add Serena to your MCP client as described below for various clients and
-[activate your first project](#project-activation).
+See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
-> In the default configuration, Serena will start a small dashboard on localhost that will display logs and allow shutting down the 
-> MCP server (since many clients fail to cleanup processes, leaving zombies behind). If you don't want that, simply set `web_dashboard` to `False`
-> in your `serena_config.yml` or pass 
+#### SSE Mode
+
+ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
+necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
+In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and
+therefore needs to be configured with a launch command. 
+
+When using instead the SSE mode, which uses HTTP-based communication, you control the server lifecycle yourself,
+i.e. you start the server and provide the client with the URL to connect to it.
+
+Simply provide `serena-mcp-server` with the `--transport sse` option and optionally provide the port.
+For example, to run the Serena MCP server in SSE mode on port 9121 using a local installation,
+you would run this command from the Serena directory, 
+
+```shell
+uv run serena-mcp-server --transport sse --port 9121
+```
+
+and then configure your client to connect to `http://localhost/sse:9121`.
+
+
+#### Command-Line Arguments
+
+The Serena MCP server supports a wide range of additional command-line options, including the option to run in SSE mode
+and to adapt Serena to various [contexts and modes of operation](#modes-and-contexts).
+
+Run with parameter `--help` to get a list of available options.
+
 
 ### Configuration
 
-Serena's behavior (like available projects, active tools and prompts) is configured in four places:
+Serena's behavior (active tools and prompts as well as logging configuration, etc.) is configured in four places:
 
 1. The `serena_config.yml` for general settings that apply to all clients and projects
 2. In the arguments passed to the `serena-mcp-server` in your client's config (see below), 
@@ -224,10 +299,13 @@ want to use Serena.
 
 You can just ask the LLM to show you the config of your session, Serena has a tool for it.
 
-### Project Activation
+### Project Activation & Indexing
 
 The recommended way is to just ask the LLM to activate a project by providing it an absolute path to, or,
-in case the project was activated in the past, by it's name. The default project name is the directory name.
+in case the project was activated in the past, by its name. The default project name is the directory name.
+
+  * "Activate the project /path/to/my_project"
+  * "Activate the project my_project"
 
 All projects that have been activated will be automatically added to your `serena_config.yml`, and for each 
 project, the file `.serena/project.yml` will be generated. You can adjust the latter, e.g., by changing the name
@@ -237,55 +315,85 @@ same name.
 If you are mostly working with the same project, you can also configure to always activate a project at startup
 by passing `--project <path_or_name>` to the `serena-mcp-server` command in your client's MCP config.
 
-### MCP Server (Claude Desktop)
+ℹ️ For larger projects, we recommend that you index your project to accelerate Serena's tools; otherwise the first
+tool application may be very slow.
+To do so, run one of these commands the project directory or pass the path to the project as an argument:
 
-Configure the MCP server in your client.  
-For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
-which will let you open the JSON file `claude_desktop_config.json`. Add the following (with adjusted paths) to enable Serena:
+* When using a local installation:
+  ```shell
+  uv run --directory /abs/path/to/serena index-project
+  ```
+* When using uvx:
+  ```shell
+  uvx --from git+https://github.com/oraios/serena index-project
+  ```
 
-```json
-{
-    "mcpServers": {
-        "serena": {
-            "command": "/abs/path/to/uv",
-            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server"]
-        }
-    }
-}
+### Claude Code
+
+Serena is a great way to make Claude Code both cheaper and more powerful! 
+
+From your project directory, add serena with a command like this,
+
+```shell
+claude mcp add serena -- <serena-mcp-server> --context ide-assistant --project $(pwd)
 ```
+
+where `<serena-mcp-server>` is your way of [running the Serena MCP server](#running-the-serena-mcp-server).
+For example, when using `uvx`, you would run
+```shell
+claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-mcp-server --context ide-assistant --project $(pwd)
+```
+
+ℹ️ Once in Claude Code, you should ask Claude to "Read the initial instructions" as your first prompt, such that it will receive information
+on how to use Serena's tools.
+
+
+### Claude Desktop
+
+For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
+which will let you open the JSON file `claude_desktop_config.json`. 
+Add the `serena` MCP server configuration, using a [run command](#running-the-serena-mcp-server) depending on your setup.
+
+* local installation:
+   ```json
+   {
+       "mcpServers": {
+           "serena": {
+               "command": "/abs/path/to/uv",
+               "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server"]
+           }
+       }
+   }
+   ```
+* uvx:
+   ```json
+   {
+       "mcpServers": {
+           "serena": {
+               "command": "/abs/path/to/uvx",
+               "args": ["--from", "git+https://github.com/oraios/serena", "serena-mcp-server"]
+           }
+       }
+  }
+  ```
+* docker:
+  ```json
+   {
+       "mcpServers": {
+           "serena": {
+               "command": "docker",
+               "args": ["run", "--rm", "-i", "--network", "host", "-v", "/path/to/your/projects:/workspaces/projects", "ghcr.io/oraios/serena:latest", "serena-mcp-server", "--transport", "stdio"]
+           }
+       }
+   }
+   ```
 
 If you are using paths containing backslashes for paths on Windows
 (note that you can also just use forward slashes), be sure to escape them correctly (`\\`).
 
-That's it! Save the config and then restart Claude Desktop. You are ready for activating your first project
+That's it! Save the config and then restart Claude Desktop. You are ready for activating your first project.
 
-ℹ️ You can further customize the run command, see
-
-```shell
-uv run serena-mcp-server --help
-```
-
-ℹ️ You can use Serena without cloning or configuring it explicitly by 
-
-{
-    "mcpServers": {
-        "serena": {
-            "command": "/abs/path/to/uv",
-            "args": ["run", "--directory", "/abs/path/to/serena", "serena-mcp-server"]
-        }
-    }
-}
-
-#### Troubleshooting
-
-Some client/OS/setup configurations were reported to cause issues when using Serena with the standard `stdio` protocol, where the MCP server is started by the client application. 
-If you experience such problems, you can start Serena in `sse` mode by running, e.g.,
-
-```shell
-uv run serena-mcp-server --transport sse --port 9121
-```
-
-Then configure your client to connect to `http://localhost:9121`.
+ℹ️ You can further customize the run command using additional arguments (see [above](#command-line-arguments)).
 
 Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
@@ -298,35 +406,14 @@ community version](https://github.com/aaddrick/claude-desktop-debian).
 
 After restarting, you should see Serena's tools in your chat interface (notice the small hammer icon).
 
-⚠️ Tool Names: Claude Desktop (and most MCP Clients) don't resolve the name of the server. So you shouldn't
-say something like "use Serena's tools". Instead, you can instruct the LLM to use symbolic tools or to
-use a particular tool by referring to its name. Moreover, in some clients, if you use multiple MCP Servers, you might get
-**tool name collisions** which lead to undefined behavior.
-
-ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
-necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
-In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and 
-therefore needs to be configured with a launch command. In SSE transport you control the lifetime of the server yourself.
-
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
-
-### Claude Code
-
-Serena is a great way to make Claude Code both cheaper and more powerful! We are collecting
-several examples for that and have heard very positive feedback so far. Claude Code users can
-add serena with
-
-```shell
-claude mcp add serena -- /path/to/uv "run" --directory /path/to/serena serena-mcp-server --context ide-assistant
-```
-
 
 ### Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
 
 Being an MCP Server, Serena can be included in any MCP Client. The same configuration as above,
 perhaps with small client-specific modifications, should work. Most of the popular
 existing coding assistants (IDE extensions or VSCode-like IDEs) support connections
-to MCP Servers. It is ** recommended to use the `ide-assistant` context** for these integrations by adding `"--context", "ide-assistant"` to the `args` in your MCP client's configuration. Including Serena generally boosts their performance
+to MCP Servers. It is **recommended to use the `ide-assistant` context** for these integrations by adding `"--context", "ide-assistant"` to the `args` in your MCP client's configuration. Including Serena generally boosts their performance
 by providing them tools for symbolic operations.
 
 In this case, the billing for the usage continues to be controlled by the client of your choice
@@ -334,42 +421,14 @@ In this case, the billing for the usage continues to be controlled by the client
 e.g., for one of the following reasons:
 
 1. You are already using a coding assistant (say Cline or Cursor) and just want to make it more powerful.
-2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian)
-3. You want tighter integration of Serena into your IDE and don't mind paying for that
-
-### Goose
-
-[goose](https://github.com/block/goose) is a standalone coding agent which has an integration for MCP servers and offers a CLI (as well as a GUI on macOS). 
-Using goose is currently the simplest way of running Serena through a CLI-based UI with an LLM of your choice.
-
-Follow the instructions [here](https://block.github.io/goose/docs/getting-started/installation/) to install it.
-
-After that, use `goose configure` to add an extension. For adding Serena, choose the option `Command-line Extension`, name it `Serena` and add the following as command:
-
-```
-/abs/path/to/uv run --directory /abs/path/to/serena serena-mcp-server --project /optional/abs/path/to/project
-```
-
-Since Serena can do all necessary editing and command operations, you should disable the `developer` extension that goose enables by default.
-For that execute
-
-```shell
-goose configure
-```
-again, choose the option `Toggle Extensions`, and make sure Serena is enabled selected while `developer` is not.
-
-That's it. Read through the configuration options of goose to see what you can do with it (which is a lot, like setting different levels of permissions for tool execution).
-
-> Goose does not seem to always properly terminate python processes for MCP servers when a session ends. 
-> You may want to disable the Serena GUI and/or to manually cleanup any running python processes after finishing your work
-> with goose.
+2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian).
+3. You want tighter integration of Serena into your IDE and don't mind paying for that.
 
 ### Agno Agent
 
 Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
 (independent of the MCP technology) with a large number of underlying LLMs. Agno is currently
-the simplest way of running Serena in a chat GUI with an LLM of your choice 
-(unless you are using a Mac, then you might prefer goose, which requires almost no setup).
+the simplest way of running Serena in a chat GUI with an LLM of your choice.
 
 While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
 making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
@@ -399,7 +458,7 @@ Here's how it works (see also [Agno's documentation](https://docs.agno.com/intro
 3. Copy `.env.example` to `.env` and fill in the API keys for the provider(s) you
    intend to use.
 
-5. Start the agno agent app with
+4. Start the agno agent app with
    ```shell
    uv run python scripts/agno_agent.py
    ```
@@ -653,9 +712,7 @@ platform and from client to client. We recommend always using absolute paths, as
 errors. The language server is running in a separate sub-process and is called with asyncio – sometimes
 a client may make it crash. If you have Serena's log window enabled, and it disappears, you'll know what happened.
 
-Some clients (like goose) may not properly terminate MCP servers,
-look out for hanging python processes and terminate them
-manually, if needed.
+Some clients may not properly terminate MCP servers, look out for hanging python processes and terminate them manually, if needed.
 
 ## Comparison with Other Coding Agents
 
@@ -725,17 +782,16 @@ larger codebases.
 We built Serena on top of multiple existing open-source technologies, the most important ones being:
 
 1. [multilspy](https://github.com/microsoft/multilspy).
-   A beautifully designed wrapper around language servers following the LSP. It
-   was not easily extendable with the symbolic
-   logic that Serena required, so instead of incorporating it as dependency, we
-   copied the source code
-   and adapted it to our needs.
+   A library which wraps language server implementations and adapts them for interaction via Python
+   and which provided the basis for our library Solid-LSP (src/solidlsp). 
+   Solid-LSP provides pure synchronous LSP calls and extends the original library with the symbolic logic 
+   that Serena required.
 2. [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)
 3. [Agno](https://github.com/agno-agi/agno) and
    the associated [agent-ui](https://github.com/agno-agi/agent-ui),
    which we use to allow Serena to work with any model, beyond the ones
    supporting the MCP.
-4. All the language servers that we use through multilspy.
+4. All the language servers that we use through Solid-LSP.
 
 Without these projects, Serena would not have been possible (or would have been significantly more difficult to build).
 

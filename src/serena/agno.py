@@ -25,7 +25,7 @@ class SerenaAgnoToolkit(Toolkit):
     def __init__(self, serena_agent: SerenaAgent):
         super().__init__("Serena")
         for tool in serena_agent.get_exposed_tool_instances():
-            self.functions[tool.get_name()] = self._create_agno_function(tool)
+            self.functions[tool.get_name_from_cls()] = self._create_agno_function(tool)
         log.info("Agno agent functions: %s", list(self.functions.keys()))
 
     @staticmethod
@@ -39,7 +39,7 @@ class SerenaAgnoToolkit(Toolkit):
             return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
 
         function = Function.from_callable(tool.get_apply_fn())
-        function.name = tool.get_name()
+        function.name = tool.get_name_from_cls()
         function.entrypoint = entrypoint
         function.skip_entrypoint_processing = True
         return function

@@ -56,7 +56,7 @@ When developing the `ReplaceRegexTool` we were initially not able to make Claude
 examples nor explicit instructions helped. It was only after adding 
 
 ```
-IMPORTANT: REMEMBER TO USE WILDCARDS WEHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
+IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
 ```
 
 to the initial instructions and to the tool description that Claude finally started following the instructions.
@@ -69,6 +69,14 @@ The MCP technology is clearly very green. Even though there is a lifespan contex
 many clients, including Claude Desktop, fail to properly clean up, leaving zombie processes behind.
 We mitigate this through the GUI window and the dashboard, so the user sees whether Serena is running
 and can terminate it there.
+
+### Trusting Asyncio
+
+Running multiple asyncio apps led to non-deterministic 
+event loop contamination and deadlocks, which were very hard to debug
+and understand. We solved this with a large hammer, by putting all asyncio apps into a separate
+process. It made the code much more complex and slightly enhanced RAM requirements, but it seems
+like that was the only way to reliably overcome asyncio deadlock issues.
 
 ### Cross-OS Tkinter GUI
 

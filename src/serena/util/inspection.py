@@ -3,8 +3,8 @@ import os
 from collections.abc import Generator
 from typing import TypeVar
 
-from multilspy.multilspy_config import Language
 from serena.util.file_system import find_all_non_ignored_files
+from solidlsp.ls_config import Language
 
 T = TypeVar("T")
 

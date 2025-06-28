@@ -182,6 +182,24 @@ class TestSearchText:
         assert any("isinstance(item, dict)" in line for line in instance_matches)
         assert any("isinstance(item, list)" in line for line in instance_matches)
 
+    def test_search_text_glob_with_special_chars(self):
+        """Glob patterns containing regex special characters should match literally."""
+        content = """
+        def func_square():
+            print("value[42]")
+
+        def func_curly():
+            print("value{bar}")
+        """
+
+        matches_square = search_text(r"*\[42\]*", content=content, is_glob=True)
+        assert len(matches_square) == 1
+        assert "[42]" in matches_square[0].lines[0].line_content
+
+        matches_curly = search_text("*{bar}*", content=content, is_glob=True)
+        assert len(matches_curly) == 1
+        assert "{bar}" in matches_curly[0].lines[0].line_content
+
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
         content = """
@@ -258,6 +276,87 @@ class TestSearchFiles:
 
         # Assert that the matched files are exactly the ones expected
         assert actual_matched_files == sorted(expected_matched_files)
+
+        # Basic check on results structure if files were expected
+        if expected_matched_files:
+            assert len(results) == len(expected_matched_files)
+            for result in results:
+                assert len(result.matched_lines) == 1  # Mock reader returns one matching line
+                assert result.matched_lines[0].line_content == "This line contains a match."
+                assert result.matched_lines[0].match_type == LineType.MATCH
+
+    @pytest.mark.parametrize(
+        "file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description",
+        [
+            # Glob patterns that were problematic with gitignore syntax
+            (
+                ["src/serena/agent.py", "src/serena/process_isolated_agent.py", "test/agent.py"],
+                "match",
+                "src/**agent.py",
+                None,
+                ["src/serena/agent.py", "src/serena/process_isolated_agent.py"],
+                "Glob: src/**agent.py should match files ending with agent.py under src/",
+            ),
+            (
+                ["src/serena/agent.py", "src/serena/process_isolated_agent.py", "other/agent.py"],
+                "match",
+                "**agent.py",
+                None,
+                ["src/serena/agent.py", "src/serena/process_isolated_agent.py", "other/agent.py"],
+                "Glob: **agent.py should match files ending with agent.py anywhere",
+            ),
+            (
+                ["dir/subdir/file.py", "dir/other/file.py", "elsewhere/file.py"],
+                "match",
+                "dir/**file.py",
+                None,
+                ["dir/subdir/file.py", "dir/other/file.py"],
+                "Glob: dir/**file.py should match files ending with file.py under dir/",
+            ),
+            (
+                ["src/a/b/c/test.py", "src/x/test.py", "other/test.py"],
+                "match",
+                "src/**/test.py",
+                None,
+                ["src/a/b/c/test.py", "src/x/test.py"],
+                "Glob: src/**/test.py should match test.py files under src/ at any depth",
+            ),
+            # Edge cases for ** patterns
+            (
+                ["agent.py", "src/agent.py", "src/serena/agent.py"],
+                "match",
+                "**agent.py",
+                None,
+                ["agent.py", "src/agent.py", "src/serena/agent.py"],
+                "Glob: **agent.py should match at root and any depth",
+            ),
+            (["file.txt", "src/file.txt"], "match", "src/**", None, ["src/file.txt"], "Glob: src/** should match everything under src/"),
+        ],
+        ids=lambda x: x if isinstance(x, str) else "",  # Use description as test ID
+    )
+    def test_search_files_glob_patterns(
+        self, file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description
+    ):
+        """
+        Test glob patterns that were problematic with the previous gitignore-based implementation.
+        """
+        results = search_files(
+            file_paths=file_paths,
+            pattern=pattern,
+            file_reader=mock_reader_always_match,
+            paths_include_glob=paths_include_glob,
+            paths_exclude_glob=paths_exclude_glob,
+            context_lines_before=0,
+            context_lines_after=0,
+        )
+
+        # Extract the source file paths from the results
+        actual_matched_files = sorted([result.source_file_path for result in results if result.source_file_path])
+
+        # Assert that the matched files are exactly the ones expected
+        assert actual_matched_files == sorted(
+            expected_matched_files
+        ), f"Pattern '{paths_include_glob}' failed: expected {sorted(expected_matched_files)}, got {actual_matched_files}"
 
         # Basic check on results structure if files were expected
         if expected_matched_files:
@@ -347,3 +446,47 @@ class TestSearchFiles:
         assert result.lines[1].match_type == LineType.MATCH
         assert result.lines[2].line_content == "Line after 1", "Incorrect 'after' context line"
         assert result.lines[2].match_type == LineType.AFTER_MATCH
+
+
+class TestGlobMatch:
+    """Test the glob_match function directly."""
+
+    @pytest.mark.parametrize(
+        "pattern, path, expected",
+        [
+            # Basic wildcard patterns
+            ("*.py", "file.py", True),
+            ("*.py", "file.txt", False),
+            ("*agent.py", "agent.py", True),
+            ("*agent.py", "process_isolated_agent.py", True),
+            ("*agent.py", "agent_test.py", False),
+            # Double asterisk patterns
+            ("**agent.py", "agent.py", True),
+            ("**agent.py", "src/agent.py", True),
+            ("**agent.py", "src/serena/agent.py", True),
+            ("**agent.py", "src/serena/process_isolated_agent.py", True),
+            ("**agent.py", "agent_test.py", False),
+            # Prefix with double asterisk
+            ("src/**agent.py", "src/agent.py", True),
+            ("src/**agent.py", "src/serena/agent.py", True),
+            ("src/**agent.py", "src/serena/process_isolated_agent.py", True),
+            ("src/**agent.py", "other/agent.py", False),
+            ("src/**agent.py", "src/agent_test.py", False),
+            # Directory patterns
+            ("src/**", "src/file.py", True),
+            ("src/**", "src/dir/file.py", True),
+            ("src/**", "other/file.py", False),
+            # Exact matches with double asterisk
+            ("src/**/test.py", "src/test.py", True),
+            ("src/**/test.py", "src/a/b/test.py", True),
+            ("src/**/test.py", "src/test_file.py", False),
+            # Simple patterns without asterisks
+            ("src/file.py", "src/file.py", True),
+            ("src/file.py", "src/other.py", False),
+        ],
+    )
+    def test_glob_match(self, pattern, path, expected):
+        """Test glob_match function with various patterns."""
+        from src.serena.text_utils import glob_match
+
+        assert glob_match(pattern, path) == expected

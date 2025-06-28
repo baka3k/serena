@@ -1,3 +1,4 @@
+import fnmatch
 import logging
 import re
 from collections.abc import Callable
@@ -6,8 +7,6 @@ from enum import StrEnum
 from typing import Any, Self
 
 from joblib import Parallel, delayed
-from pathspec import PathSpec
-from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
 log = logging.getLogger(__name__)
 
@@ -153,19 +152,28 @@ def search_text(
 
     # Convert pattern to a compiled regex if it's a string
     if is_glob and isinstance(pattern, str):
-        # Convert glob pattern to regex
-        # Escape all regex special characters except * and ?
-        regex_special_chars = r"\^$.|+()[{"
-        escaped_pattern = ""
-        for char in pattern:
-            if char in regex_special_chars:
-                escaped_pattern += "\\" + char
-            elif char == "*":
-                escaped_pattern += ".*"
-            elif char == "?":
-                escaped_pattern += "."
-            else:
-                escaped_pattern += char
+        # Convert glob pattern with optional backslash escaping to regex
+        def glob_to_regex(glob_pat: str) -> str:
+            regex_parts: list[str] = []
+            i = 0
+            while i < len(glob_pat):
+                ch = glob_pat[i]
+                if ch == "*":
+                    regex_parts.append(".*")
+                elif ch == "?":
+                    regex_parts.append(".")
+                elif ch == "\\":
+                    i += 1
+                    if i < len(glob_pat):
+                        regex_parts.append(re.escape(glob_pat[i]))
+                    else:
+                        regex_parts.append("\\")
+                else:
+                    regex_parts.append(re.escape(ch))
+                i += 1
+            return "".join(regex_parts)
+
+        escaped_pattern = glob_to_regex(pattern)
         # For glob patterns, don't anchor with ^ and $ to allow partial line matches
         compiled_pattern = re.compile(escaped_pattern)
     elif isinstance(pattern, str):
@@ -249,6 +257,52 @@ def default_file_reader(file_path: str) -> str:
         return f.read()
 
 
+def glob_match(pattern: str, path: str) -> bool:
+    """
+    Match a file path against a glob pattern.
+
+    Supports standard glob patterns:
+    - * matches any number of characters except /
+    - ** matches any number of directories (zero or more)
+    - ? matches a single character except /
+    - [seq] matches any character in seq
+
+    :param pattern: Glob pattern (e.g., 'src/**/*.py', '**agent.py')
+    :param path: File path to match against
+    :return: True if path matches pattern
+    """
+    pattern = pattern.replace("\\", "/")  # Normalize backslashes to forward slashes
+    path = path.replace("\\", "/")  # Normalize path backslashes to forward slashes
+
+    # Handle ** patterns that should match zero or more directories
+    if "**" in pattern:
+        # Method 1: Standard fnmatch (matches one or more directories)
+        regex1 = fnmatch.translate(pattern)
+        if re.match(regex1, path):
+            return True
+
+        # Method 2: Handle zero-directory case by removing /** entirely
+        # Convert "src/**/test.py" to "src/test.py"
+        if "/**/" in pattern:
+            zero_dir_pattern = pattern.replace("/**/", "/")
+            regex2 = fnmatch.translate(zero_dir_pattern)
+            if re.match(regex2, path):
+                return True
+
+        # Method 3: Handle leading ** case by removing **/
+        # Convert "**/test.py" to "test.py"
+        if pattern.startswith("**/"):
+            zero_dir_pattern = pattern[3:]  # Remove "**/"
+            regex3 = fnmatch.translate(zero_dir_pattern)
+            if re.match(regex3, path):
+                return True
+
+        return False
+    else:
+        # Simple pattern without **, use fnmatch directly
+        return fnmatch.fnmatch(path, pattern)
+
+
 def search_files(
     file_paths: list[str],
     pattern: re.Pattern | str,
@@ -272,15 +326,14 @@ def search_files(
     :return: List of MatchedConsecutiveLines objects
     """
     # Pre-filter paths (done sequentially to avoid overhead)
-    include_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_include_glob]) if paths_include_glob else None
-    exclude_spec = PathSpec.from_lines(GitWildMatchPattern, [paths_exclude_glob]) if paths_exclude_glob else None
+    # Use proper glob matching instead of gitignore patterns
 
     filtered_paths = []
     for path in file_paths:
-        if include_spec and not include_spec.match_file(path):
+        if paths_include_glob and not glob_match(paths_include_glob, path):
             log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
             continue
-        if exclude_spec and exclude_spec.match_file(path):
+        if paths_exclude_glob and glob_match(paths_exclude_glob, path):
             log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
             continue
         filtered_paths.append(path)

@@ -4,7 +4,9 @@ import pytest
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 
 from serena.agent import Tool, ToolRegistry
-from serena.mcp import make_tool
+from serena.mcp import SerenaMCPFactory
+
+make_tool = SerenaMCPFactory.make_mcp_tool
 
 
 class BaseMockTool(Tool):
@@ -224,7 +226,7 @@ def test_make_tool_missing_apply() -> None:
             """,
             "",
         ),
-        ("", ""),
+        ("Description without params.", "Description without params."),
     ],
 )
 def test_make_tool_descriptions(docstring, expected_description) -> None:
@@ -287,7 +289,7 @@ def test_make_tool_all_tools(tool_class) -> None:
 
     # Basic validation
     assert isinstance(mcp_tool, MCPTool)
-    assert mcp_tool.name == tool_class.get_name()
+    assert mcp_tool.name == tool_class.get_name_from_cls()
 
     # The description should be a string (either from docstring or default)
     assert isinstance(mcp_tool.description, str)

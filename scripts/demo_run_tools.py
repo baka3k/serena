@@ -20,10 +20,10 @@ class InMemorySerenaConfig(SerenaConfigBase):
 
 
 if __name__ == "__main__":
-    # project_path = str(Path("test") / "resources" / "repos" / "python" / "test_repo")
     agent = SerenaAgent(project=REPO_ROOT)
 
     # apply a tool
     find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
     print("Finding the symbol 'SyncLanguageServer'\n")
-    pprint(json.loads(find_refs_tool.apply(name_path="SyncLanguageServer", relative_path="src/multilspy/language_server.py")))
+    result = agent.execute_task(lambda: find_refs_tool.apply(name_path="SolidLanguageServer", relative_path="src/solidlsp/ls.py"))
+    pprint(json.loads(result))

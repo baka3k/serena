@@ -1,6 +1,8 @@
+import logging
 import os
 import shutil
 import tempfile
+import time
 from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -9,12 +11,14 @@ from typing import Literal
 
 import pytest
 
-from multilspy.multilspy_config import Language
 from serena.symbol import CodeDiff
+from solidlsp.ls_config import Language
 from src.serena.symbol import SymbolManager
 from test.conftest import create_ls, get_repo_path
 
 pytestmark = pytest.mark.snapshot
+
+log = logging.getLogger(__name__)
 
 
 class EditingTest:
@@ -35,14 +39,32 @@ class EditingTest:
         self.repo_path = temp_dir / self.original_repo_path.name
         language_server = None  # Initialize language_server
         try:
+            print(f"Copying repo from {self.original_repo_path} to {self.repo_path}")
             shutil.copytree(self.original_repo_path, self.repo_path)
+            # prevent deadlock on Windows due to file locks caused by antivirus or some other external software
+            # wait for a long time here
+            if os.name == "nt":
+                time.sleep(0.1)
+            log.info(f"Creating language server for {self.language} {self.rel_path}")
             language_server = create_ls(self.language, str(self.repo_path))
+            log.info(f"Starting language server for {self.language} {self.rel_path}")
             language_server.start()
+            log.info(f"Language server started for {self.language} {self.rel_path}")
             yield SymbolManager(lang_server=language_server)
         finally:
             if language_server is not None and language_server.is_running():
+                log.info(f"Stopping language server for {self.language} {self.rel_path}")
                 language_server.stop()
-            shutil.rmtree(temp_dir)
+                # attempt at trigger of garbage collection
+                language_server = None
+                log.info(f"Language server stopped for {self.language} {self.rel_path}")
+
+            # prevent deadlock on Windows due to lingering file locks
+            if os.name == "nt":
+                time.sleep(0.1)
+            log.info(f"Removing temp directory {temp_dir}")
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            log.info(f"Temp directory {temp_dir} removed")
 
     def _read_file(self, rel_path: str) -> str:
         """Read the content of a file in the test repository."""
@@ -112,6 +134,18 @@ def test_delete_symbol(test_case, snapshot):
 NEW_PYTHON_FUNCTION = """def new_inserted_function():
     print("This is a new function inserted before another.")"""
 
+NEW_PYTHON_CLASS_WITH_LEADING_NEWLINES = """
+
+class NewInsertedClass:
+    pass
+"""
+
+NEW_PYTHON_CLASS_WITH_TRAILING_NEWLINES = """class NewInsertedClass:
+    pass
+
+
+"""
+
 NEW_TYPESCRIPT_FUNCTION = """function newInsertedFunction(): void {
     console.log("This is a new function inserted before another.");
 }"""
@@ -125,11 +159,13 @@ NEW_TYPESCRIPT_FUNCTION_AFTER = """function newFunctionAfterClass(): void {
 
 
 class InsertInRelToSymbolTest(EditingTest):
-    def __init__(self, language: Language, rel_path: str, symbol_name: str, new_content: str):
+    def __init__(
+        self, language: Language, rel_path: str, symbol_name: str, new_content: str, mode: Literal["before", "after"] | None = None
+    ):
         super().__init__(language, rel_path)
         self.symbol_name = symbol_name
         self.new_content = new_content
-        self.mode: Literal["before", "after"] | None = None
+        self.mode: Literal["before", "after"] | None = mode
 
     def set_mode(self, mode: Literal["before", "after"]):
         self.mode = mode
@@ -137,9 +173,9 @@ class InsertInRelToSymbolTest(EditingTest):
     def _apply_edit(self, symbol_manager: SymbolManager) -> None:
         assert self.mode is not None
         if self.mode == "before":
-            symbol_manager.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content)
+            symbol_manager.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
         elif self.mode == "after":
-            symbol_manager.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content)
+            symbol_manager.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
 
 
 @pytest.mark.parametrize("mode", ["before", "after"])
@@ -189,18 +225,38 @@ def test_insert_in_rel_to_symbol(test_case: InsertInRelToSymbolTest, mode: Liter
     test_case.run_test(content_after_ground_truth=snapshot)
 
 
-PYTHON_REPLACED_BODY = """        
-def modify_instance_var(self):
-    # This body has been replaced
-    self.instance_var = "Replaced!"
-    self.reassignable_instance_var = 999
+@pytest.mark.python
+def test_insert_python_class_before(snapshot):
+    InsertInRelToSymbolTest(
+        Language.PYTHON,
+        PYTHON_TEST_REL_FILE_PATH,
+        "VariableDataclass",
+        NEW_PYTHON_CLASS_WITH_TRAILING_NEWLINES,
+        mode="before",
+    ).run_test(snapshot)
+
+
+@pytest.mark.python
+def test_insert_python_class_after(snapshot):
+    InsertInRelToSymbolTest(
+        Language.PYTHON,
+        PYTHON_TEST_REL_FILE_PATH,
+        "VariableDataclass",
+        NEW_PYTHON_CLASS_WITH_LEADING_NEWLINES,
+        mode="after",
+    ).run_test(snapshot)
+
+
+PYTHON_REPLACED_BODY = """def modify_instance_var(self):
+        # This body has been replaced
+        self.instance_var = "Replaced!"
+        self.reassignable_instance_var = 999
 """
 
-TYPESCRIPT_REPLACED_BODY = """
-function printValue() {
-    // This body has been replaced
-    console.warn("New value: " + this.value);
-}
+TYPESCRIPT_REPLACED_BODY = """function printValue() {
+        // This body has been replaced
+        console.warn("New value: " + this.value);
+    }
 """
 
 
@@ -211,7 +267,7 @@ class ReplaceBodyTest(EditingTest):
         self.new_body = new_body
 
     def _apply_edit(self, symbol_manager: SymbolManager) -> None:
-        symbol_manager.replace_body(self.symbol_name, self.rel_path, self.new_body)
+        symbol_manager.replace_body(self.symbol_name, self.rel_path, self.new_body, use_same_indentation=False)
 
 
 @pytest.mark.parametrize(

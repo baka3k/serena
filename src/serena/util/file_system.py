@@ -1,3 +1,4 @@
+import glob
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -78,17 +79,14 @@ def find_all_non_ignored_files(repo_root: str) -> list[str]:
 
 @dataclass
 class GitignoreSpec:
-    """
-    Represents a single gitignore file and its parsed patterns.
-
-    :param file_path: Path to the gitignore file
-    :param patterns: List of adjusted patterns from the gitignore file
-    :param pathspec: Compiled PathSpec object for pattern matching
-    """
-
     file_path: str
+    """Path to the gitignore file."""
     patterns: list[str] = field(default_factory=list)
+    """List of patterns from the gitignore file.
+    The patterns are adjusted based on the gitignore file location.
+    """
     pathspec: PathSpec = field(init=False)
+    """Compiled PathSpec object for pattern matching."""
 
     def __post_init__(self) -> None:
         """Initialize the PathSpec from patterns."""
@@ -137,18 +135,7 @@ class GitignoreParser:
 
         :return: List of absolute paths to .gitignore files
         """
-        gitignore_files = []
-
-        for root, dirs, files in os.walk(self.repo_root):
-            # Skip .git directory
-            if ".git" in dirs:
-                dirs.remove(".git")
-
-            if ".gitignore" in files:
-                gitignore_path = os.path.join(root, ".gitignore")
-                gitignore_files.append(gitignore_path)
-
-        return gitignore_files
+        return glob.glob(self.repo_root + "/.gitignore") + glob.glob(self.repo_root + "/**/.gitignore")
 
     def _create_ignore_spec(self, gitignore_file_path: str) -> GitignoreSpec:
         """
@@ -228,7 +215,13 @@ class GitignoreParser:
                         # Add the directory prefix but also allow matching in subdirectories
                         adjusted_pattern = os.path.join(rel_dir, "**", line)
             else:
-                adjusted_pattern = line
+                if is_anchored:
+                    # Anchored patterns in root should only match at root level
+                    # Add leading slash back to indicate root-only matching
+                    adjusted_pattern = "/" + line
+                else:
+                    # Non-anchored patterns can match anywhere
+                    adjusted_pattern = line
 
             # Re-add negation if needed
             if is_negation:
@@ -254,8 +247,13 @@ class GitignoreParser:
         else:
             rel_path = path
 
+        abs_path = os.path.join(self.repo_root, rel_path)
+
         # Normalize path separators
         rel_path = rel_path.replace(os.sep, "/")
+
+        if os.path.exists(abs_path) and os.path.isdir(abs_path) and not rel_path.endswith("/"):
+            rel_path = rel_path + "/"
 
         # Check against each ignore spec
         for spec in self.ignore_specs:
@@ -276,3 +274,14 @@ class GitignoreParser:
         """Reload all gitignore files from the repository."""
         self.ignore_specs.clear()
         self._load_gitignore_files()
+
+
+def match_path(path: str, path_spec: PathSpec) -> bool:
+    path = os.path.abspath(path)
+    normalized_path = str(path).replace(os.path.sep, "/")
+
+    # pathspec can't handle the matching of directories if they don't end with a slash!
+    # see https://github.com/cpburnz/python-pathspec/issues/89
+    if os.path.isdir(normalized_path) and not normalized_path.endswith("/"):
+        normalized_path = normalized_path + "/"
+    return path_spec.match_file(normalized_path)
