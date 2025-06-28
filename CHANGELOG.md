@@ -6,17 +6,28 @@ Status of the `main` branch. Changes prior to the next official version change w
    * Switch to newly developed fully synchronous LSP library `solidlsp` (derived from `multilspy`),
      removing our fork of `multilspy` (src/multilspy)
    * Switch from fastapi (which uses asyncio) to Flask in the Serena dashboard
-   * The MCP server is the only asynchronous component now, which resolves cross-component loop contamination,
+   * The MCP server is the only asyncio-based component now, which resolves cross-component loop contamination,
      such that process isolation is no longer required.
      Neither are non-graceful shutdowns on Windows.
 * Better default and description for restricting the search in `search_for_pattern`
+* **Improved editing tools**: The editing logic was simplified and improved, making it more robust.
+   * The "minimal indentation" logic was removed, because LLMs did not understand it.
+   * The logic for the insertion of empty lines was improved (mostly controlled by the LLM now)
+* Add a task queue for the agent, which is executed in a separate and thread and
+   * allows the language server to be initialized in the background, making the MCP server respond to requests
+     immediately upon startup,
+   * ensures that all tool executions are fully synchronized (executed linearly).
 * Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
 
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows
 * Fix project activation by name via `--project` not working (was broken in previous release) 
 * Improve handling of indentation and newlines in symbolic editing tools
-* Fix that `insert_after_symbol` was failing for insertions at the end of a file that did not end with a newline
+* Fix `InsertAfterSymbolTool` failing for insertions at the end of a file that did not end with a newline
+* Fix `InsertBeforeSymbolTool` inserting in the wrong place in the absence of empty lines above the reference symbol
+* Fix `ReplaceSymbolBodyTool` changing whitespace before/after the symbol
+* Fix repository indexing not following links and catch exceptions during indexing, allowing indexing
+  to continue even if unexpected errors occur for individual files.
 
 # 2025-06-20
 
