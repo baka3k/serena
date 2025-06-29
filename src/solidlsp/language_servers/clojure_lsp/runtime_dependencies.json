@@ -31,7 +31,7 @@
             "url": "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download/clojure-lsp-native-windows-amd64.zip",
             "platformId": "win-x64",
             "archiveType": "zip",
-            "binaryName": "clojure-lsp"
+            "binaryName": "clojure-lsp.exe"
         }
     ]
 }
