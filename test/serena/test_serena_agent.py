@@ -32,7 +32,16 @@ def serena_config():
     """Create an in-memory configuration for tests with test repositories pre-registered."""
     # Create test projects for all supported languages
     test_projects = []
-    for language in [Language.PYTHON, Language.GO, Language.JAVA, Language.RUST, Language.TYPESCRIPT, Language.PHP, Language.CSHARP, Language.CLOJURE]:
+    for language in [
+        Language.PYTHON,
+        Language.GO,
+        Language.JAVA,
+        Language.RUST,
+        Language.TYPESCRIPT,
+        Language.PHP,
+        Language.CSHARP,
+        Language.CLOJURE,
+    ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
             project_name = f"test_repo_{language}"
