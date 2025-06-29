@@ -94,7 +94,8 @@ class ClojureLSP(SolidLanguageServer):
         platform_id = PlatformUtils.get_platform_id()
 
         runtime_dependencies = [dependency for dependency in self.runtime_dependencies if dependency["platformId"] == platform_id.value]
-        assert len(runtime_dependencies) == 1
+        if len(runtime_dependencies) != 1:
+            raise RuntimeError(f"Could not find a suitable clojure-lsp runtime dependency for platform {platform_id.value}.")
         dependency = runtime_dependencies[0]
 
         clojurelsp_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clojure-lsp")
@@ -103,9 +104,9 @@ class ClojureLSP(SolidLanguageServer):
             os.makedirs(clojurelsp_ls_dir, exist_ok=True)
             logger.log(f"Downloading and extracting clojure-lsp from {dependency['url']} to {clojurelsp_ls_dir}", logging.INFO)
             FileUtils.download_and_extract_archive(logger, dependency["url"], clojurelsp_ls_dir, dependency["archiveType"])
-        assert os.path.exists(clojurelsp_executable_path)
+        if not os.path.exists(clojurelsp_executable_path):
+            raise FileNotFoundError(f"Download failed? Could not find clojure-lsp executable at {clojurelsp_executable_path}")
         os.chmod(clojurelsp_executable_path, stat.S_IEXEC)
-
         return clojurelsp_executable_path
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
