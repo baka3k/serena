@@ -32,7 +32,16 @@ def serena_config():
     """Create an in-memory configuration for tests with test repositories pre-registered."""
     # Create test projects for all supported languages
     test_projects = []
-    for language in [Language.PYTHON, Language.GO, Language.JAVA, Language.RUST, Language.TYPESCRIPT, Language.PHP, Language.CLOJURE]:
+    for language in [
+        Language.PYTHON,
+        Language.GO,
+        Language.JAVA,
+        Language.RUST,
+        Language.TYPESCRIPT,
+        Language.PHP,
+        Language.CSHARP,
+        Language.CLOJURE,
+    ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
             project_name = f"test_repo_{language}"
@@ -102,6 +111,7 @@ class TestSerenaAgent:
                 clj.CORE_PATH,
                 marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
             ),
+            pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
         ],
         indirect=["serena_agent"],
     )
@@ -147,6 +157,7 @@ class TestSerenaAgent:
                 clj.UTILS_PATH,
                 marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
             ),
+            pytest.param(Language.CSHARP, "Calculator", "Program.cs", "Program.cs", marks=pytest.mark.csharp),
         ],
         indirect=["serena_agent"],
     )

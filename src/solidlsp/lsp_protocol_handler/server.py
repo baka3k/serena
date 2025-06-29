@@ -50,7 +50,7 @@ class ProcessLaunchInfo:
     """
 
     # The command to launch the process
-    cmd: str
+    cmd: str | list[str]
 
     # The environment variables to set for the process
     env: dict[str, str] = dataclasses.field(default_factory=dict)

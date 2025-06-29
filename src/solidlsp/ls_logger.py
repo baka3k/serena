@@ -28,7 +28,7 @@ class LanguageServerLogger:
     """
 
     def __init__(self, json_format: bool = False, log_level: int = logging.INFO) -> None:
-        self.logger = logging.getLogger("multilspy")
+        self.logger = logging.getLogger("solidlsp")
         self.logger.setLevel(log_level)
         self.json_format = json_format
 

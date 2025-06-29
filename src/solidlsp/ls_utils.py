@@ -131,7 +131,8 @@ class PathUtils:
             from urlparse import urlparse
         parsed = urlparse(uri)
         host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
-        return os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
+        path = os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
+        return path
 
     @staticmethod
     def path_to_uri(path: str) -> str:
@@ -152,7 +153,8 @@ class PathUtils:
         returns `None` otherwise.
         """
         if PurePath(path).drive == PurePath(base_path).drive:
-            return str(PurePath(os.path.relpath(path, base_path)))
+            rel_path = str(PurePath(os.path.relpath(path, base_path)))
+            return rel_path
         return None
 
 

@@ -17,6 +17,7 @@ Status of the `main` branch. Changes prior to the next official version change w
    * allows the language server to be initialized in the background, making the MCP server respond to requests
      immediately upon startup,
    * ensures that all tool executions are fully synchronized (executed linearly).
+* Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
 
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows

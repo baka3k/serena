@@ -6,6 +6,7 @@ import os
 import pathlib
 import pickle
 import re
+import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -135,9 +136,14 @@ class SolidLanguageServer(ABC):
             ls = RustAnalyzer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CSHARP:
-            from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
+            # You can also switch to OmniSharp if you prefer that
+            # But OmniSharp seems to crash and has some issues with newer C# versions
+            # from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
+            # ls = OmniSharp(config, logger, repository_root_path)
 
-            ls = OmniSharp(config, logger, repository_root_path)
+            from solidlsp.language_servers.csharp_language_server.csharp_language_server import CSharpLanguageServer
+
+            ls = CSharpLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.TYPESCRIPT:
             from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
@@ -343,14 +349,45 @@ class SolidLanguageServer(ABC):
         # Stage 1: Graceful Termination Request
         # Send LSP shutdown and close stdin to signal no more input.
         try:
-            self.server.shutdown()
+            self.logger.log("Sending LSP shutdown request...", logging.DEBUG)
+            # Use a thread to timeout the LSP shutdown call since it can hang
+            shutdown_thread = threading.Thread(target=self.server.shutdown)
+            shutdown_thread.daemon = True
+            shutdown_thread.start()
+            shutdown_thread.join(timeout=2.0)  # 2 second timeout for LSP shutdown
+
+            if shutdown_thread.is_alive():
+                self.logger.log("LSP shutdown request timed out, proceeding to terminate...", logging.DEBUG)
+            else:
+                self.logger.log("LSP shutdown request completed.", logging.DEBUG)
+
             if process.stdin and not process.stdin.is_closing():
                 process.stdin.close()
-        except Exception:
-            pass  # Ignore errors here, we are proceeding to terminate anyway.
+            self.logger.log("Stage 1 shutdown complete.", logging.DEBUG)
+        except Exception as e:
+            self.logger.log(f"Exception during graceful shutdown: {e}", logging.DEBUG)
+            # Ignore errors here, we are proceeding to terminate anyway.
 
-        # Stage 2: Terminate and Concurrently Drain stdout/stderr
+        # Stage 2: Terminate and Wait for Process to Exit
+        self.logger.log(f"Terminating process {process.pid}, current status: {process.poll()}", logging.DEBUG)
         process.terminate()
+
+        # Stage 3: Wait for process termination with timeout
+        try:
+            self.logger.log(f"Waiting for process {process.pid} to terminate...", logging.DEBUG)
+            exit_code = process.wait(timeout=timeout)
+            self.logger.log(f"Language server process terminated successfully with exit code {exit_code}.", logging.INFO)
+        except subprocess.TimeoutExpired:
+            # If termination failed, forcefully kill the process
+            self.logger.log(f"Process {process.pid} termination timed out, killing process forcefully...", logging.WARNING)
+            process.kill()
+            try:
+                exit_code = process.wait(timeout=2.0)
+                self.logger.log(f"Language server process killed successfully with exit code {exit_code}.", logging.INFO)
+            except subprocess.TimeoutExpired:
+                self.logger.log(f"Process {process.pid} could not be killed within timeout.", logging.ERROR)
+        except Exception as e:
+            self.logger.log(f"Error during process shutdown: {e}", logging.ERROR)
 
     @contextmanager
     def start_server(self) -> Iterator["SolidLanguageServer"]:

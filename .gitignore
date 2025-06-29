@@ -218,3 +218,6 @@ tmp/
 
 .serena/
 .vscode/
+
+# Claude settings
+.claude/settings.local.json
