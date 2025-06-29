@@ -2,7 +2,6 @@
 Provides Clojure specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Clojure.
 """
 
-import json
 import logging
 import os
 import pathlib
@@ -44,6 +43,34 @@ class ClojureLSP(SolidLanguageServer):
     Provides a clojure-lsp specific instantiation of the LanguageServer class. Contains various configurations and settings specific to clojure.
     """
 
+    clojure_lsp_releases = "https://github.com/clojure-lsp/clojure-lsp/releases/latest/download"
+    runtime_dependencies = [
+        {
+            "url": f"{clojure_lsp_releases}/clojure-lsp-native-macos-aarch64.zip",
+            "platformId": "osx-arm64",
+            "archiveType": "zip",
+            "binaryName": "clojure-lsp",
+        },
+        {
+            "url": f"{clojure_lsp_releases}/clojure-lsp-native-linux-aarch64.zip",
+            "platformId": "linux-arm64",
+            "archiveType": "zip",
+            "binaryName": "clojure-lsp",
+        },
+        {
+            "url": f"{clojure_lsp_releases}/clojure-lsp-native-linux-amd64.zip",
+            "platformId": "linux-x64",
+            "archiveType": "zip",
+            "binaryName": "clojure-lsp",
+        },
+        {
+            "url": f"{clojure_lsp_releases}/clojure-lsp-native-windows-amd64.zip",
+            "platformId": "win-x64",
+            "archiveType": "zip",
+            "binaryName": "clojure-lsp.exe",
+        },
+    ]
+
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
         """
         Creates a ClojureLSP instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
@@ -66,12 +93,7 @@ class ClojureLSP(SolidLanguageServer):
         verify_clojure_cli()
         platform_id = PlatformUtils.get_platform_id()
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json"), encoding="utf-8") as f:
-            d = json.load(f)
-            del d["_description"]
-
-        runtime_dependencies = d["runtimeDependencies"]
-        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
+        runtime_dependencies = [dependency for dependency in self.runtime_dependencies if dependency["platformId"] == platform_id.value]
         assert len(runtime_dependencies) == 1
         dependency = runtime_dependencies[0]
 
@@ -79,6 +101,7 @@ class ClojureLSP(SolidLanguageServer):
         clojurelsp_executable_path = os.path.join(clojurelsp_ls_dir, dependency["binaryName"])
         if not os.path.exists(clojurelsp_ls_dir):
             os.makedirs(clojurelsp_ls_dir)
+            self.logger.log(f"Downloading and extracting clojure-lsp from {dependency['url']} to {clojurelsp_ls_dir}", logging.INFO)
             FileUtils.download_and_extract_archive(logger, dependency["url"], clojurelsp_ls_dir, dependency["archiveType"])
         assert os.path.exists(clojurelsp_executable_path)
         os.chmod(clojurelsp_executable_path, stat.S_IEXEC)
