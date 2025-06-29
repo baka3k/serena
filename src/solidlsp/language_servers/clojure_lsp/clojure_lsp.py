@@ -99,9 +99,9 @@ class ClojureLSP(SolidLanguageServer):
 
         clojurelsp_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clojure-lsp")
         clojurelsp_executable_path = os.path.join(clojurelsp_ls_dir, dependency["binaryName"])
-        if not os.path.exists(clojurelsp_ls_dir):
-            os.makedirs(clojurelsp_ls_dir)
-            self.logger.log(f"Downloading and extracting clojure-lsp from {dependency['url']} to {clojurelsp_ls_dir}", logging.INFO)
+        if not os.path.exists(clojurelsp_executable_path):
+            os.makedirs(clojurelsp_ls_dir, exist_ok=True)
+            logger.log(f"Downloading and extracting clojure-lsp from {dependency['url']} to {clojurelsp_ls_dir}", logging.INFO)
             FileUtils.download_and_extract_archive(logger, dependency["url"], clojurelsp_ls_dir, dependency["archiveType"])
         assert os.path.exists(clojurelsp_executable_path)
         os.chmod(clojurelsp_executable_path, stat.S_IEXEC)
