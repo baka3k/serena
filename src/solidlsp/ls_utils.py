@@ -132,11 +132,6 @@ class PathUtils:
         parsed = urlparse(uri)
         host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
         path = os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
-
-        # Normalize backslashes to forward slashes for JSON compatibility
-        # This prevents JSON parsing errors when paths contain unescaped backslashes
-        path = path.replace("\\", "/")
-
         return path
 
     @staticmethod
@@ -159,8 +154,6 @@ class PathUtils:
         """
         if PurePath(path).drive == PurePath(base_path).drive:
             rel_path = str(PurePath(os.path.relpath(path, base_path)))
-            # Normalize backslashes to forward slashes for JSON compatibility
-            rel_path = rel_path.replace("\\", "/")
             return rel_path
         return None
 
