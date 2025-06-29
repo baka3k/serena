@@ -53,6 +53,7 @@ dev = [
   "mypy>=1.4.1",
   "poethepoet>=0.20.0",
   "pytest>=8.0.2",
+  "pytest-xdist>=3.5.0",
   "ruff>=0.0.285",
   "toml-sort>=0.24.2",
   "types-pyyaml>=6.0.12.20241230",
