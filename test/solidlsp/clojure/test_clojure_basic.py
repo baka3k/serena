@@ -1,57 +1,49 @@
-from pathlib import Path
-
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import UnifiedSymbolInformation
 
-from . import CLOJURE_CLI_FAIL
+from . import CLI_FAIL, CORE_PATH, UTILS_PATH
 
 
 @pytest.mark.clojure
-@pytest.mark.skipif(CLOJURE_CLI_FAIL, reason=f"Clojure CLI not available: {CLOJURE_CLI_FAIL}")
+@pytest.mark.skipif(CLI_FAIL, reason=f"Clojure CLI not available: {CLI_FAIL}")
 class TestLanguageServerBasics:
-    test_app = Path("src") / "test_app"
-    core_path = str(test_app / "core.clj")
-    utils_path = str(test_app / "utils.clj")
-
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_basic_definition(self, language_server: SolidLanguageServer):
         """
         Test finding definition of 'greet' function call in core.clj
         """
-        result = language_server.request_definition(self.core_path, 20, 12)  # Position of 'greet' in (greet "World")
+        result = language_server.request_definition(CORE_PATH, 20, 12)  # Position of 'greet' in (greet "World")
 
         assert isinstance(result, list)
         assert len(result) >= 1
 
         definition = result[0]
-        assert definition["relativePath"] == self.core_path
-        assert definition["range"]["start"]["line"] == 2, \
-            "Should find the definition of greet function at line 2"
-
+        assert definition["relativePath"] == CORE_PATH
+        assert definition["range"]["start"]["line"] == 2, "Should find the definition of greet function at line 2"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_cross_file_references(self, language_server: SolidLanguageServer):
         """
         Test finding references to 'multiply' function from core.clj
         """
-        result = language_server.request_references(self.core_path, 12, 6)
+        result = language_server.request_references(CORE_PATH, 12, 6)
 
         assert isinstance(result, list) and len(result) >= 2, "Should find definition + usage in utils.clj"
 
         usage_found = any(
-            item["relativePath"] == self.utils_path and item["range"]["start"]["line"] == 6  # multiply usage in calculate-area
+            item["relativePath"] == UTILS_PATH and item["range"]["start"]["line"] == 6  # multiply usage in calculate-area
             for item in result
         )
         assert usage_found, "Should find multiply usage in utils.clj"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_completions(self, language_server: SolidLanguageServer):
-        with language_server.open_file(self.utils_path):
+        with language_server.open_file(UTILS_PATH):
             # After "core/" in calculate-area
-            result = language_server.request_completions(self.utils_path, 6, 8)
+            result = language_server.request_completions(UTILS_PATH, 6, 8)
 
             assert isinstance(result, list) and len(result) > 0
 
@@ -60,10 +52,9 @@ class TestLanguageServerBasics:
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer):
-        symbols, _ = language_server.request_document_symbols(self.core_path)
+        symbols, _ = language_server.request_document_symbols(CORE_PATH)
 
-        assert isinstance(symbols, list) and len(symbols) >= 4, \
-              "greet, add, multiply, -main functions"
+        assert isinstance(symbols, list) and len(symbols) >= 4, "greet, add, multiply, -main functions"
 
         # Check that we find the expected function symbols
         symbol_names = [symbol["name"] for symbol in symbols]
@@ -75,7 +66,7 @@ class TestLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_hover(self, language_server: SolidLanguageServer):
         """Test hover on greet function"""
-        result = language_server.request_hover(self.core_path, 2, 7)
+        result = language_server.request_hover(CORE_PATH, 2, 7)
 
         assert result is not None, "Hover should return information for greet function"
         assert "contents" in result
@@ -93,20 +84,17 @@ class TestLanguageServerBasics:
         # Search for functions containing "add"
         result = language_server.request_workspace_symbol("add")
 
-        
-        assert isinstance(result, list) and len(result) > 0,\
-            "Should find at least one symbol containing 'add'"
-        
+        assert isinstance(result, list) and len(result) > 0, "Should find at least one symbol containing 'add'"
+
         # Should find the 'add' function
         symbol_names = [symbol["name"] for symbol in result]
-        assert any("add" in name.lower() for name in symbol_names),\
-            f"Should find 'add' function in symbols: {symbol_names}"
-    
+        assert any("add" in name.lower() for name in symbol_names), f"Should find 'add' function in symbols: {symbol_names}"
+
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_retrieve_content_around_line(self, language_server: SolidLanguageServer):
         """Test retrieving content around specific lines"""
         # Test retrieving content around the greet function definition (line 2)
-        result = language_server.retrieve_content_around_line(self.core_path, 2, 2)
+        result = language_server.retrieve_content_around_line(CORE_PATH, 2, 2)
 
         assert result is not None, "Should retrieve content around line 2"
         content_str = result.to_display_string()
@@ -114,7 +102,7 @@ class TestLanguageServerBasics:
         assert "defn" in content_str, "Should contain defn keyword"
 
         # Test retrieving content around multiply function (around line 13)
-        result = language_server.retrieve_content_around_line(self.core_path, 13, 1)
+        result = language_server.retrieve_content_around_line(CORE_PATH, 13, 1)
 
         assert result is not None, "Should retrieve content around line 13"
         content_str = result.to_display_string()
@@ -124,14 +112,13 @@ class TestLanguageServerBasics:
     def test_namespace_functions(self, language_server: SolidLanguageServer):
         """Test definition lookup for core/greet usage in utils.clj"""
         # Position of 'greet' in core/greet call
-        result = language_server.request_definition(self.utils_path, 11, 25)
+        result = language_server.request_definition(UTILS_PATH, 11, 25)
 
         assert isinstance(result, list)
         assert len(result) >= 1
 
         definition = result[0]
-        assert definition["relativePath"] == self.core_path, \
-            "Should find the definition of greet in core.clj"
+        assert definition["relativePath"] == CORE_PATH, "Should find the definition of greet in core.clj"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_search_files_for_pattern(self, language_server: SolidLanguageServer):
@@ -152,7 +139,7 @@ class TestLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_request_references_with_content(self, language_server: SolidLanguageServer):
         """Test references to multiply function with content"""
-        result = language_server.request_references_with_content(self.core_path, 12, 6, 3)
+        result = language_server.request_references_with_content(CORE_PATH, 12, 6, 3)
 
         assert result is not None, "Should find references with content"
         assert isinstance(result, list)
@@ -218,9 +205,8 @@ class TestLanguageServerBasics:
         """Test finding symbols that reference a given symbol
         Finds references to the 'multiply' function.
         """
-        result = language_server.request_referencing_symbols(self.core_path, 12, 6)
-        assert isinstance(result, list) and len(result) > 0, \
-            "Should find at least one referencing symbol"
+        result = language_server.request_referencing_symbols(CORE_PATH, 12, 6)
+        assert isinstance(result, list) and len(result) > 0, "Should find at least one referencing symbol"
         found_relevant_references = False
         for ref in result:
             if hasattr(ref, "symbol") and "calculate-area" in ref.symbol["name"]:
