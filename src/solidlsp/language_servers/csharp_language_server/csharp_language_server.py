@@ -4,7 +4,6 @@ CSharp Language Server using Microsoft.CodeAnalysis.LanguageServer (Official Ros
 
 import logging
 import os
-import pathlib
 import platform
 import shutil
 import stat
@@ -16,7 +15,7 @@ import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import cast
 
 from overrides import override
 
@@ -24,6 +23,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import LanguageServerException
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -37,10 +37,10 @@ class RuntimeDependency:
     platform_id: str
     archive_type: str
     binary_name: str
-    package_name: Optional[str] = None
-    package_version: Optional[str] = None
-    extract_path: Optional[str] = None
-    url: Optional[str] = None
+    package_name: str | None = None
+    package_version: str | None = None
+    extract_path: str | None = None
+    url: str | None = None
 
 
 # Runtime dependencies configuration
@@ -146,92 +146,6 @@ NUGET_SOURCES = [
     "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json",
     "https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-public/nuget/v3/index.json",
 ]
-
-# Initialize params template for the Microsoft.CodeAnalysis.LanguageServer
-INITIALIZE_PARAMS_TEMPLATE = {
-    "processId": "os.getpid()",
-    "rootPath": "$rootPath",
-    "rootUri": "$rootUri",
-    "capabilities": {
-        "window": {
-            "workDoneProgress": True,
-            "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
-            "showDocument": {"support": True},
-        },
-        "workspace": {
-            "applyEdit": True,
-            "workspaceEdit": {"documentChanges": True},
-            "didChangeConfiguration": {"dynamicRegistration": True},
-            "didChangeWatchedFiles": {"dynamicRegistration": True},
-            "symbol": {
-                "dynamicRegistration": True,
-                "symbolKind": {"valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]},
-            },
-            "executeCommand": {"dynamicRegistration": True},
-            "configuration": True,
-            "workspaceFolders": True,
-            "workDoneProgress": True,
-        },
-        "textDocument": {
-            "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
-            "completion": {
-                "dynamicRegistration": True,
-                "contextSupport": True,
-                "completionItem": {
-                    "snippetSupport": True,
-                    "commitCharactersSupport": True,
-                    "documentationFormat": ["markdown", "plaintext"],
-                    "deprecatedSupport": True,
-                    "preselectSupport": True,
-                },
-                "completionItemKind": {
-                    "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-                },
-            },
-            "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
-            "signatureHelp": {
-                "dynamicRegistration": True,
-                "signatureInformation": {
-                    "documentationFormat": ["markdown", "plaintext"],
-                    "parameterInformation": {"labelOffsetSupport": True},
-                },
-            },
-            "definition": {"dynamicRegistration": True},
-            "references": {"dynamicRegistration": True},
-            "documentHighlight": {"dynamicRegistration": True},
-            "documentSymbol": {
-                "dynamicRegistration": True,
-                "symbolKind": {"valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]},
-                "hierarchicalDocumentSymbolSupport": True,
-            },
-            "codeAction": {
-                "dynamicRegistration": True,
-                "codeActionLiteralSupport": {
-                    "codeActionKind": {
-                        "valueSet": [
-                            "",
-                            "quickfix",
-                            "refactor",
-                            "refactor.extract",
-                            "refactor.inline",
-                            "refactor.rewrite",
-                            "source",
-                            "source.organizeImports",
-                        ]
-                    }
-                },
-            },
-            "codeLens": {"dynamicRegistration": True},
-            "formatting": {"dynamicRegistration": True},
-            "rangeFormatting": {"dynamicRegistration": True},
-            "onTypeFormatting": {"dynamicRegistration": True},
-            "rename": {"dynamicRegistration": True},
-            "publishDiagnostics": {"relatedInformation": True},
-            "foldingRange": {"dynamicRegistration": True, "rangeLimit": 5000, "lineFoldingOnly": True},
-        },
-    },
-    "workspaceFolders": [{"uri": "$rootUri", "name": "$rootName"}],
-}
 
 
 def breadth_first_file_scan(root_dir):
@@ -593,44 +507,105 @@ class CSharpLanguageServer(SolidLanguageServer):
         except Exception as e:
             raise LanguageServerException(f"Failed to download .NET 9 runtime from {url}: {e}") from e
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self) -> InitializeParams:
         """
         Returns the initialize params for the Microsoft.CodeAnalysis.LanguageServer.
         """
-        import json
-
-        # Convert the template string to actual values
-        initialize_params_str = json.dumps(INITIALIZE_PARAMS_TEMPLATE)
-
-        # Replace template variables
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        root_name = os.path.basename(repository_absolute_path)
-
-        initialize_params_str = initialize_params_str.replace("$rootPath", repository_absolute_path)
-        initialize_params_str = initialize_params_str.replace("$rootUri", root_uri)
-        initialize_params_str = initialize_params_str.replace("$rootName", root_name)
-        initialize_params_str = initialize_params_str.replace('"os.getpid()"', str(os.getpid()))
-
-        # Parse back to dictionary
-        initialize_params = json.loads(initialize_params_str)
-
-        return initialize_params
+        root_uri = PathUtils.path_to_uri(self.repository_root_path)
+        root_name = os.path.basename(self.repository_root_path)
+        return cast(
+            InitializeParams,
+            {
+                "worspaceFolders": [{"uri": root_uri, "name": root_name}],
+                "processId": os.getpid(),
+                "rootPath": self.repository_root_path,
+                "rootUri": root_uri,
+                "capabilities": {
+                    "window": {
+                        "workDoneProgress": True,
+                        "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                        "showDocument": {"support": True},
+                    },
+                    "workspace": {
+                        "applyEdit": True,
+                        "workspaceEdit": {"documentChanges": True},
+                        "didChangeConfiguration": {"dynamicRegistration": True},
+                        "didChangeWatchedFiles": {"dynamicRegistration": True},
+                        "symbol": {
+                            "dynamicRegistration": True,
+                            "symbolKind": {
+                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                            },
+                        },
+                        "executeCommand": {"dynamicRegistration": True},
+                        "configuration": True,
+                        "workspaceFolders": True,
+                        "workDoneProgress": True,
+                    },
+                    "textDocument": {
+                        "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                        "completion": {
+                            "dynamicRegistration": True,
+                            "contextSupport": True,
+                            "completionItem": {
+                                "snippetSupport": True,
+                                "commitCharactersSupport": True,
+                                "documentationFormat": ["markdown", "plaintext"],
+                                "deprecatedSupport": True,
+                                "preselectSupport": True,
+                            },
+                            "completionItemKind": {
+                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+                            },
+                        },
+                        "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                        "signatureHelp": {
+                            "dynamicRegistration": True,
+                            "signatureInformation": {
+                                "documentationFormat": ["markdown", "plaintext"],
+                                "parameterInformation": {"labelOffsetSupport": True},
+                            },
+                        },
+                        "definition": {"dynamicRegistration": True},
+                        "references": {"dynamicRegistration": True},
+                        "documentHighlight": {"dynamicRegistration": True},
+                        "documentSymbol": {
+                            "dynamicRegistration": True,
+                            "symbolKind": {
+                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
+                            },
+                            "hierarchicalDocumentSymbolSupport": True,
+                        },
+                        "codeAction": {
+                            "dynamicRegistration": True,
+                            "codeActionLiteralSupport": {
+                                "codeActionKind": {
+                                    "valueSet": [
+                                        "",
+                                        "quickfix",
+                                        "refactor",
+                                        "refactor.extract",
+                                        "refactor.inline",
+                                        "refactor.rewrite",
+                                        "source",
+                                        "source.organizeImports",
+                                    ]
+                                }
+                            },
+                        },
+                        "codeLens": {"dynamicRegistration": True},
+                        "formatting": {"dynamicRegistration": True},
+                        "rangeFormatting": {"dynamicRegistration": True},
+                        "onTypeFormatting": {"dynamicRegistration": True},
+                        "rename": {"dynamicRegistration": True},
+                        "publishDiagnostics": {"relatedInformation": True},
+                        "foldingRange": {"dynamicRegistration": True, "rangeLimit": 5000, "lineFoldingOnly": True},
+                    },
+                },
+            },
+        )
 
     def _start_server(self):
-        """
-        Starts the Microsoft.CodeAnalysis.LanguageServer.
-
-        Usage:
-        ```
-        async with lsp.start_server():
-            # LanguageServer has been initialized
-            await lsp.request_definition(...)
-            await lsp.request_references(...)
-            # Shutdown the LanguageServer on exit from scope
-        # LanguageServer has been shutdown cleanly
-        ```
-        """
-
         def do_nothing(params):
             return
 
@@ -760,26 +735,29 @@ class CSharpLanguageServer(SolidLanguageServer):
             raise LanguageServerException(f"Failed to start C# language server: {e}")
 
         # Send initialization
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._get_initialize_params()
 
         self.logger.log("Sending initialize request to language server", logging.INFO)
         try:
             init_response = self.server.send.initialize(initialize_params)
             self.logger.log(f"Received initialize response: {init_response}", logging.DEBUG)
         except Exception as e:
-            self.logger.log(f"Language server initialization failed: {e}", logging.ERROR)
-            self.logger.log("This might be due to:", logging.ERROR)
-            self.logger.log("1. .NET 9 runtime not properly installed", logging.ERROR)
-            self.logger.log("2. Microsoft.CodeAnalysis.LanguageServer not found", logging.ERROR)
-            self.logger.log("3. Project too large or complex for default timeout", logging.ERROR)
-            raise
+            raise LanguageServerException(f"Failed to initialize C# language server for {self.repository_root_path}: {e}") from e
 
         # Verify required capabilities
         capabilities = init_response.get("capabilities", {})
-        assert "textDocumentSync" in capabilities
-        assert "definitionProvider" in capabilities
-        assert "referencesProvider" in capabilities
-        assert "documentSymbolProvider" in capabilities
+        required_capabilities = [
+            "textDocumentSync",
+            "definitionProvider",
+            "referencesProvider",
+            "documentSymbolProvider",
+        ]
+        missing = [cap for cap in required_capabilities if cap not in capabilities]
+        if missing:
+            raise RuntimeError(
+                f"Language server is missing required capabilities: {', '.join(missing)}. "
+                "Initialization failed. Please ensure the correct version of Microsoft.CodeAnalysis.LanguageServer is installed and the .NET runtime is working."
+            )
 
         # Complete initialization
         self.server.notify.initialized({})
