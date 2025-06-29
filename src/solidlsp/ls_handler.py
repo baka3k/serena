@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import platform
 import subprocess
 import threading
 import time
@@ -149,7 +148,6 @@ class SolidLanguageServerHandler:
         child_proc_env.update(self.process_launch_info.env)
 
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
-        is_windows = platform.system() == "Windows"
         self.process = subprocess.Popen(
             self.process_launch_info.cmd,
             stdout=subprocess.PIPE,
@@ -158,7 +156,7 @@ class SolidLanguageServerHandler:
             env=child_proc_env,
             cwd=self.process_launch_info.cwd,
             start_new_session=self.start_independent_lsp_process,
-            shell=not is_windows,
+            shell=True,
         )
 
         # Check if process terminated immediately

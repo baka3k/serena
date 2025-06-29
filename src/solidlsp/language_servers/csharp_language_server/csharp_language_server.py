@@ -516,7 +516,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         return cast(
             InitializeParams,
             {
-                "workspaceFolders": [{"uri": root_uri, "name": root_name}],
+                "worspaceFolders": [{"uri": root_uri, "name": root_name}],
                 "processId": os.getpid(),
                 "rootPath": self.repository_root_path,
                 "rootUri": root_uri,

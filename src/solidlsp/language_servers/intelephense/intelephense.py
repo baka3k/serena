@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import pathlib
-import platform
 import shutil
 import subprocess
 from time import sleep
@@ -71,8 +70,8 @@ class Intelephense(SolidLanguageServer):
                 # Windows doesn't support the 'user' parameter and doesn't have pwd module
                 if PlatformUtils.get_platform_id().value.startswith("win"):
                     subprocess.run(
-                        dependency["command"].split(" "),
-                        shell=False,
+                        dependency["command"],
+                        shell=True,
                         check=True,
                         cwd=intelephense_ls_dir,
                         stdout=subprocess.DEVNULL,
