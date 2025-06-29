@@ -177,6 +177,11 @@ class SolidLanguageServer(ABC):
 
             ls = Intelephense(config, logger, repository_root_path)
 
+        elif config.code_language == Language.CLOJURE:
+            from solidlsp.language_servers.clojure_lsp.clojure_lsp import ClojureLSP
+
+            ls = ClojureLSP(config, logger, repository_root_path)
+
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise LanguageServerException(f"Language {config.code_language} is not supported")
@@ -553,7 +558,7 @@ class SolidLanguageServer(ABC):
         """
         if not self.server_started:
             self.logger.log(
-                "find_function_definition called before Language Server started",
+                "request_definition called before Language Server started",
                 logging.ERROR,
             )
             raise LanguageServerException("Language Server not started")
