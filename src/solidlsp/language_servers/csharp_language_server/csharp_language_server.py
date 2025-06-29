@@ -233,7 +233,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Join command parts with spaces
         # ProcessLaunchInfo expects a simple string command, not shell-quoted
-        cmd = " ".join(cmd_parts)
+        cmd = cmd_parts
 
         logger.log(f"Language server command: {cmd}", logging.DEBUG)
 
