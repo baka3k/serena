@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
+import test.solidlsp.clojure as clj
 from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfigBase
 from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
 from solidlsp.ls_config import Language
@@ -31,7 +32,7 @@ def serena_config():
     """Create an in-memory configuration for tests with test repositories pre-registered."""
     # Create test projects for all supported languages
     test_projects = []
-    for language in [Language.PYTHON, Language.GO, Language.JAVA, Language.RUST, Language.TYPESCRIPT, Language.PHP]:
+    for language in [Language.PYTHON, Language.GO, Language.JAVA, Language.RUST, Language.TYPESCRIPT, Language.PHP, Language.CLOJURE]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
             project_name = f"test_repo_{language}"
@@ -94,6 +95,13 @@ class TestSerenaAgent:
             pytest.param(Language.RUST, "add", "Function", "lib.rs", marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
+            pytest.param(
+                Language.CLOJURE,
+                "greet",
+                "Function",
+                clj.CORE_PATH,
+                marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
+            ),
         ],
         indirect=["serena_agent"],
     )
@@ -132,6 +140,13 @@ class TestSerenaAgent:
             pytest.param(Language.RUST, "add", os.path.join("src", "lib.rs"), os.path.join("src", "main.rs"), marks=pytest.mark.rust),
             pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", "use_helper.ts", marks=pytest.mark.typescript),
             pytest.param(Language.PHP, "helperFunction", "helper.php", "index.php", marks=pytest.mark.php),
+            pytest.param(
+                Language.CLOJURE,
+                "multiply",
+                clj.CORE_PATH,
+                clj.UTILS_PATH,
+                marks=[pytest.mark.clojure, pytest.mark.skipif(clj.CLI_FAIL, reason=f"Clojure CLI not available: {clj.CLI_FAIL}")],
+            ),
         ],
         indirect=["serena_agent"],
     )
