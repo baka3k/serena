@@ -28,6 +28,7 @@ Fixes:
 * Fix `ReplaceSymbolBodyTool` changing whitespace before/after the symbol
 * Fix repository indexing not following links and catch exceptions during indexing, allowing indexing
   to continue even if unexpected errors occur for individual files.
+* Fix `ImportError` in Ruby language server.
 
 # 2025-06-20
 
