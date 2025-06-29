@@ -246,6 +246,7 @@ markers = [
   "typescript: language server running for TypeScript",
   "php: language server running for PHP",
   "csharp: language server running for C#",
+  "elixir: language server running for Elixir",
   "snapshot: snapshot tests for symbolic editing operations",
   "isolated_process: test runs with process isolated agent",
 ]

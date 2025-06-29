@@ -221,3 +221,6 @@ tmp/
 
 # Claude settings
 .claude/settings.local.json
+
+# Elixir
+/test/resources/repos/elixir/test_repo/deps

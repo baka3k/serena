@@ -182,6 +182,11 @@ class SolidLanguageServer(ABC):
 
             ls = ClojureLSP(config, logger, repository_root_path)
 
+        elif config.code_language == Language.ELIXIR:
+            from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
+
+            ls = ElixirTools(config, logger, repository_root_path)
+
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
             raise LanguageServerException(f"Language {config.code_language} is not supported")

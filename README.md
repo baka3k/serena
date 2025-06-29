@@ -74,6 +74,7 @@ With Serena, we provide
      * C/C++
      * C# (requires dotnet to be installed. We switched the underlying language server recently, please report any issues you encounter)
      * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
+     * Elixir (Requires NextLS and Elixir install)
  * indirect support (may require some code changes/manual installation) for:
      * Ruby (untested)
      * Kotlin (untested)
