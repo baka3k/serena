@@ -5,7 +5,6 @@ import logging
 import os
 import pathlib
 import pickle
-import re
 import subprocess
 import threading
 from abc import ABC, abstractmethod
@@ -20,6 +19,7 @@ import pathspec
 import tqdm
 
 from serena.text_utils import MatchedConsecutiveLines, search_files
+from serena.util.file_system import match_path
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import LanguageServerException
@@ -697,11 +697,13 @@ class SolidLanguageServer(ABC):
             for ref in references
         ]
 
-    def retrieve_full_file_content(self, relative_file_path: str) -> str:
+    def retrieve_full_file_content(self, file_path: str) -> str:
         """
         Retrieve the full content of the given file.
         """
-        with self.open_file(relative_file_path) as file_data:
+        if os.path.isabs(file_path):
+            file_path = os.path.relpath(file_path, self.repository_root_path)
+        with self.open_file(file_path) as file_data:
             return file_data.contents
 
     def retrieve_content_around_line(
@@ -1188,8 +1190,11 @@ class SolidLanguageServer(ABC):
         symbol_body = symbol_body[symbol_start_column:]
         return symbol_body
 
-    def request_parsed_files(self) -> list[str]:
-        """Retrieves relative paths of all files analyzed by the Language Server."""
+    def request_parsed_files(self, relative_path: str = "") -> list[str]:
+        """Retrieves relative paths of all files analyzed by the Language Server.
+
+        :param relative_path: will only retrieve files that are subpaths of this.
+        """
         if not self.server_started:
             self.logger.log(
                 "request_parsed_files called before Language Server started",
@@ -1197,23 +1202,30 @@ class SolidLanguageServer(ABC):
             )
             raise LanguageServerException("Language Server not started")
         rel_file_paths = []
-        for root, dirs, files in os.walk(self.repository_root_path, followlinks=True):
-            dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
-            for file in files:
-                rel_file_path = os.path.relpath(os.path.join(root, file), start=self.repository_root_path)
-                try:
-                    if not self.is_ignored_path(rel_file_path):
-                        rel_file_paths.append(rel_file_path)
-                except FileNotFoundError:
-                    self.logger.log(
-                        f"File {rel_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
-                        logging.WARNING,
-                    )
-        return rel_file_paths
+        start_path = os.path.join(self.repository_root_path, relative_path)
+        if not os.path.exists(start_path):
+            raise FileNotFoundError(f"Relative path {start_path} not found.")
+        if os.path.isfile(start_path):
+            return [relative_path]
+        else:
+            for root, dirs, files in os.walk(start_path, followlinks=True):
+                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+                for file in files:
+                    rel_file_path = os.path.relpath(os.path.join(root, file), start=self.repository_root_path)
+                    try:
+                        if not self.is_ignored_path(rel_file_path):
+                            rel_file_paths.append(rel_file_path)
+                    except FileNotFoundError:
+                        self.logger.log(
+                            f"File {rel_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
+                            logging.WARNING,
+                        )
+            return rel_file_paths
 
     def search_files_for_pattern(
         self,
-        pattern: re.Pattern | str,
+        pattern: str,
+        relative_path: str = "",
         context_lines_before: int = 0,
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
@@ -1223,6 +1235,7 @@ class SolidLanguageServer(ABC):
         Search for a pattern across all files analyzed by the Language Server.
 
         :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
+        :param relative_path:
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: Glob pattern to filter which files to include in the search
@@ -1232,11 +1245,12 @@ class SolidLanguageServer(ABC):
         if isinstance(pattern, str):
             pattern = re.compile(pattern)
 
-        relative_file_paths = self.request_parsed_files()
+        relative_file_paths = self.request_parsed_files(relative_path=relative_path)
         return search_files(
             relative_file_paths,
             pattern,
             file_reader=self.retrieve_full_file_content,
+            root_path=self.repository_root_path,
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,

@@ -2178,6 +2178,7 @@ class SearchForPatternTool(Tool):
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
+        relative_path: str = "",
         restrict_search_to_code_files: bool = False,
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
@@ -2191,6 +2192,8 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search; if not provided, search globally.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search (takes precedence over paths_include_glob).
+        :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
+            file is passed, only that will be searched. The path must exist, otherwise a FileNotFoundError will be raised.
         :param max_answer_chars: if the output is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
@@ -2203,34 +2206,36 @@ class SearchForPatternTool(Tool):
             which is why it is the default.
         :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
         """
-        # this was previously a kwarg and was true by default
-        # However, the LLM doesn't really know which files are taken into account by the language server
-        # and which onees
+        abs_path = os.path.join(self.get_project_root(), relative_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
+
         if restrict_search_to_code_files:
             matches = self.language_server.search_files_for_pattern(
                 pattern=pattern,
+                relative_path=relative_path,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,
             )
         else:
-            # we walk through all files in the project starting from the root
-            project_root = self.get_project_root()
-            rel_paths_to_search = []
-            for root, dirs, files in os.walk(project_root):
-                # don't explore ignored dirs
-                dirs[:] = [d for d in dirs if not self.agent.path_is_gitignored(os.path.join(root, d))]
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    if not self.agent.path_is_gitignored(file_path):
-                        relative_path = os.path.relpath(file_path, project_root)
-                        rel_paths_to_search.append(relative_path)
+            if os.path.isfile(abs_path):
+                rel_paths_to_search = [relative_path]
+            else:
+                dirs, rel_paths_to_search = scan_directory(
+                    path=abs_path,
+                    recursive=True,
+                    is_ignored_dir=self.agent.path_is_gitignored,
+                    is_ignored_file=self.agent.path_is_gitignored,
+                    relative_to=self.get_project_root(),
+                )
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
             #   but it probably never matters and this version required no further refactoring
             matches = search_files(
                 rel_paths_to_search,
                 pattern,
+                root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,
             )
