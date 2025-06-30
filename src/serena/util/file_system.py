@@ -276,12 +276,19 @@ class GitignoreParser:
         self._load_gitignore_files()
 
 
-def match_path(path: str, path_spec: PathSpec) -> bool:
-    path = os.path.abspath(path)
-    normalized_path = str(path).replace(os.path.sep, "/")
+def match_path(relative_path: str, path_spec: PathSpec) -> bool:
+    normalized_path = str(relative_path).replace(os.path.sep, "/")
+
+    # We can have patterns like /src/..., which would only match corresponding paths from the repo root
+    # Unfortunately, pathspec can't know whether a relative path is relative to the repo root or not,
+    # so it will never match src/...
+    # The fix is to just always assume that the input path is relative to the repo root and to
+    # prefix it with /.
+    if not normalized_path.startswith("/"):
+        normalized_path = "/" + normalized_path
 
     # pathspec can't handle the matching of directories if they don't end with a slash!
     # see https://github.com/cpburnz/python-pathspec/issues/89
-    if os.path.isdir(normalized_path) and not normalized_path.endswith("/"):
+    if os.path.isdir(relative_path) and not normalized_path.endswith("/"):
         normalized_path = normalized_path + "/"
     return path_spec.match_file(normalized_path)

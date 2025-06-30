@@ -1563,6 +1563,7 @@ class FindFileTool(Tool):
             recursive=True,
             is_ignored_dir=self.agent.path_is_gitignored,
             is_ignored_file=is_ignored_file,
+            relative_to=self.get_project_root(),
         )
 
         result = json.dumps({"files": files})

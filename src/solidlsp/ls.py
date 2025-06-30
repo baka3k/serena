@@ -318,20 +318,7 @@ class SolidLanguageServer(ABC):
             if self.is_ignored_dirname(part):
                 return True
 
-        # Use pathspec for gitignore-style pattern matching
-        # Normalize path separators for pathspec (it expects forward slashes)
-        normalized_path = str(rel_path).replace(os.path.sep, "/")
-
-        # pathspec can't handle the matching of directories if they don't end with a slash!
-        # see https://github.com/cpburnz/python-pathspec/issues/89
-        if os.path.isdir(os.path.join(self.repository_root_path, normalized_path)) and not normalized_path.endswith("/"):
-            normalized_path = normalized_path + "/"
-
-        # Use the pathspec matcher to check if the path matches any ignore pattern
-        if self.get_ignore_spec().match_file(normalized_path):
-            return True
-
-        return False
+        return match_path(relative_path, self.get_ignore_spec())
 
     def _shutdown(self, timeout: float = 5.0):
         """
