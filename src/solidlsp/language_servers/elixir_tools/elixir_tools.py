@@ -2,14 +2,17 @@ import json
 import logging
 import os
 import pathlib
+import stat
 import subprocess
 import threading
+from pathlib import PurePath
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
@@ -40,49 +43,82 @@ class ElixirTools(SolidLanguageServer):
             return None
         return None
 
-    @staticmethod
-    def _get_nextls_version():
-        """Get the installed Next LS version or None if not found."""
-        try:
-            result = subprocess.run(["nextls", "--version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            return None
-        return None
-
-
-
-    @classmethod
-    def setup_runtime_dependency(cls):
+    def setupRuntimeDependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Check if required Elixir runtime dependencies are available.
-        Raises RuntimeError with helpful message if dependencies are missing.
+        Setup runtime dependencies for Next LS.
+        Downloads the Next LS binary for the current platform and returns the path to the executable.
         """
-        elixir_version = cls._get_elixir_version()
+        # Check if Elixir is available first
+        elixir_version = self._get_elixir_version()
         if not elixir_version:
             raise RuntimeError(
                 "Elixir is not installed. Please install Elixir from https://elixir-lang.org/install.html and make sure it is added to your PATH."
             )
+        
+        logger.log(f"Found Elixir: {elixir_version}", logging.INFO)
 
-        nextls_version = cls._get_nextls_version()
-        if not nextls_version:
-            raise RuntimeError(
-                "Found an Elixir version but Next LS is not installed.\n"
-                "Please install Next LS from https://github.com/elixir-tools/next-ls#installation\n\n"
-                "After installation, make sure it is added to your PATH."
-            )
+        platformId = PlatformUtils.get_platform_id()
 
-        return True
+        with open(str(PurePath(os.path.dirname(__file__), "runtime_dependencies.json")), encoding="utf-8") as f:
+            runtimeDependencies = json.load(f)
+            del runtimeDependencies["_description"]
+
+        os.makedirs(str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static")), exist_ok=True)
+
+        # Map platform IDs to runtime dependency keys
+        platform_mapping = {
+            "linux-x64": "linux-x64",
+            "osx-x64": "darwin-x64", 
+            "osx-arm64": "darwin-arm64",
+            "darwin-x64": "darwin-x64",
+            "darwin-arm64": "darwin-arm64", 
+            "win-x64": "win-x64"
+        }
+
+        platform_key = platform_mapping.get(platformId.value)
+        if not platform_key:
+            raise RuntimeError(f"Unsupported platform for Next LS: {platformId.value}")
+
+        dependency = runtimeDependencies["next_ls"][platform_key]
+        next_ls_dir = str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"]))
+        os.makedirs(next_ls_dir, exist_ok=True)
+        
+        executable_path = str(PurePath(next_ls_dir, dependency["executable_name"]))
+        binary_path = str(PurePath(next_ls_dir, dependency["binary_name"]))
+
+        if not os.path.exists(executable_path):
+            logger.log(f"Downloading Next LS binary from {dependency['url']}", logging.INFO)
+            FileUtils.download_file(logger, dependency["url"], binary_path)
+            
+            # Make the binary executable on Unix-like systems
+            if not platformId.value.startswith("win"):
+                os.chmod(binary_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+            
+            # Create a symlink or copy with the expected name
+            if binary_path != executable_path:
+                if os.path.exists(executable_path):
+                    os.remove(executable_path)
+                if platformId.value.startswith("win"):
+                    # On Windows, copy the file
+                    import shutil
+                    shutil.copy2(binary_path, executable_path)
+                else:
+                    # On Unix-like systems, create a symlink
+                    os.symlink(os.path.basename(binary_path), executable_path)
+
+        assert os.path.exists(executable_path), f"Next LS executable not found at {executable_path}"
+        
+        logger.log(f"Next LS binary ready at: {executable_path}", logging.INFO)
+        return executable_path
 
     def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
-        self.setup_runtime_dependency()
+        nextls_executable_path = self.setupRuntimeDependencies(logger, config)
 
         super().__init__(
             config,
             logger,
             repository_root_path,
-            ProcessLaunchInfo(cmd="nextls --stdio", cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=f'"{nextls_executable_path}" --stdio', cwd=repository_root_path),
             "elixir",
         )
         self.server_ready = threading.Event()

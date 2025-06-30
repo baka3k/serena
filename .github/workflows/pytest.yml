@@ -40,25 +40,7 @@ jobs:
         with:
           elixir-version: '1.18.4'
           otp-version: '26.1'
-      - name: Install Next LS
-        run: |
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            NEXT_LS_URL="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_linux_amd64"
-            curl -fLo next-ls "$NEXT_LS_URL"
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            NEXT_LS_URL="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_darwin_amd64"
-            curl -fLo next-ls "$NEXT_LS_URL"
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            NEXT_LS_URL="https://github.com/elixir-tools/next-ls/releases/download/v0.23.3/next_ls_windows_amd64.exe"
-            curl -fLo next-ls.exe "$NEXT_LS_URL"
-          fi
-          chmod +x next-ls* || true
-          # Add to PATH for the current step and future steps
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "$PWD" >> $GITHUB_PATH
-          else
-            echo "$PWD" >> $GITHUB_PATH
-          fi
+
       - name: Prepare java
         uses: actions/setup-java@v3
         with:
