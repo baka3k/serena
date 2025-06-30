@@ -65,7 +65,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 @pytest.mark.parametrize("repo_path", [Language.ELIXIR], indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
-    ignored_paths = ["*cripts", "ignored_*"]
+    ignored_paths = ["*cripts", "ignored_*"]  # codespell:ignore cripts
     ls = create_ls(ignored_paths=ignored_paths, repo_path=str(repo_path), language=Language.ELIXIR)
     ls.start()
     

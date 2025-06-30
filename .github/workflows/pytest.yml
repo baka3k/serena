@@ -35,6 +35,11 @@ jobs:
       - name: Install gopls
         shell: bash
         run: go install golang.org/x/tools/gopls@latest
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.18.4'
+          otp-version: '26.1'
       - name: Prepare java
         uses: actions/setup-java@v3
         with:
