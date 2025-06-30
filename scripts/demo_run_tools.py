@@ -28,8 +28,6 @@ if __name__ == "__main__":
     search_pattern_tool = agent.get_tool(SearchForPatternTool)
 
     result = agent.execute_task(
-        lambda: search_pattern_tool.apply(
-            ".*Pyright.*|.*Omnisharp.*", restrict_search_to_code_files=False, relative_path="src/solidlsp/ls.py"
-        )
+        lambda: search_pattern_tool.apply("\n[^\n]*?Pyright", restrict_search_to_code_files=False, relative_path="src/solidlsp/ls.py")
     )
     pprint(json.loads(result))

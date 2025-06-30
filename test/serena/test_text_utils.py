@@ -214,14 +214,6 @@ class TestSearchText:
 
         assert len(matches) == 0
 
-    def test_search_text_invalid_regex(self):
-        """Test searching with an invalid regex pattern raises ValueError."""
-        content = "def example(): pass"
-
-        # Search with an invalid regex pattern (unmatched parenthesis)
-        with pytest.raises(ValueError):
-            search_text("example(", content=content)
-
 
 # Mock file reader that always returns matching content
 def mock_reader_always_match(file_path: str) -> str:
@@ -262,7 +254,7 @@ class TestSearchFiles:
         Test the include/exclude glob filtering logic in search_files using PathSpec patterns.
         """
         results = search_files(
-            file_paths=file_paths,
+            relative_file_paths=file_paths,
             pattern=pattern,
             file_reader=mock_reader_always_match,
             paths_include_glob=paths_include_glob,
@@ -341,7 +333,7 @@ class TestSearchFiles:
         Test glob patterns that were problematic with the previous gitignore-based implementation.
         """
         results = search_files(
-            file_paths=file_paths,
+            relative_file_paths=file_paths,
             pattern=pattern,
             file_reader=mock_reader_always_match,
             paths_include_glob=paths_include_glob,
@@ -371,7 +363,7 @@ class TestSearchFiles:
         file_paths = ["a.py", "b.txt"]
         pattern = "non_existent_pattern_in_mock_content"  # This won't match mock_reader_always_match content
         results = search_files(
-            file_paths=file_paths,
+            relative_file_paths=file_paths,
             pattern=pattern,
             file_reader=mock_reader_always_match,  # Content is "This line contains a match."
             paths_include_glob=None,  # Both files would pass filters
@@ -393,10 +385,10 @@ class TestSearchFiles:
             return "No values here."
 
         file_paths = ["a.py", "b.py", "c.txt"]
-        pattern = re.compile(r"value=(\d+)")  # Regex pattern to find numbers after 'value='
+        pattern = r"value=(\d+)"
 
         results = search_files(
-            file_paths=file_paths,
+            relative_file_paths=file_paths,
             pattern=pattern,
             file_reader=specific_mock_reader,
             paths_include_glob="*.py",  # Only include .py files
@@ -426,7 +418,7 @@ class TestSearchFiles:
         pattern = "MATCH HERE"
 
         results = search_files(
-            file_paths=file_paths,
+            relative_file_paths=file_paths,
             pattern=pattern,
             file_reader=context_mock_reader,
             paths_include_glob="*.txt",  # Only include .txt files

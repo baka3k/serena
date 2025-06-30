@@ -1242,9 +1242,6 @@ class SolidLanguageServer(ABC):
         :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
         :return: List of matched consecutive lines with context
         """
-        if isinstance(pattern, str):
-            pattern = re.compile(pattern)
-
         relative_file_paths = self.request_parsed_files(relative_path=relative_path)
         return search_files(
             relative_file_paths,
