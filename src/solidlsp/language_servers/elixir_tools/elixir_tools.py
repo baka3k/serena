@@ -197,30 +197,43 @@ class ElixirTools(SolidLanguageServer):
             return
 
         def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
+            """Handle window/logMessage notifications from Next LS"""
+            message_text = msg.get("message", "")
+            self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
+            
+            # Check for the specific Next LS readiness signal
+            # Based on Next LS source: "Runtime for folder #{name} is ready..."
+            if "Runtime for folder" in message_text and "is ready..." in message_text:
+                self.logger.log("Next LS runtime is ready based on official log message", logging.INFO)
+                self.server_ready.set()
 
         def do_nothing(params):
             return
 
         def check_server_ready(params):
-            # Next LS sends progress notifications when it's ready
-            # Check for various completion signals from Next LS
+            """
+            Handle $/progress notifications from Next LS.
+            Keep as fallback for error detection, but primary readiness detection 
+            is now done via window/logMessage handler.
+            """
             value = params.get("value", {})
-            token = params.get("token", "")
             
-            # Next LS sends different kinds of progress notifications
-            if (value.get("kind") == "end" or 
-                "ready" in str(value).lower() or
-                "complete" in str(value).lower() or
-                "indexing" in str(token).lower() and value.get("kind") == "end"):
-                self.logger.log(f"Next LS ready signal detected", logging.INFO)
-                self.server_ready.set()
+            # Check for initialization completion progress (fallback signal)
+            if value.get("kind") == "end":
+                message = value.get("message", "")
+                if "has initialized!" in message:
+                    self.logger.log("Next LS initialization progress completed", logging.INFO)
+                    # Note: We don't set server_ready here - we wait for the log message
 
         def work_done_progress(params):
-            # Handle work done progress notifications that might indicate readiness
-            if params.get("value", {}).get("kind") == "end":
+            """
+            Handle $/workDoneProgress notifications from Next LS.
+            Keep for completeness but primary readiness detection is via window/logMessage.
+            """
+            value = params.get("value", {})
+            if value.get("kind") == "end":
                 self.logger.log("Next LS work done progress completed", logging.INFO)
-                self.server_ready.set()
+                # Note: We don't set server_ready here - we wait for the log message
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
@@ -254,13 +267,13 @@ class ElixirTools(SolidLanguageServer):
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # Next LS may take some time to be ready, so we wait for the progress notification
-        # Use a timeout to avoid hanging indefinitely
-        ready_timeout = 30.0
-        self.logger.log(f"Waiting up to {ready_timeout} seconds for Next LS to be ready...", logging.INFO)
+        # Wait for Next LS to send the specific "Runtime for folder X is ready..." log message
+        # This is the authoritative signal that Next LS is truly ready for requests
+        ready_timeout = 60.0
+        self.logger.log(f"Waiting up to {ready_timeout} seconds for Next LS runtime readiness...", logging.INFO)
         
         if self.server_ready.wait(timeout=ready_timeout):
-            self.logger.log("Next LS is ready", logging.INFO)
+            self.logger.log("Next LS is ready and available for requests", logging.INFO)
         else:
             error_msg = f"Next LS failed to initialize within {ready_timeout} seconds. This may indicate a problem with the Elixir installation, project compilation, or Next LS itself."
             self.logger.log(error_msg, logging.ERROR)
