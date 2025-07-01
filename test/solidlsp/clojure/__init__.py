@@ -7,7 +7,7 @@ def _test_clojure_cli() -> bool:
     try:
         verify_clojure_cli()
         return False
-    except (FileNotFoundError, RuntimeError) as e:
+    except (FileNotFoundError, RuntimeError):
         return True
 
 
