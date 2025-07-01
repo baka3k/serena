@@ -71,10 +71,4 @@ jobs:
         run: uv pip install -e ".[dev]"
       - name: Test with pytest
         shell: bash
-        run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            # Exclude Elixir tests on Windows since Next LS doesn't support Windows
-            uv run pytest -m "not elixir"
-          else
-            uv run poe test
-          fi
+        run: uv run poe test
