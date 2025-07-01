@@ -9,7 +9,8 @@ Status of the `main` branch. Changes prior to the next official version change w
    * The MCP server is the only asyncio-based component now, which resolves cross-component loop contamination,
      such that process isolation is no longer required.
      Neither are non-graceful shutdowns on Windows.
-* Better default and description for restricting the search in `search_for_pattern`
+* **Support for Clojure**
+* Better default, extended parameters and description for restricting the search in `search_for_pattern`
 * **Improved editing tools**: The editing logic was simplified and improved, making it more robust.
    * The "minimal indentation" logic was removed, because LLMs did not understand it.
    * The logic for the insertion of empty lines was improved (mostly controlled by the LLM now)
@@ -29,6 +30,7 @@ Fixes:
 * Fix repository indexing not following links and catch exceptions during indexing, allowing indexing
   to continue even if unexpected errors occur for individual files.
 * Fix `ImportError` in Ruby language server.
+* Fix some issues with gitignore matching and interpreting of regexes in `search_for_pattern` tool.
 
 # 2025-06-20
 
