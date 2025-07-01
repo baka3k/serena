@@ -162,6 +162,9 @@ class ElixirTools(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
         self.request_id = 0
+        
+        # Set generous timeout for Next LS which can be slow to initialize and respond
+        self.set_request_timeout(60.0)  # 60 seconds for all environments
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
@@ -201,12 +204,29 @@ class ElixirTools(SolidLanguageServer):
 
         def check_server_ready(params):
             # Next LS sends progress notifications when it's ready
+            # Check for various completion signals from Next LS
+            value = params.get("value", {})
+            token = params.get("token", "")
+            
+            # Next LS sends different kinds of progress notifications
+            if (value.get("kind") == "end" or 
+                "ready" in str(value).lower() or
+                "complete" in str(value).lower() or
+                "indexing" in str(token).lower() and value.get("kind") == "end"):
+                self.logger.log(f"Next LS ready signal detected", logging.INFO)
+                self.server_ready.set()
+
+        def work_done_progress(params):
+            # Handle work done progress notifications that might indicate readiness
             if params.get("value", {}).get("kind") == "end":
+                self.logger.log("Next LS work done progress completed", logging.INFO)
                 self.server_ready.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", check_server_ready)
+        self.server.on_notification("window/workDoneProgress/create", do_nothing)
+        self.server.on_notification("$/workDoneProgress", work_done_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
         self.logger.log("Starting Next LS server process", logging.INFO)
@@ -235,4 +255,13 @@ class ElixirTools(SolidLanguageServer):
         self.completions_available.set()
 
         # Next LS may take some time to be ready, so we wait for the progress notification
-        self.server_ready.wait() 
+        # Use a timeout to avoid hanging indefinitely
+        ready_timeout = 30.0
+        self.logger.log(f"Waiting up to {ready_timeout} seconds for Next LS to be ready...", logging.INFO)
+        
+        if self.server_ready.wait(timeout=ready_timeout):
+            self.logger.log("Next LS is ready", logging.INFO)
+        else:
+            error_msg = f"Next LS failed to initialize within {ready_timeout} seconds. This may indicate a problem with the Elixir installation, project compilation, or Next LS itself."
+            self.logger.log(error_msg, logging.ERROR)
+            raise RuntimeError(error_msg) 

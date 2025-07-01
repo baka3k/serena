@@ -12,8 +12,15 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 
+from . import NEXTLS_UNAVAILABLE, NEXTLS_UNAVAILABLE_REASON
 
-@pytest.mark.elixir
+# These marks will be applied to all tests in this module
+pytestmark = [
+    pytest.mark.elixir,
+    pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=f"Next LS not available: {NEXTLS_UNAVAILABLE_REASON}")
+]
+
+
 class TestElixirBasic:
     """Basic Elixir language server functionality tests."""
 
