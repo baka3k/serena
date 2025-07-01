@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Self
 
 import yaml
 from sensai.util import logging
+from sensai.util.string import ToStringMixin
 
 from serena.constants import CONTEXT_YAMLS_DIR, DEFAULT_CONTEXT, DEFAULT_MODES, MODE_YAMLS_DIR
 
@@ -93,7 +94,7 @@ class SerenaAgentMode:
 
 
 @dataclass
-class SerenaAgentContext:
+class SerenaAgentContext(ToStringMixin):
     """Represents a context where the agent is operating (an IDE, a chat, etc.), typically read off a YAML file.
     An agent can only be in a single context at a time.
     The contexts cannot be changed after the agent is running.
@@ -103,6 +104,9 @@ class SerenaAgentContext:
     prompt: str
     description: str = ""
     excluded_tools: set[str] = field(default_factory=set)
+
+    def _tostring_includes(self) -> list[str]:
+        return ["name"]
 
     def to_json_dict(self) -> dict[str, str | list[str]]:
         result = asdict(self)

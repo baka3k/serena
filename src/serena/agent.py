@@ -769,9 +769,19 @@ class SerenaAgent:
                 )
                 Logger.root.addHandler(self._gui_log_handler)
 
+        # set the agent context
+        if context is None:
+            context = SerenaAgentContext.load_default()
+        self._context = context
+
         # instantiate all tool classes
         self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
+
+        # determine the set exposed tools (which e.g. the MCP shall see), limited by the context
+        # (which is fixed for the session)
+        excluded_tool_classes = set(self._context.get_excluded_tool_classes())
+        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if tc not in excluded_tool_classes}
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
@@ -807,14 +817,14 @@ class SerenaAgent:
         self.ignore_spec: PathSpec  # not set to None to avoid assert statements
         """Ignore spec, extracted from the project's gitignore files and the explicitly configured ignored paths."""
 
-        # Apply context and mode tool configurations
-        if context is None:
-            context = SerenaAgentContext.load_default()
+        # set the active modes
         if modes is None:
             modes = SerenaAgentMode.load_default_modes()
-        self._context = context
         self._modes = modes
+
+        # log tool information
         log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
+        log.info(f"Number of exposed tools given {self._context}: {len(self._exposed_tools)}")
 
         self._active_tools: dict[type[Tool], Tool] = {}
         self._update_active_tools()
@@ -880,11 +890,14 @@ class SerenaAgent:
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
-        :return: all tool instances, including the non-active ones. For MCP clients, we need to expose them all since typical
-            clients don't react to changes in the set of tools.
-            An attempt to use a non-active tool will result in an error.
+        :return: the tool instances which are exposed (e.g. to the MCP client).
+            Note that the set of exposed tools is fixed for the session, as
+            clients don't react to changes in the set of tools, so this is the superset
+            of tools that can be offered during the session.
+            If a client should attempt to use a tool that is dynamically disabled
+            (e.g. because a project is activated that disables it), it will receive an error.
         """
-        return list(self._all_tools.values())
+        return list(self._exposed_tools.values())
 
     def get_active_project(self) -> Project | None:
         """
