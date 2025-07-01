@@ -92,14 +92,14 @@ class GitignoreSpec:
         """Initialize the PathSpec from patterns."""
         self.pathspec = PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, self.patterns)
 
-    def matches(self, path: str) -> bool:
+    def matches(self, relative_path: str) -> bool:
         """
         Check if the given path matches any pattern in this gitignore spec.
 
-        :param path: Path to check (should be relative to repo root)
+        :param relative_path: Path to check (should be relative to repo root)
         :return: True if path matches any pattern
         """
-        return self.pathspec.match_file(path)
+        return match_path(relative_path, self.pathspec, root_path=os.path.dirname(self.file_path))
 
 
 class GitignoreParser:
@@ -276,12 +276,29 @@ class GitignoreParser:
         self._load_gitignore_files()
 
 
-def match_path(path: str, path_spec: PathSpec) -> bool:
-    path = os.path.abspath(path)
-    normalized_path = str(path).replace(os.path.sep, "/")
+def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> bool:
+    """
+    Match a relative path against a given pathspec. Just pathspec.match_file() is not enough,
+    we need to do some massaging to fix issues with pathspec matching.
+
+    :param relative_path: relative path to match against the pathspec
+    :param path_spec: the pathspec to match against
+    :param root_path: the root path from which the relative path is derived
+    :return:
+    """
+    normalized_path = str(relative_path).replace(os.path.sep, "/")
+
+    # We can have patterns like /src/..., which would only match corresponding paths from the repo root
+    # Unfortunately, pathspec can't know whether a relative path is relative to the repo root or not,
+    # so it will never match src/...
+    # The fix is to just always assume that the input path is relative to the repo root and to
+    # prefix it with /.
+    if not normalized_path.startswith("/"):
+        normalized_path = "/" + normalized_path
 
     # pathspec can't handle the matching of directories if they don't end with a slash!
     # see https://github.com/cpburnz/python-pathspec/issues/89
-    if os.path.isdir(normalized_path) and not normalized_path.endswith("/"):
+    abs_path = os.path.abspath(os.path.join(root_path, relative_path))
+    if os.path.isdir(abs_path) and not normalized_path.endswith("/"):
         normalized_path = normalized_path + "/"
     return path_spec.match_file(normalized_path)

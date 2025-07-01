@@ -3,12 +3,12 @@ from pathlib import Path
 from solidlsp.language_servers.clojure_lsp.clojure_lsp import verify_clojure_cli
 
 
-def _test_clojure_cli() -> str | bool:
+def _test_clojure_cli() -> bool:
     try:
         verify_clojure_cli()
         return False
     except (FileNotFoundError, RuntimeError) as e:
-        return str(e)
+        return True
 
 
 CLI_FAIL = _test_clojure_cli()

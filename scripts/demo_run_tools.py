@@ -20,10 +20,19 @@ class InMemorySerenaConfig(SerenaConfigBase):
 
 
 if __name__ == "__main__":
-    agent = SerenaAgent(project=REPO_ROOT)
+    agent = SerenaAgent(project=REPO_ROOT, serena_config=InMemorySerenaConfig())
 
     # apply a tool
     find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-    print("Finding the symbol 'SyncLanguageServer'\n")
-    result = agent.execute_task(lambda: find_refs_tool.apply(name_path="SolidLanguageServer", relative_path="src/solidlsp/ls.py"))
+    find_file_tool = agent.get_tool(FindFileTool)
+    search_pattern_tool = agent.get_tool(SearchForPatternTool)
+
+    result = agent.execute_task(
+        lambda: search_pattern_tool.apply(
+            r"def request_parsed_files.*?\).*?\)",
+            restrict_search_to_code_files=False,
+            relative_path="src/solidlsp",
+            paths_include_glob="**/ls.py",
+        )
+    )
     pprint(json.loads(result))
