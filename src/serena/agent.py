@@ -2173,7 +2173,7 @@ class SearchForPatternTool(Tool):
 
     def apply(
         self,
-        pattern: str,
+        substring_pattern: str,
         context_lines_before: int = 0,
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
@@ -2183,17 +2183,43 @@ class SearchForPatternTool(Tool):
         max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
-        Search for a pattern in the project. You can select whether all files or only code files should be searched.
+        Offers a flexible search for arbitrary patterns in the codebase, including the
+        possibility to search in non-code files.
         Generally, symbolic operations like find_symbol or find_referencing_symbols
         should be preferred if you know which symbols you are looking for.
 
-        :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
+        Pattern Matching Logic:
+            For each match, the returned result will contain the full lines where the
+            substring pattern is found, as well as optionally some lines before and after it. The pattern will be compiled with
+            DOTALL, meaning that the dot will match all characters including newlines.
+            This also means that it never makes sense to have .* at the beginning or end of the pattern,
+            but it may make sense to have it in the middle for complex patterns.
+            If a pattern matches multiple lines, all those lines will be part of the match.
+            Be careful to not use greedy quantifiers unnecessarily, it is usually better to use non-greedy quantifiers like .*? to avoid
+            matching too much content.
+
+        File Selection Logic:
+            The files in which the search is performed can be restricted very flexibly.
+            Using `restrict_search_to_code_files` is useful if you are only interested in code symbols (i.e., those
+            symbols that can be manipulated with symbolic tools like find_symbol).
+            You can also restrict the search to a specific file or directory,
+            and provide glob patterns to include or exclude certain files on top of that.
+            The globs are matched against relative file paths from the project root (not to the `relative_path` parameter that
+            is used to further restrict the search).
+            Smartly combining the various restrictions allows you to perform very targeted searches.
+
+
+        :param substring_pattern: Regular expression for a substring pattern to search for
         :param context_lines_before: Number of lines of context to include before each match
         :param context_lines_after: Number of lines of context to include after each match
-        :param paths_include_glob: optional glob pattern specifying files to include in the search; if not provided, search globally.
-        :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search (takes precedence over paths_include_glob).
+        :param paths_include_glob: optional glob pattern specifying files to include in the search.
+            Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
+            Only matches files, not directories.
+        :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
+            Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
+            Takes precedence over paths_include_glob. Only matches files, not directories.
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
-            file is passed, only that will be searched. The path must exist, otherwise a FileNotFoundError will be raised.
+            file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
         :param max_answer_chars: if the output is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
@@ -2212,7 +2238,7 @@ class SearchForPatternTool(Tool):
 
         if restrict_search_to_code_files:
             matches = self.language_server.search_files_for_pattern(
-                pattern=pattern,
+                pattern=substring_pattern,
                 relative_path=relative_path,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
@@ -2234,7 +2260,7 @@ class SearchForPatternTool(Tool):
             #   but it probably never matters and this version required no further refactoring
             matches = search_files(
                 rel_paths_to_search,
-                pattern,
+                substring_pattern,
                 root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,
