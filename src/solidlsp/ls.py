@@ -318,7 +318,7 @@ class SolidLanguageServer(ABC):
             if self.is_ignored_dirname(part):
                 return True
 
-        return match_path(relative_path, self.get_ignore_spec())
+        return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
 
     def _shutdown(self, timeout: float = 5.0):
         """

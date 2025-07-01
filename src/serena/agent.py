@@ -865,7 +865,7 @@ class SerenaAgent:
         if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
             return True
 
-        return match_path(str(relative_path), self.ignore_spec)
+        return match_path(str(relative_path), self.ignore_spec, root_path=self.get_project_root())
 
     def validate_relative_path(self, relative_path: str) -> None:
         """
