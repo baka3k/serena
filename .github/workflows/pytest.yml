@@ -36,6 +36,7 @@ jobs:
         shell: bash
         run: go install golang.org/x/tools/gopls@latest
       - name: Set up Elixir
+        if: runner.os != 'Windows'
         uses: erlef/setup-beam@v1
         with:
           elixir-version: '1.18.4'
@@ -70,4 +71,10 @@ jobs:
         run: uv pip install -e ".[dev]"
       - name: Test with pytest
         shell: bash
-        run: uv run poe test
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Exclude Elixir tests on Windows since Next LS doesn't support Windows
+            uv run pytest -m "not elixir"
+          else
+            uv run poe test
+          fi

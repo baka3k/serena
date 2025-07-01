@@ -32,6 +32,38 @@ class ElixirTools(SolidLanguageServer):
         # - cover: coverage reports
         return super().is_ignored_dirname(dirname) or dirname in ["_build", "deps", "node_modules", ".elixir_ls", "cover"]
 
+    def _is_next_ls_internal_file(self, abs_path: str) -> bool:
+        """Check if an absolute path is a Next LS internal file that should be ignored."""
+        return any(pattern in abs_path for pattern in [
+            ".burrito",  # Next LS runtime directory
+            "next_ls_erts-",  # Next LS Erlang runtime  
+            "_next_ls_private_",  # Next LS private files
+            "/priv/monkey/",  # Next LS monkey patching directory
+        ])
+
+    @override
+    def _send_references_request(self, relative_file_path: str, line: int, column: int):
+        """Override to filter out Next LS internal files from references."""
+        from solidlsp.ls_utils import PathUtils
+        
+        # Get the raw response from the parent implementation
+        raw_response = super()._send_references_request(relative_file_path, line, column)
+        
+        if raw_response is None:
+            return None
+            
+        # Filter out Next LS internal files
+        filtered_response = []
+        for item in raw_response:
+            if isinstance(item, dict) and "uri" in item:
+                abs_path = PathUtils.uri_to_path(item["uri"])
+                if self._is_next_ls_internal_file(abs_path):
+                    self.logger.log(f"Filtering out Next LS internal file: {abs_path}", logging.DEBUG)
+                    continue
+            filtered_response.append(item)
+            
+        return filtered_response
+
     @staticmethod
     def _get_elixir_version():
         """Get the installed Elixir version or None if not found."""
@@ -78,6 +110,13 @@ class ElixirTools(SolidLanguageServer):
         platform_key = platform_mapping.get(platformId.value)
         if not platform_key:
             raise RuntimeError(f"Unsupported platform for Next LS: {platformId.value}")
+        
+        # Check for Windows and provide a helpful error message
+        if platformId.value.startswith("win"):
+            raise RuntimeError(
+                "Windows is not supported by Next LS. The Next LS project does not provide Windows binaries. "
+                "Consider using Windows Subsystem for Linux (WSL) or a virtual machine with Linux/macOS."
+            )
 
         dependency = runtimeDependencies["next_ls"][platform_key]
         next_ls_dir = str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"]))

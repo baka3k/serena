@@ -2,6 +2,18 @@
 
 This directory contains the integration for Elixir language support using [Next LS](https://github.com/elixir-tools/next-ls) from the elixir-tools project.
 
+> **⚠️ Windows Not Supported**: Next LS does not provide Windows binaries, so Elixir language server integration is only available on Linux and macOS.
+
+## Known Issues
+
+### Next LS v0.23.3 Timeout Enumeration Bug
+There is a known intermittent bug in Next LS v0.23.3 where `textDocument/definition` requests can fail with:
+```
+Protocol.UndefinedError: protocol Enumerable not implemented for :timeout of type Atom
+```
+
+This bug is tracked in [Next LS Issue #543](https://github.com/elixir-tools/next-ls/issues/543) and primarily occurs in CI environments. The affected test (`test_request_defining_symbol_none`) is marked as expected to fail until this upstream bug is resolved.
+
 ## Prerequisites
 
 Before using the Elixir language server integration, you need to have:
