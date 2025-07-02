@@ -2407,7 +2407,7 @@ class GetCurrentConfigTool(Tool):
         return self.agent.get_current_config_overview()
 
 
-class InitialInstructionsTool(Tool):
+class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     """
     Gets the initial instructions for the current project.
     Should only be used in settings where the system prompt cannot be set,
