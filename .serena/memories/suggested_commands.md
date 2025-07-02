@@ -17,7 +17,6 @@ The following tasks should generally be executed using `uv run poe <task_name>`.
         "typescript: language server running for TypeScript",
         "php: language server running for PHP",
         "snapshot: snapshot tests for symbolic editing operations",
-        "isolated_process: test runs with process isolated agent",
     ]
    ```
   By default, `uv run poe test` uses the markers set in the env var `PYTEST_MARKERS`, or, if it unset, uses `-m "not java and not rust and not isolated process"`.
