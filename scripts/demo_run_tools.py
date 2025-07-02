@@ -8,19 +8,8 @@ from pprint import pprint
 from serena.agent import *
 from serena.constants import REPO_ROOT
 
-
-@dataclass
-class InMemorySerenaConfig(SerenaConfigBase):
-    """
-    In-memory implementation of Serena configuration with the GUI disabled.
-    """
-
-    gui_log_window_enabled: bool = False
-    web_dashboard: bool = False
-
-
 if __name__ == "__main__":
-    agent = SerenaAgent(project=REPO_ROOT, serena_config=InMemorySerenaConfig())
+    agent = SerenaAgent(project=REPO_ROOT, serena_config=SerenaConfig(gui_log_window_enabled=False, web_dashboard=False))
 
     # apply a tool
     find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)

@@ -28,7 +28,6 @@ from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
 import click
 import yaml
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
-from overrides import override
 from pathspec import PathSpec
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
@@ -252,9 +251,11 @@ class Project:
 
 
 @dataclass(kw_only=True)
-class SerenaConfigBase(ABC):
+class SerenaConfig:
     """
-    Abstract base class for Serena configuration handling
+    Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
+    (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
+    For testing purposes, it can also be instantiated directly with the desired parameters.
     """
 
     projects: list[Project] = field(default_factory=list)
@@ -264,94 +265,12 @@ class SerenaConfigBase(ABC):
     web_dashboard: bool = True
     web_dashboard_open_on_launch: bool = True
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
-
-    @cached_property
-    def project_paths(self) -> list[str]:
-        return sorted(project.project_root for project in self.projects)
-
-    @cached_property
-    def project_names(self) -> list[str]:
-        return sorted(project.project_config.project_name for project in self.projects)
-
-    def get_project(self, project_root_or_name: str) -> Project | None:
-        for project in self.projects:
-            if project.project_config.project_name == project_root_or_name:
-                return project
-        if os.path.isdir(project_root_or_name):
-            project_root = Path(project_root_or_name).resolve()
-            for project in self.projects:
-                if Path(project.project_root).resolve() == project_root:
-                    return project
-        return None
-
-    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple[Project, bool]:
-        """
-        Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
-        name or path is already registered.
-
-        :param project_root: the path to the project to add
-        :param project_name: the name of the project to add; if None, the name of the project will be the name of the directory
-            containing the project
-        :return: the project that was added and a boolean indicating whether a new project configuration was generated and
-            saved to disk. It may be that no new project configuration was generated if the project configuration already
-            exists on disk but the project itself was not added yet to the Serena configuration.
-        """
-        project_root = Path(project_root).resolve()
-        if not project_root.exists():
-            raise FileNotFoundError(f"Error: Path does not exist: {project_root}")
-        if not project_root.is_dir():
-            raise FileNotFoundError(f"Error: Path is not a directory: {project_root}")
-
-        if project_name is None:
-            project_name = project_root.name
-        for already_registered_project in self.projects:
-            if already_registered_project.project_name == project_name:
-                raise FileExistsError(
-                    f"Project name '{project_name}' already exists and points to {already_registered_project.project_root}."
-                )
-            if str(already_registered_project.project_root) == str(project_root):
-                raise FileExistsError(
-                    f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
-                )
-
-        try:
-            project_config = ProjectConfig.load(project_root)
-            new_project_config_generated = False
-        except FileNotFoundError:
-            project_config = ProjectConfig.autogenerate(project_root, save_to_disk=True)
-            new_project_config_generated = True
-
-        new_project = Project(project_root=str(project_root), project_config=project_config)
-        self._add_new_project(new_project)
-
-        return new_project, new_project_config_generated
-
-    def _add_new_project(self, project: Project) -> None:
-        """
-        Adds a new project to the Serena configuration. No checks are performed here,
-        this method is intended to be overridden by subclasses.
-        """
-        self.projects.append(project)
-
-    def remove_project(self, project_name: str) -> None:
-        # find the index of the project with the desired name and remove it
-        for i, project in enumerate(self.projects):
-            if project.project_name == project_name:
-                del self.projects[i]
-                break
-        else:
-            raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-
-
-@dataclass(kw_only=True)
-class SerenaConfig(SerenaConfigBase):
+    loaded_commented_yaml: CommentedMap | None = None
+    config_file_path: str | None = None
     """
-    Handles user-defined Serena configuration based on the (fixed) Serena configuration file.
-    Updates to the instance will be automatically saved to the configuration file.
-    Usually, there should be only one instance of this class in the application.
+    the path to the configuration file to which updates of the configuration shall be saved;
+    if None, the configuration is not saved to disk
     """
-
-    loaded_commented_yaml: CommentedMap
 
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
@@ -359,15 +278,15 @@ class SerenaConfig(SerenaConfigBase):
     @classmethod
     def autogenerate(cls) -> None:
         log.info("Autogenerating Serena configuration file")
-        if os.path.exists(cls.get_config_file_path()):
+        if os.path.exists(cls._determine_config_file_path()):
             raise FileExistsError(
-                f"Serena configuration file already exists at {cls.get_config_file_path()}. Please remove it if you want to autogenerate a new one."
+                f"Serena configuration file already exists at {cls._determine_config_file_path()}. Please remove it if you want to autogenerate a new one."
             )
         loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
-        save_yaml(cls.get_config_file_path(), loaded_commented_yaml, preserve_comments=True)
+        save_yaml(cls._determine_config_file_path(), loaded_commented_yaml, preserve_comments=True)
 
     @classmethod
-    def get_config_file_path(cls) -> str:
+    def _determine_config_file_path(cls) -> str:
         config_file = cls.CONFIG_FILE_DOCKER if is_running_in_docker() else cls.CONFIG_FILE
         return os.path.join(REPO_ROOT, config_file)
 
@@ -388,11 +307,12 @@ class SerenaConfig(SerenaConfigBase):
         """
         Static constructor to create SerenaConfig from the configuration file
         """
-        config_file = cls.get_config_file_path()
-        log.info(f"Loading Serena configuration from {config_file}")
-        loaded_commented_yaml = cls._load_commented_yaml(config_file, generate_if_missing)
+        config_file_path = cls._determine_config_file_path()
+        log.info(f"Loading Serena configuration from {config_file_path}")
+        loaded_commented_yaml = cls._load_commented_yaml(config_file_path, generate_if_missing)
+
         # Create instance
-        instance = cls(loaded_commented_yaml=loaded_commented_yaml)
+        instance = cls(loaded_commented_yaml=loaded_commented_yaml, config_file_path=config_file_path)
 
         # read projects
         if "projects" not in loaded_commented_yaml:
@@ -458,22 +378,90 @@ class SerenaConfig(SerenaConfigBase):
             log.error(f"Error migrating configuration file: {e}")
             return None
 
+    @cached_property
+    def project_paths(self) -> list[str]:
+        return sorted(project.project_root for project in self.projects)
+
+    @cached_property
+    def project_names(self) -> list[str]:
+        return sorted(project.project_config.project_name for project in self.projects)
+
+    def get_project(self, project_root_or_name: str) -> Project | None:
+        for project in self.projects:
+            if project.project_config.project_name == project_root_or_name:
+                return project
+        if os.path.isdir(project_root_or_name):
+            project_root = Path(project_root_or_name).resolve()
+            for project in self.projects:
+                if Path(project.project_root).resolve() == project_root:
+                    return project
+        return None
+
+    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple[Project, bool]:
+        """
+        Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
+        name or path is already registered.
+
+        :param project_root: the path to the project to add
+        :param project_name: the name of the project to add; if None, the name of the project will be the name of the directory
+            containing the project
+        :return: the project that was added and a boolean indicating whether a new project configuration was generated and
+            saved to disk. It may be that no new project configuration was generated if the project configuration already
+            exists on disk but the project itself was not added yet to the Serena configuration.
+        """
+        project_root = Path(project_root).resolve()
+        if not project_root.exists():
+            raise FileNotFoundError(f"Error: Path does not exist: {project_root}")
+        if not project_root.is_dir():
+            raise FileNotFoundError(f"Error: Path is not a directory: {project_root}")
+
+        if project_name is None:
+            project_name = project_root.name
+        for already_registered_project in self.projects:
+            if already_registered_project.project_name == project_name:
+                raise FileExistsError(
+                    f"Project name '{project_name}' already exists and points to {already_registered_project.project_root}."
+                )
+            if str(already_registered_project.project_root) == str(project_root):
+                raise FileExistsError(
+                    f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
+                )
+
+        try:
+            project_config = ProjectConfig.load(project_root)
+            new_project_config_generated = False
+        except FileNotFoundError:
+            project_config = ProjectConfig.autogenerate(project_root, save_to_disk=True)
+            new_project_config_generated = True
+
+        new_project = Project(project_root=str(project_root), project_config=project_config)
+        self.projects.append(new_project)
+        self.save()
+
+        return new_project, new_project_config_generated
+
+    def remove_project(self, project_name: str) -> None:
+        # find the index of the project with the desired name and remove it
+        for i, project in enumerate(self.projects):
+            if project.project_name == project_name:
+                del self.projects[i]
+                break
+        else:
+            raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
+        self.save()
+
     def save(self) -> None:
+        """
+        Saves the configuration to the file from which it was loaded (if any)
+        """
+        if self.config_file_path is None:
+            return
+        assert self.loaded_commented_yaml is not None, "Cannot save configuration without loaded YAML"
         loaded_original_yaml = deepcopy(self.loaded_commented_yaml)
         # projects are unique absolute paths
         # we also canonicalize them before saving
         loaded_original_yaml["projects"] = sorted({str(Path(project.project_root).resolve()) for project in self.projects})
-        save_yaml(self.get_config_file_path(), loaded_original_yaml, preserve_comments=True)
-
-    @override
-    def _add_new_project(self, project: Project) -> None:
-        super()._add_new_project(project)
-        self.save()
-
-    @override
-    def remove_project(self, project_name: str) -> None:
-        super().remove_project(project_name)
-        self.save()
+        save_yaml(self.config_file_path, loaded_original_yaml, preserve_comments=True)
 
 
 class LinesRead:
@@ -544,7 +532,7 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
 
 
 def create_serena_config(
-    serena_config: SerenaConfigBase | None = None,
+    serena_config: SerenaConfig | None = None,
     enable_web_dashboard: bool | None = None,
     enable_gui_log_window: bool | None = None,
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
@@ -567,24 +555,7 @@ def create_serena_config(
     """
     # obtain serena configuration
     if serena_config is not None:
-        # If a complete SerenaConfig is provided, use it directly
-        if isinstance(serena_config, SerenaConfig):
-            config = serena_config
-        else:
-            # For SerenaConfigBase instances (like test configs), create an in-memory SerenaConfig
-            # that preserves the base config attributes without loading from file
-            from ruamel.yaml.comments import CommentedMap
-
-            config = SerenaConfig.__new__(SerenaConfig)  # Create without calling __init__
-            # Initialize basic attributes from base config
-            config.projects = getattr(serena_config, "projects", [])
-            config.gui_log_window_enabled = serena_config.gui_log_window_enabled
-            config.log_level = serena_config.log_level
-            config.trace_lsp_communication = serena_config.trace_lsp_communication
-            config.web_dashboard = serena_config.web_dashboard
-            config.tool_timeout = serena_config.tool_timeout
-            # Set empty yaml for in-memory config
-            config.loaded_commented_yaml = CommentedMap()
+        config = serena_config
     else:
         config = SerenaConfig.from_config_file()
 
@@ -681,7 +652,7 @@ class SerenaAgent:
         self,
         project: str | None = None,
         project_activation_callback: Callable[[], None] | None = None,
-        serena_config: SerenaConfigBase | None = None,
+        serena_config: SerenaConfig | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
         enable_web_dashboard: bool | None = None,
