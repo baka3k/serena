@@ -681,7 +681,9 @@ class SerenaAgent:
             if self.serena_config.web_dashboard_open_on_launch:
                 webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
 
+        # log fundamental information
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
+        log.info("Configuration file: %s", self.serena_config.config_file_path)
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
         # create executor for starting the language server and running tools in another thread
