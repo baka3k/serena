@@ -278,7 +278,7 @@ class ElixirTools(SolidLanguageServer):
             
             # Add a small settling period to ensure background indexing is complete
             # Next LS often continues compilation/indexing in background after ready signal
-            settling_time = 10.0
+            settling_time = 120.0
             self.logger.log(f"Allowing {settling_time} seconds for Next LS background indexing to complete...", logging.INFO)
             time.sleep(settling_time)
             self.logger.log("Next LS settling period complete", logging.INFO)
