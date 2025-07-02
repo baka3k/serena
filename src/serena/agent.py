@@ -17,7 +17,7 @@ from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from functools import cached_property
 from logging import Logger
@@ -168,14 +168,14 @@ class ProjectConfig(ToStringMixin):
         config_with_comments["language"] = dominant_language
         if save_to_disk:
             save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
-        return cls.from_json_dict(config_with_comments)
+        return cls._from_dict(config_with_comments)
 
     @classmethod
     def rel_path_to_project_yml(cls) -> str:
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
-    def from_json_dict(cls, data: dict[str, Any]) -> Self:
+    def _from_dict(cls, data: dict[str, Any]) -> Self:
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
@@ -200,12 +200,6 @@ class ProjectConfig(ToStringMixin):
             encoding=data.get("encoding", DEFAULT_ENCODING),
         )
 
-    def to_json_dict(self) -> dict[str, Any]:
-        result = asdict(self)
-        result["language"] = result["language"].value
-        result["excluded_tools"] = list(result["excluded_tools"])
-        return result
-
     @classmethod
     def load(cls, project_root: Path | str, autogenerate: bool = True) -> Self:
         """
@@ -222,7 +216,7 @@ class ProjectConfig(ToStringMixin):
             yaml_data = yaml.safe_load(f)
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_root.name
-        return cls.from_json_dict(yaml_data)
+        return cls._from_dict(yaml_data)
 
     def get_excluded_tool_classes(self) -> set[type["Tool"]]:
         return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
@@ -252,13 +246,6 @@ class Project:
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
         return cls(project_root=str(project_root), project_config=project_config)
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        return cls(project_root=data["project_root"], project_config=ProjectConfig.from_json_dict(data["project_config"]))
-
-    def to_json_dict(self) -> dict:
-        return {"project_root": self.project_root, "project_config": self.project_config.to_json_dict()}
 
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
@@ -354,19 +341,6 @@ class SerenaConfigBase(ABC):
                 break
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-
-    def to_json_dict(self) -> dict:
-        """Convert configuration to dictionary for serialization."""
-        result = asdict(self)
-        result["projects"] = [project.to_json_dict() for project in self.projects]
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        """Create configuration from dictionary."""
-        data = copy(data)
-        data["projects"] = [Project.from_json_dict(project_data) for project_data in data["projects"]]
-        return cls(**data)
 
 
 @dataclass(kw_only=True)
@@ -500,16 +474,6 @@ class SerenaConfig(SerenaConfigBase):
     def remove_project(self, project_name: str) -> None:
         super().remove_project(project_name)
         self.save()
-
-    def to_json_dict(self) -> dict:
-        result = super().to_json_dict()
-        result.pop("loaded_commented_yaml", None)
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        data["loaded_commented_yaml"] = cls._load_commented_yaml(cls.get_config_file_path())
-        return super().from_json_dict(data)
 
 
 class LinesRead:
