@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from logging import Formatter, Logger, StreamHandler
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import click
 import docstring_parser
@@ -23,7 +23,6 @@ from serena.agent import (
     SerenaAgent,
     SerenaConfig,
     ToolInterface,
-    create_serena_config,
     show_fatal_exception_safe,
 )
 from serena.config import SerenaAgentContext, SerenaAgentMode
@@ -149,15 +148,23 @@ class SerenaMCPFactory:
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
         """
         try:
-            serena_config = create_serena_config(
-                enable_web_dashboard=enable_web_dashboard,
-                enable_gui_log_window=enable_gui_log_window,
-                log_level=log_level,
-                trace_lsp_communication=trace_lsp_communication,
-                tool_timeout=tool_timeout,
-            )
+            config = SerenaConfig.from_config_file()
+
+            # update configuration with the provided parameters
+            if enable_web_dashboard is not None:
+                config.web_dashboard = enable_web_dashboard
+            if enable_gui_log_window is not None:
+                config.gui_log_window_enabled = enable_gui_log_window
+            if log_level is not None:
+                log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level.upper())
+                config.log_level = logging.getLevelNamesMapping()[log_level]
+            if trace_lsp_communication is not None:
+                config.trace_lsp_communication = trace_lsp_communication
+            if tool_timeout is not None:
+                config.tool_timeout = tool_timeout
+
             modes_instances = [SerenaAgentMode.load(mode) for mode in modes]
-            self._instantiate_agent(serena_config, modes_instances)
+            self._instantiate_agent(config, modes_instances)
 
         except Exception as e:
             show_fatal_exception_safe(e)

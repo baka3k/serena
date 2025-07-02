@@ -23,7 +23,7 @@ from functools import cached_property
 from logging import Logger
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
 
 import click
 import yaml
@@ -531,54 +531,6 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
         return f"Memory {name} deleted."
 
 
-def create_serena_config(
-    serena_config: SerenaConfig | None = None,
-    enable_web_dashboard: bool | None = None,
-    enable_gui_log_window: bool | None = None,
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
-    trace_lsp_communication: bool | None = None,
-    tool_timeout: float | None = None,
-) -> SerenaConfig:
-    """
-    Create a SerenaConfig instance without instantiating a full SerenaAgent.
-
-    This function extracts the configuration creation logic from SerenaAgent.__init__
-    to allow creating configurations independently for process isolation and other use cases.
-
-    :param serena_config: the base Serena configuration or None to read from default location
-    :param enable_web_dashboard: Whether to enable the web dashboard
-    :param enable_gui_log_window: Whether to enable the GUI log window
-    :param log_level: Log level
-    :param trace_lsp_communication: Whether to trace LSP communication
-    :param tool_timeout: Timeout in seconds for tool execution
-    :return: A fully configured SerenaConfig instance
-    """
-    # obtain serena configuration
-    if serena_config is not None:
-        config = serena_config
-    else:
-        config = SerenaConfig.from_config_file()
-
-    # Apply parameter overrides
-    if enable_web_dashboard is not None:
-        config.web_dashboard = enable_web_dashboard
-    if enable_gui_log_window is not None:
-        config.gui_log_window_enabled = enable_gui_log_window
-    if log_level is not None:
-        log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level.upper())
-        # transform to int
-        config.log_level = logging.getLevelNamesMapping()[log_level]
-    if trace_lsp_communication is not None:
-        config.trace_lsp_communication = trace_lsp_communication
-    if tool_timeout is not None:
-        config.tool_timeout = tool_timeout
-
-    # Note: Project registration/activation is handled separately by the caller
-    # since it involves complex logic that may require the full agent context
-
-    return config
-
-
 def create_ls_for_project(
     project: str | Project,
     log_level: int = logging.INFO,
@@ -655,35 +607,19 @@ class SerenaAgent:
         serena_config: SerenaConfig | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
-        enable_web_dashboard: bool | None = None,
-        enable_gui_log_window: bool | None = None,
-        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
-        trace_lsp_communication: bool | None = None,
-        tool_timeout: float | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
             an already registered project;
         :param project_activation_callback: a callback function to be called when a project is activated.
+        :param serena_config: the Serena configuration or None to read the configuration from the default location.
         :param context: the context in which the agent is operating, None for default context.
             The context may adjust prompts, tool availability, and tool descriptions.
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
-        :param serena_config: the Serena configuration or None to read the configuration from the default location.
-        :param enable_web_dashboard: whether to enable the web dashboard; If None, will take the value from the Serena configuration.
-        :param enable_gui_log_window: whether to enable the GUI log window; If None, will take the value from the Serena configuration.
-        :param log_level: the log level for the GUI log window; If None, will take the value from the serena configuration.
-        :param tool_timeout: the timeout in seconds for tool execution. If None, will take the value from the serena configuration.
         """
         # obtain serena configuration using the decoupled factory function
-        self.serena_config = create_serena_config(
-            serena_config=serena_config,
-            enable_web_dashboard=enable_web_dashboard,
-            enable_gui_log_window=enable_gui_log_window,
-            log_level=log_level,
-            trace_lsp_communication=trace_lsp_communication,
-            tool_timeout=tool_timeout,
-        )
+        self.serena_config = serena_config or SerenaConfig.from_config_file()
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
