@@ -347,9 +347,9 @@ class SerenaConfig:
             project = Project.load(path)
             instance.projects.append(project)
 
-        # Force disable GUI in Docker environment
+        # set other configuration parameters
         if is_running_in_docker():
-            instance.gui_log_window_enabled = False
+            instance.gui_log_window_enabled = False  # not supported in Docker
         else:
             instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
