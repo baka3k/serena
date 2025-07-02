@@ -9,8 +9,6 @@ Status of the `main` branch. Changes prior to the next official version change w
    * The MCP server is the only asyncio-based component now, which resolves cross-component loop contamination,
      such that process isolation is no longer required.
      Neither are non-graceful shutdowns on Windows.
-* **Support for Clojure**
-* Better default, extended parameters and description for restricting the search in `search_for_pattern`
 * **Improved editing tools**: The editing logic was simplified and improved, making it more robust.
    * The "minimal indentation" logic was removed, because LLMs did not understand it.
    * The logic for the insertion of empty lines was improved (mostly controlled by the LLM now)
@@ -18,7 +16,10 @@ Status of the `main` branch. Changes prior to the next official version change w
    * allows the language server to be initialized in the background, making the MCP server respond to requests
      immediately upon startup,
    * ensures that all tool executions are fully synchronized (executed linearly).
-* Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
+* `SearchForPatternTool`: Better default, extended parameters and description for restricting the search
+* Language support:
+   * Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
+   * **Add support for Clojure**
 
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows
