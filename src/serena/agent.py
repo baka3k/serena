@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import contextlib
 import inspect
 import json
 import os
@@ -795,7 +796,11 @@ class SerenaAgent:
             Logger.root.addHandler(dashboard_log_handler)
             self._dashboard_thread, port = SerenaDashboardAPI(dashboard_log_handler, tool_names).run_in_thread()
             if self.serena_config.web_dashboard_open_on_launch:
-                webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
+                # open the dashboard URL in the default web browser, making sure to redirect output,
+                # as this can print to stdout (contaminating the MCP server stream)
+                with open(os.devnull, "w") as fnull:
+                    with contextlib.redirect_stdout(fnull), contextlib.redirect_stderr(fnull):
+                        webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
 
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))

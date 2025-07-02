@@ -224,6 +224,7 @@ ignore = [
   "TID252",   # forbids relative imports
   "B904",     # forces use of raise from other_exception
   "RUF012",   # forbids mutable attributes as ClassVar
+  "SIM117",   # forbids nested with statements
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]
