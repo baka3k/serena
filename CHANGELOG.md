@@ -20,6 +20,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language support:
    * Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
    * **Add support for Clojure**
+* Configuration:
+   * Add option `web_dashboard_open_on_launch` (allowing the dashboard to be enabled without opening a browser window) 
 
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows

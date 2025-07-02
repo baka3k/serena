@@ -275,6 +275,7 @@ class SerenaConfigBase(ABC):
     log_level: int = logging.INFO
     trace_lsp_communication: bool = False
     web_dashboard: bool = True
+    web_dashboard_open_on_launch: bool = True
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
     @cached_property
@@ -446,6 +447,7 @@ class SerenaConfig(SerenaConfigBase):
             instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
         instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
         instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
+        instance.web_dashboard_open_on_launch = loaded_commented_yaml.get("web_dashboard_open_on_launch", True)
         instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
         instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)
 
@@ -792,7 +794,8 @@ class SerenaAgent:
             dashboard_log_handler = MemoryLogHandler(level=serena_log_level)
             Logger.root.addHandler(dashboard_log_handler)
             self._dashboard_thread, port = SerenaDashboardAPI(dashboard_log_handler, tool_names).run_in_thread()
-            webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
+            if self.serena_config.web_dashboard_open_on_launch:
+                webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
 
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
