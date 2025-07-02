@@ -245,14 +245,15 @@ class SerenaConfig:
         if is_running_in_docker():
             return os.path.join(REPO_ROOT, cls.CONFIG_FILE_DOCKER)
         else:
-            candidates = [
-                str(Path.home() / SERENA_MANAGED_DIR_NAME / cls.CONFIG_FILE),
-                os.path.join(REPO_ROOT, cls.CONFIG_FILE),
-            ]
-            for candidate in candidates:
-                if os.path.exists(candidate):
-                    return candidate
-            return candidates[0]
+            config_path = str(Path.home() / SERENA_MANAGED_DIR_NAME / cls.CONFIG_FILE)
+
+            # migrate configuration in old location
+            old_config_path = os.path.join(REPO_ROOT, cls.CONFIG_FILE)
+            if os.path.exists(old_config_path):
+                log.info(f"Moving Serena configuration file from {old_config_path} to {config_path}")
+                shutil.move(old_config_path, config_path)
+
+            return config_path
 
     @classmethod
     def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":
