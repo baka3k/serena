@@ -276,14 +276,15 @@ class SerenaConfig:
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
 
     @classmethod
-    def autogenerate(cls) -> None:
-        log.info("Autogenerating Serena configuration file")
-        if os.path.exists(cls._determine_config_file_path()):
-            raise FileExistsError(
-                f"Serena configuration file already exists at {cls._determine_config_file_path()}. Please remove it if you want to autogenerate a new one."
-            )
+    def _generate_config_file(cls, config_file_path: str) -> None:
+        """
+        Generates a Serena configuration file at the specified path from the template file.
+
+        :param config_file_path: the path where the configuration file should be generated
+        """
+        log.info(f"Auto-generating Serena configuration file in {config_file_path}")
         loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
-        save_yaml(cls._determine_config_file_path(), loaded_commented_yaml, preserve_comments=True)
+        save_yaml(config_file_path, loaded_commented_yaml, preserve_comments=True)
 
     @classmethod
     def _determine_config_file_path(cls) -> str:
@@ -303,27 +304,27 @@ class SerenaConfig:
             return candidates[0]
 
     @classmethod
-    def _load_commented_yaml(cls, config_file: str, generate_if_missing: bool = True) -> CommentedMap:
-        if not os.path.exists(config_file):
-            if not generate_if_missing:
-                raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
-            log.info(f"Serena configuration file not found at {config_file}, autogenerating...")
-            cls.autogenerate()
-        try:
-            return load_yaml(config_file, preserve_comments=True)
-        except Exception as e:
-            raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
-
-    @classmethod
     def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":
         """
         Static constructor to create SerenaConfig from the configuration file
         """
         config_file_path = cls._determine_config_file_path()
-        log.info(f"Loading Serena configuration from {config_file_path}")
-        loaded_commented_yaml = cls._load_commented_yaml(config_file_path, generate_if_missing)
 
-        # Create instance
+        # create the configuration file from the template if necessary
+        if not os.path.exists(config_file_path):
+            if not generate_if_missing:
+                raise FileNotFoundError(f"Serena configuration file not found: {config_file_path}")
+            log.info(f"Serena configuration file not found at {config_file_path}, autogenerating...")
+            cls._generate_config_file(config_file_path)
+
+        # load the configuration
+        log.info(f"Loading Serena configuration from {config_file_path}")
+        try:
+            loaded_commented_yaml = load_yaml(config_file_path, preserve_comments=True)
+        except Exception as e:
+            raise ValueError(f"Error loading Serena configuration from {config_file_path}: {e}") from e
+
+        # create the configuration instance
         instance = cls(loaded_commented_yaml=loaded_commented_yaml, config_file_path=config_file_path)
 
         # read projects
