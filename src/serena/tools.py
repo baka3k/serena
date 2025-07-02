@@ -21,7 +21,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
-from serena.config import SerenaAgentMode
+from serena.config.context_mode import SerenaAgentMode
 from serena.prompt_factory import PromptFactory
 from serena.symbol import SymbolManager
 from serena.text_utils import search_files

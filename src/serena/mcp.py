@@ -24,7 +24,7 @@ from serena.agent import (
     SerenaConfig,
     show_fatal_exception_safe,
 )
-from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
 from serena.tools import ToolInterface
 

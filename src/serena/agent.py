@@ -28,7 +28,7 @@ from sensai.util.logging import FallbackHandler, LogTime
 from sensai.util.string import ToStringMixin
 
 from serena import serena_version
-from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.constants import (
     DEFAULT_ENCODING,
     PROJECT_TEMPLATE_FILE,
