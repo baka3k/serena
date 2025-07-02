@@ -7,7 +7,6 @@ import pytest
 
 import test.solidlsp.clojure as clj
 from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfigBase
-from serena.process_isolated_agent import ProcessIsolatedSerenaAgent
 from solidlsp.ls_config import Language
 from test.conftest import get_repo_path
 
@@ -70,31 +69,10 @@ def serena_agent(request: pytest.FixtureRequest, serena_config):
     language = Language(request.param)
     project_name = f"test_repo_{language}"
 
-    # Check if this test should use process isolation by looking at the test parameters
-    isolated_process = False
-    if hasattr(request, "node") and hasattr(request.node, "callspec"):
-        # Get the isolated_process parameter value from the test
-        params = request.node.callspec.params
-        isolated_process = params.get("isolated_process", False)
-
-    if isolated_process:
-        agent = ProcessIsolatedSerenaAgent(project=project_name, serena_config=serena_config)
-        agent.start()
-
-        # Add cleanup to stop the process
-        def cleanup():
-            agent.stop()
-
-        request.addfinalizer(cleanup)
-        return agent
-    else:
-        return SerenaAgent(project=project_name, serena_config=serena_config)
+    return SerenaAgent(project=project_name, serena_config=serena_config)
 
 
 class TestSerenaAgent:
-    @pytest.mark.parametrize(
-        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
-    )
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
         [
@@ -115,7 +93,7 @@ class TestSerenaAgent:
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol(self, serena_agent, symbol_name: str, expected_kind: str, expected_file: str, isolated_process: bool):
+    def test_find_symbol(self, serena_agent, symbol_name: str, expected_kind: str, expected_file: str):
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(name_path=symbol_name)
@@ -126,9 +104,6 @@ class TestSerenaAgent:
             for s in symbols
         ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}"
 
-    @pytest.mark.parametrize(
-        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
-    )
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,def_file,ref_file",
         [
@@ -161,7 +136,7 @@ class TestSerenaAgent:
         ],
         indirect=["serena_agent"],
     )
-    def test_find_symbol_references(self, serena_agent, symbol_name: str, def_file: str, ref_file: str, isolated_process: bool) -> None:
+    def test_find_symbol_references(self, serena_agent, symbol_name: str, def_file: str, ref_file: str) -> None:
         agent = serena_agent
 
         # Find the symbol location first
@@ -182,9 +157,6 @@ class TestSerenaAgent:
             ref["relative_path"] == ref_file for ref in refs
         ), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
 
-    @pytest.mark.parametrize(
-        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
-    )
     @pytest.mark.parametrize(
         "serena_agent,name_path,substring_matching,expected_symbol_name,expected_kind,expected_file",
         [
@@ -259,7 +231,6 @@ class TestSerenaAgent:
         expected_symbol_name: str,
         expected_kind: str,
         expected_file: str,
-        isolated_process: bool,
     ):
         agent = serena_agent
 
@@ -283,9 +254,6 @@ class TestSerenaAgent:
         ), f"Expected to find {name_path} ({expected_kind}) in {expected_file} for {agent._active_project.language.name}. Symbols: {symbols}"
 
     @pytest.mark.parametrize(
-        "isolated_process", [pytest.param(False, id="direct"), pytest.param(True, id="isolated", marks=pytest.mark.isolated_process)]
-    )
-    @pytest.mark.parametrize(
         "serena_agent,name_path",
         [
             pytest.param(
@@ -307,7 +275,6 @@ class TestSerenaAgent:
         self,
         serena_agent,
         name_path: str,
-        isolated_process: bool,
     ):
         agent = serena_agent
 
