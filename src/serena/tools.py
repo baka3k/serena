@@ -1195,7 +1195,7 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
 
         :param project: the name of a registered project to activate or a path to a project directory
         """
-        from .agent import ProjectConfig
+        from .config.serena_config import ProjectConfig
 
         active_project, new_project_generated, new_project_config_generated = self.agent.activate_project_from_path_or_name(project)
         if new_project_generated:
