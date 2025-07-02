@@ -5,6 +5,7 @@ import pathlib
 import stat
 import subprocess
 import threading
+import time
 from pathlib import PurePath
 
 from overrides import override
@@ -164,7 +165,7 @@ class ElixirTools(SolidLanguageServer):
         self.request_id = 0
         
         # Set generous timeout for Next LS which can be slow to initialize and respond
-        self.set_request_timeout(60.0)  # 60 seconds for all environments
+        self.set_request_timeout(180.0)  # 60 seconds for all environments
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
@@ -269,11 +270,18 @@ class ElixirTools(SolidLanguageServer):
 
         # Wait for Next LS to send the specific "Runtime for folder X is ready..." log message
         # This is the authoritative signal that Next LS is truly ready for requests
-        ready_timeout = 60.0
+        ready_timeout = 180.0
         self.logger.log(f"Waiting up to {ready_timeout} seconds for Next LS runtime readiness...", logging.INFO)
         
         if self.server_ready.wait(timeout=ready_timeout):
             self.logger.log("Next LS is ready and available for requests", logging.INFO)
+            
+            # Add a small settling period to ensure background indexing is complete
+            # Next LS often continues compilation/indexing in background after ready signal
+            settling_time = 10.0
+            self.logger.log(f"Allowing {settling_time} seconds for Next LS background indexing to complete...", logging.INFO)
+            time.sleep(settling_time)
+            self.logger.log("Next LS settling period complete", logging.INFO)
         else:
             error_msg = f"Next LS failed to initialize within {ready_timeout} seconds. This may indicate a problem with the Elixir installation, project compilation, or Next LS itself."
             self.logger.log(error_msg, logging.ERROR)
