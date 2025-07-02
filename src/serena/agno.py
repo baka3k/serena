@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from sensai.util.logging import LogTime
 
 from serena.agent import SerenaAgent, Tool, show_fatal_exception_safe
-from serena.config import SerenaAgentContext
+from serena.config.context_mode import SerenaAgentContext
 from serena.constants import REPO_ROOT
 
 log = logging.getLogger(__name__)
