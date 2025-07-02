@@ -354,7 +354,8 @@ claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-
 ```
 
 ℹ️ Once in Claude Code, you should ask Claude to "Read the initial instructions" as your first prompt, such that it will receive information
-on how to use Serena's tools.
+on how to use Serena's tools. Provide this prompt whenever you start a new conversation and perhaps even after a compacting operation,
+such that Claude is correctly primed to use Serena's tools at all times.
 
 
 ### Claude Desktop
