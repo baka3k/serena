@@ -22,11 +22,11 @@ from sensai.util import logging
 from serena.agent import (
     SerenaAgent,
     SerenaConfig,
-    ToolInterface,
     show_fatal_exception_safe,
 )
 from serena.config import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
+from serena.tools import ToolInterface
 
 log = logging.getLogger(__name__)
 LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
