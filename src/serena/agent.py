@@ -18,18 +18,17 @@ from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from functools import cached_property
 from logging import Logger
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, Union
 
 import click
 import yaml
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
-from overrides import override
 from pathspec import PathSpec
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
@@ -169,14 +168,14 @@ class ProjectConfig(ToStringMixin):
         config_with_comments["language"] = dominant_language
         if save_to_disk:
             save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
-        return cls.from_json_dict(config_with_comments)
+        return cls._from_dict(config_with_comments)
 
     @classmethod
     def rel_path_to_project_yml(cls) -> str:
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
-    def from_json_dict(cls, data: dict[str, Any]) -> Self:
+    def _from_dict(cls, data: dict[str, Any]) -> Self:
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
@@ -201,12 +200,6 @@ class ProjectConfig(ToStringMixin):
             encoding=data.get("encoding", DEFAULT_ENCODING),
         )
 
-    def to_json_dict(self) -> dict[str, Any]:
-        result = asdict(self)
-        result["language"] = result["language"].value
-        result["excluded_tools"] = list(result["excluded_tools"])
-        return result
-
     @classmethod
     def load(cls, project_root: Path | str, autogenerate: bool = True) -> Self:
         """
@@ -223,7 +216,7 @@ class ProjectConfig(ToStringMixin):
             yaml_data = yaml.safe_load(f)
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_root.name
-        return cls.from_json_dict(yaml_data)
+        return cls._from_dict(yaml_data)
 
     def get_excluded_tool_classes(self) -> set[type["Tool"]]:
         return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
@@ -254,21 +247,16 @@ class Project:
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
         return cls(project_root=str(project_root), project_config=project_config)
 
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        return cls(project_root=data["project_root"], project_config=ProjectConfig.from_json_dict(data["project_config"]))
-
-    def to_json_dict(self) -> dict:
-        return {"project_root": self.project_root, "project_config": self.project_config.to_json_dict()}
-
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
 
 
 @dataclass(kw_only=True)
-class SerenaConfigBase(ABC):
+class SerenaConfig:
     """
-    Abstract base class for Serena configuration handling
+    Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
+    (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
+    For testing purposes, it can also be instantiated directly with the desired parameters.
     """
 
     projects: list[Project] = field(default_factory=list)
@@ -278,6 +266,131 @@ class SerenaConfigBase(ABC):
     web_dashboard: bool = True
     web_dashboard_open_on_launch: bool = True
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
+    loaded_commented_yaml: CommentedMap | None = None
+    config_file_path: str | None = None
+    """
+    the path to the configuration file to which updates of the configuration shall be saved;
+    if None, the configuration is not saved to disk
+    """
+
+    CONFIG_FILE = "serena_config.yml"
+    CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
+
+    @classmethod
+    def _generate_config_file(cls, config_file_path: str) -> None:
+        """
+        Generates a Serena configuration file at the specified path from the template file.
+
+        :param config_file_path: the path where the configuration file should be generated
+        """
+        log.info(f"Auto-generating Serena configuration file in {config_file_path}")
+        loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
+        save_yaml(config_file_path, loaded_commented_yaml, preserve_comments=True)
+
+    @classmethod
+    def _determine_config_file_path(cls) -> str:
+        """
+        :return: the location where the Serena configuration file is stored/should be stored
+        """
+        if is_running_in_docker():
+            return os.path.join(REPO_ROOT, cls.CONFIG_FILE_DOCKER)
+        else:
+            candidates = [
+                str(Path.home() / SERENA_MANAGED_DIR_NAME / cls.CONFIG_FILE),
+                os.path.join(REPO_ROOT, cls.CONFIG_FILE),
+            ]
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    return candidate
+            return candidates[0]
+
+    @classmethod
+    def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":
+        """
+        Static constructor to create SerenaConfig from the configuration file
+        """
+        config_file_path = cls._determine_config_file_path()
+
+        # create the configuration file from the template if necessary
+        if not os.path.exists(config_file_path):
+            if not generate_if_missing:
+                raise FileNotFoundError(f"Serena configuration file not found: {config_file_path}")
+            log.info(f"Serena configuration file not found at {config_file_path}, autogenerating...")
+            cls._generate_config_file(config_file_path)
+
+        # load the configuration
+        log.info(f"Loading Serena configuration from {config_file_path}")
+        try:
+            loaded_commented_yaml = load_yaml(config_file_path, preserve_comments=True)
+        except Exception as e:
+            raise ValueError(f"Error loading Serena configuration from {config_file_path}: {e}") from e
+
+        # create the configuration instance
+        instance = cls(loaded_commented_yaml=loaded_commented_yaml, config_file_path=config_file_path)
+
+        # read projects
+        if "projects" not in loaded_commented_yaml:
+            raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
+
+        # load list of known projects
+        instance.projects = []
+        num_project_migrations = 0
+        for path in loaded_commented_yaml["projects"]:
+            path = Path(path).resolve()
+            if not path.exists() or (path.is_dir() and not (path / ProjectConfig.rel_path_to_project_yml()).exists()):
+                log.warning(f"Project path {path} does not exist or does not contain a project configuration file, skipping.")
+                continue
+            if path.is_file():
+                path = cls._migrate_out_of_project_config_file(path)
+                if path is None:
+                    continue
+                num_project_migrations += 1
+            project = Project.load(path)
+            instance.projects.append(project)
+
+        # set other configuration parameters
+        if is_running_in_docker():
+            instance.gui_log_window_enabled = False  # not supported in Docker
+        else:
+            instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
+        instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
+        instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
+        instance.web_dashboard_open_on_launch = loaded_commented_yaml.get("web_dashboard_open_on_launch", True)
+        instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
+        instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)
+
+        # re-save the configuration file if any migrations were performed
+        if num_project_migrations > 0:
+            log.info(
+                f"Migrated {num_project_migrations} project configurations from legacy format to in-project configuration; re-saving configuration"
+            )
+            instance.save()
+
+        return instance
+
+    @classmethod
+    def _migrate_out_of_project_config_file(cls, path: Path) -> Path | None:
+        """
+        Migrates a legacy project configuration file (which is a YAML file containing the project root) to the
+        in-project configuration file (project.yml) inside the project root directory.
+
+        :param path: the path to the legacy project configuration file
+        :return: the project root path if the migration was successful, None otherwise.
+        """
+        log.info(f"Found legacy project configuration file {path}, migrating to in-project configuration.")
+        try:
+            with open(path, encoding="utf-8") as f:
+                project_config_data = yaml.safe_load(f)
+            if "project_name" not in project_config_data:
+                project_name = path.stem
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(f"\nproject_name: {project_name}")
+            project_root = project_config_data["project_root"]
+            shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))
+            return Path(project_root).resolve()
+        except Exception as e:
+            log.error(f"Error migrating configuration file: {e}")
+            return None
 
     @cached_property
     def project_paths(self) -> list[str]:
@@ -336,16 +449,10 @@ class SerenaConfigBase(ABC):
             new_project_config_generated = True
 
         new_project = Project(project_root=str(project_root), project_config=project_config)
-        self._add_new_project(new_project)
+        self.projects.append(new_project)
+        self.save()
 
         return new_project, new_project_config_generated
-
-    def _add_new_project(self, project: Project) -> None:
-        """
-        Adds a new project to the Serena configuration. No checks are performed here,
-        this method is intended to be overridden by subclasses.
-        """
-        self.projects.append(project)
 
     def remove_project(self, project_name: str) -> None:
         # find the index of the project with the desired name and remove it
@@ -355,162 +462,20 @@ class SerenaConfigBase(ABC):
                 break
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-
-    def to_json_dict(self) -> dict:
-        """Convert configuration to dictionary for serialization."""
-        result = asdict(self)
-        result["projects"] = [project.to_json_dict() for project in self.projects]
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        """Create configuration from dictionary."""
-        data = copy(data)
-        data["projects"] = [Project.from_json_dict(project_data) for project_data in data["projects"]]
-        return cls(**data)
-
-
-@dataclass(kw_only=True)
-class SerenaConfig(SerenaConfigBase):
-    """
-    Handles user-defined Serena configuration based on the (fixed) Serena configuration file.
-    Updates to the instance will be automatically saved to the configuration file.
-    Usually, there should be only one instance of this class in the application.
-    """
-
-    loaded_commented_yaml: CommentedMap
-
-    CONFIG_FILE = "serena_config.yml"
-    CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
-
-    @classmethod
-    def autogenerate(cls) -> None:
-        log.info("Autogenerating Serena configuration file")
-        if os.path.exists(cls.get_config_file_path()):
-            raise FileExistsError(
-                f"Serena configuration file already exists at {cls.get_config_file_path()}. Please remove it if you want to autogenerate a new one."
-            )
-        loaded_commented_yaml = load_yaml(SELENA_CONFIG_TEMPLATE_FILE, preserve_comments=True)
-        save_yaml(cls.get_config_file_path(), loaded_commented_yaml, preserve_comments=True)
-
-    @classmethod
-    def get_config_file_path(cls) -> str:
-        config_file = cls.CONFIG_FILE_DOCKER if is_running_in_docker() else cls.CONFIG_FILE
-        return os.path.join(REPO_ROOT, config_file)
-
-    @classmethod
-    def _load_commented_yaml(cls, config_file: str, generate_if_missing: bool = True) -> CommentedMap:
-        if not os.path.exists(config_file):
-            if not generate_if_missing:
-                raise FileNotFoundError(f"Serena configuration file not found: {config_file}")
-            log.info(f"Serena configuration file not found at {config_file}, autogenerating...")
-            cls.autogenerate()
-        try:
-            return load_yaml(config_file, preserve_comments=True)
-        except Exception as e:
-            raise ValueError(f"Error loading Serena configuration from {config_file}: {e}") from e
-
-    @classmethod
-    def from_config_file(cls, generate_if_missing: bool = True) -> "SerenaConfig":
-        """
-        Static constructor to create SerenaConfig from the configuration file
-        """
-        config_file = cls.get_config_file_path()
-        log.info(f"Loading Serena configuration from {config_file}")
-        loaded_commented_yaml = cls._load_commented_yaml(config_file, generate_if_missing)
-        # Create instance
-        instance = cls(loaded_commented_yaml=loaded_commented_yaml)
-
-        # read projects
-        if "projects" not in loaded_commented_yaml:
-            raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
-
-        # load list of known projects
-        instance.projects = []
-        num_project_migrations = 0
-        for path in loaded_commented_yaml["projects"]:
-            path = Path(path).resolve()
-            if not path.exists() or (path.is_dir() and not (path / ProjectConfig.rel_path_to_project_yml()).exists()):
-                log.warning(f"Project path {path} does not exist or does not contain a project configuration file, skipping.")
-                continue
-            if path.is_file():
-                path = cls._migrate_out_of_project_config_file(path)
-                if path is None:
-                    continue
-                num_project_migrations += 1
-            project = Project.load(path)
-            instance.projects.append(project)
-
-        # Force disable GUI in Docker environment
-        if is_running_in_docker():
-            instance.gui_log_window_enabled = False
-        else:
-            instance.gui_log_window_enabled = loaded_commented_yaml.get("gui_log_window", False)
-        instance.log_level = loaded_commented_yaml.get("log_level", loaded_commented_yaml.get("gui_log_level", logging.INFO))
-        instance.web_dashboard = loaded_commented_yaml.get("web_dashboard", True)
-        instance.web_dashboard_open_on_launch = loaded_commented_yaml.get("web_dashboard_open_on_launch", True)
-        instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
-        instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)
-
-        # re-save the configuration file if any migrations were performed
-        if num_project_migrations > 0:
-            log.info(
-                f"Migrated {num_project_migrations} project configurations from legacy format to in-project configuration; re-saving configuration"
-            )
-            instance.save()
-
-        return instance
-
-    @classmethod
-    def _migrate_out_of_project_config_file(cls, path: Path) -> Path | None:
-        """
-        Migrates a legacy project configuration file (which is a YAML file containing the project root) to the
-        in-project configuration file (project.yml) inside the project root directory.
-
-        :param path: the path to the legacy project configuration file
-        :return: the project root path if the migration was successful, None otherwise.
-        """
-        log.info(f"Found legacy project configuration file {path}, migrating to in-project configuration.")
-        try:
-            with open(path, encoding="utf-8") as f:
-                project_config_data = yaml.safe_load(f)
-            if "project_name" not in project_config_data:
-                project_name = path.stem
-                with open(path, "a", encoding="utf-8") as f:
-                    f.write(f"\nproject_name: {project_name}")
-            project_root = project_config_data["project_root"]
-            shutil.move(str(path), str(Path(project_root) / ProjectConfig.rel_path_to_project_yml()))
-            return Path(project_root).resolve()
-        except Exception as e:
-            log.error(f"Error migrating configuration file: {e}")
-            return None
+        self.save()
 
     def save(self) -> None:
+        """
+        Saves the configuration to the file from which it was loaded (if any)
+        """
+        if self.config_file_path is None:
+            return
+        assert self.loaded_commented_yaml is not None, "Cannot save configuration without loaded YAML"
         loaded_original_yaml = deepcopy(self.loaded_commented_yaml)
         # projects are unique absolute paths
         # we also canonicalize them before saving
         loaded_original_yaml["projects"] = sorted({str(Path(project.project_root).resolve()) for project in self.projects})
-        save_yaml(self.get_config_file_path(), loaded_original_yaml, preserve_comments=True)
-
-    @override
-    def _add_new_project(self, project: Project) -> None:
-        super()._add_new_project(project)
-        self.save()
-
-    @override
-    def remove_project(self, project_name: str) -> None:
-        super().remove_project(project_name)
-        self.save()
-
-    def to_json_dict(self) -> dict:
-        result = super().to_json_dict()
-        result.pop("loaded_commented_yaml", None)
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        data["loaded_commented_yaml"] = cls._load_commented_yaml(cls.get_config_file_path())
-        return super().from_json_dict(data)
+        save_yaml(self.config_file_path, loaded_original_yaml, preserve_comments=True)
 
 
 class LinesRead:
@@ -578,71 +543,6 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
         memory_file_path = self._get_memory_file_path(name)
         memory_file_path.unlink()
         return f"Memory {name} deleted."
-
-
-def create_serena_config(
-    serena_config: SerenaConfigBase | None = None,
-    enable_web_dashboard: bool | None = None,
-    enable_gui_log_window: bool | None = None,
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
-    trace_lsp_communication: bool | None = None,
-    tool_timeout: float | None = None,
-) -> SerenaConfig:
-    """
-    Create a SerenaConfig instance without instantiating a full SerenaAgent.
-
-    This function extracts the configuration creation logic from SerenaAgent.__init__
-    to allow creating configurations independently for process isolation and other use cases.
-
-    :param serena_config: the base Serena configuration or None to read from default location
-    :param enable_web_dashboard: Whether to enable the web dashboard
-    :param enable_gui_log_window: Whether to enable the GUI log window
-    :param log_level: Log level
-    :param trace_lsp_communication: Whether to trace LSP communication
-    :param tool_timeout: Timeout in seconds for tool execution
-    :return: A fully configured SerenaConfig instance
-    """
-    # obtain serena configuration
-    if serena_config is not None:
-        # If a complete SerenaConfig is provided, use it directly
-        if isinstance(serena_config, SerenaConfig):
-            config = serena_config
-        else:
-            # For SerenaConfigBase instances (like test configs), create an in-memory SerenaConfig
-            # that preserves the base config attributes without loading from file
-            from ruamel.yaml.comments import CommentedMap
-
-            config = SerenaConfig.__new__(SerenaConfig)  # Create without calling __init__
-            # Initialize basic attributes from base config
-            config.projects = getattr(serena_config, "projects", [])
-            config.gui_log_window_enabled = serena_config.gui_log_window_enabled
-            config.log_level = serena_config.log_level
-            config.trace_lsp_communication = serena_config.trace_lsp_communication
-            config.web_dashboard = serena_config.web_dashboard
-            config.tool_timeout = serena_config.tool_timeout
-            # Set empty yaml for in-memory config
-            config.loaded_commented_yaml = CommentedMap()
-    else:
-        config = SerenaConfig.from_config_file()
-
-    # Apply parameter overrides
-    if enable_web_dashboard is not None:
-        config.web_dashboard = enable_web_dashboard
-    if enable_gui_log_window is not None:
-        config.gui_log_window_enabled = enable_gui_log_window
-    if log_level is not None:
-        log_level = cast(Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level.upper())
-        # transform to int
-        config.log_level = logging.getLevelNamesMapping()[log_level]
-    if trace_lsp_communication is not None:
-        config.trace_lsp_communication = trace_lsp_communication
-    if tool_timeout is not None:
-        config.tool_timeout = tool_timeout
-
-    # Note: Project registration/activation is handled separately by the caller
-    # since it involves complex logic that may require the full agent context
-
-    return config
 
 
 def create_ls_for_project(
@@ -718,38 +618,22 @@ class SerenaAgent:
         self,
         project: str | None = None,
         project_activation_callback: Callable[[], None] | None = None,
-        serena_config: SerenaConfigBase | None = None,
+        serena_config: SerenaConfig | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
-        enable_web_dashboard: bool | None = None,
-        enable_gui_log_window: bool | None = None,
-        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
-        trace_lsp_communication: bool | None = None,
-        tool_timeout: float | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
             an already registered project;
         :param project_activation_callback: a callback function to be called when a project is activated.
+        :param serena_config: the Serena configuration or None to read the configuration from the default location.
         :param context: the context in which the agent is operating, None for default context.
             The context may adjust prompts, tool availability, and tool descriptions.
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
-        :param serena_config: the Serena configuration or None to read the configuration from the default location.
-        :param enable_web_dashboard: whether to enable the web dashboard; If None, will take the value from the Serena configuration.
-        :param enable_gui_log_window: whether to enable the GUI log window; If None, will take the value from the Serena configuration.
-        :param log_level: the log level for the GUI log window; If None, will take the value from the serena configuration.
-        :param tool_timeout: the timeout in seconds for tool execution. If None, will take the value from the serena configuration.
         """
         # obtain serena configuration using the decoupled factory function
-        self.serena_config = create_serena_config(
-            serena_config=serena_config,
-            enable_web_dashboard=enable_web_dashboard,
-            enable_gui_log_window=enable_gui_log_window,
-            log_level=log_level,
-            trace_lsp_communication=trace_lsp_communication,
-            tool_timeout=tool_timeout,
-        )
+        self.serena_config = serena_config or SerenaConfig.from_config_file()
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
@@ -802,7 +686,9 @@ class SerenaAgent:
                     with contextlib.redirect_stdout(fnull), contextlib.redirect_stderr(fnull):
                         webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
 
+        # log fundamental information
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
+        log.info("Configuration file: %s", self.serena_config.config_file_path)
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
 
         # create executor for starting the language server and running tools in another thread

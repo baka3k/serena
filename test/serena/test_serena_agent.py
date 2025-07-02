@@ -1,29 +1,13 @@
 import json
 import os
 import time
-from dataclasses import dataclass
 
 import pytest
 
 import test.solidlsp.clojure as clj
-from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfigBase
+from serena.agent import FindReferencingSymbolsTool, FindSymbolTool, Project, ProjectConfig, SerenaAgent, SerenaConfig
 from solidlsp.ls_config import Language
 from test.conftest import get_repo_path
-
-
-@dataclass
-class SerenaConfigForTests(SerenaConfigBase):
-    """
-    In-memory implementation of Serena configuration with the GUI disabled.
-    """
-
-    gui_log_window_enabled: bool = False
-    web_dashboard: bool = False
-
-    def __post_init__(self):
-        # Initialize with empty projects list if not already set
-        if not hasattr(self, "projects") or self.projects is None:
-            self.projects = []
 
 
 @pytest.fixture
@@ -59,7 +43,7 @@ def serena_config():
             )
             test_projects.append(project)
 
-    config = SerenaConfigForTests()
+    config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False)
     config.projects = test_projects
     return config
 

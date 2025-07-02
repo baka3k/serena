@@ -202,6 +202,8 @@ This and other settings can be adjusted in the [configuration](#configuration) a
    cd serena
    ```
 2. Optionally create a config file from the template and adjust it according to your preferences.
+   You can either place it in your user directory (`~/.serena/serena_config.yml`) or into 
+   the Serena installation directory:
    ```shell
    cp src/serena/resources/serena_config.template.yml serena_config.yml
    ```
@@ -279,7 +281,11 @@ Run with parameter `--help` to get a list of available options.
 
 Serena's behavior (active tools and prompts as well as logging configuration, etc.) is configured in four places:
 
-1. The `serena_config.yml` for general settings that apply to all clients and projects
+1. The `serena_config.yml` for general settings that apply to all clients and projects.
+   Serena will look for this file in your user directory under `.serena/serena_config.yml`
+   or within the Serena installation directory.
+   If you do not explicitly create the file, it will be auto-generated in the former location
+   when you first run Serena.
 2. In the arguments passed to the `serena-mcp-server` in your client's config (see below), 
    which will apply to all sessions started by the respective client. In particular, the [context](#contexts) parameter
    should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
