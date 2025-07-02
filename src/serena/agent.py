@@ -287,8 +287,20 @@ class SerenaConfig:
 
     @classmethod
     def _determine_config_file_path(cls) -> str:
-        config_file = cls.CONFIG_FILE_DOCKER if is_running_in_docker() else cls.CONFIG_FILE
-        return os.path.join(REPO_ROOT, config_file)
+        """
+        :return: the location where the Serena configuration file is stored/should be stored
+        """
+        if is_running_in_docker():
+            return os.path.join(REPO_ROOT, cls.CONFIG_FILE_DOCKER)
+        else:
+            candidates = [
+                str(Path.home() / SERENA_MANAGED_DIR_NAME / cls.CONFIG_FILE),
+                os.path.join(REPO_ROOT, cls.CONFIG_FILE),
+            ]
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    return candidate
+            return candidates[0]
 
     @classmethod
     def _load_commented_yaml(cls, config_file: str, generate_if_missing: bool = True) -> CommentedMap:
