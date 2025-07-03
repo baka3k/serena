@@ -1,8 +1,4 @@
 import sys
-from logging import Logger
-
-from sensai.util import logging
-from sensai.util.logging import FallbackHandler
 
 from serena.agent import log
 
@@ -12,10 +8,9 @@ def show_fatal_exception_safe(e: Exception) -> None:
     Shows the given exception in the GUI log viewer on the main thread and ensures that the exception is logged or at
     least printed to stderr.
     """
-    # Make sure the error is logged (adding a fallback handler which writes to stderr in case there is no other handler)
-    fallback_handler = FallbackHandler(logging.StreamHandler(sys.stderr))
-    Logger.root.addHandler(fallback_handler)
+    # Log the error and print it to stderr
     log.error(f"Fatal exception: {e}", exc_info=e)
+    print(f"Fatal exception: {e}", file=sys.stderr)
 
     # attempt to show the error in the GUI
     try:
