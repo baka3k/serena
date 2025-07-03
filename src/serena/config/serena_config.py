@@ -247,11 +247,12 @@ class SerenaConfig:
         else:
             config_path = str(Path.home() / SERENA_MANAGED_DIR_NAME / cls.CONFIG_FILE)
 
-            # migrate configuration in old location
-            old_config_path = os.path.join(REPO_ROOT, cls.CONFIG_FILE)
-            if os.path.exists(old_config_path):
-                log.info(f"Moving Serena configuration file from {old_config_path} to {config_path}")
-                shutil.move(old_config_path, config_path)
+            # if the config file does not exist, check if we can migrate it from the old location
+            if not os.path.exists(config_path):
+                old_config_path = os.path.join(REPO_ROOT, cls.CONFIG_FILE)
+                if os.path.exists(old_config_path):
+                    log.info(f"Moving Serena configuration file from {old_config_path} to {config_path}")
+                    shutil.move(old_config_path, config_path)
 
             return config_path
 
