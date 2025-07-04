@@ -14,6 +14,7 @@ jobs:
   cpu:
     name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     if: "!contains(github.event.head_commit.message, 'ci skip')"
     strategy:
       fail-fast: false
