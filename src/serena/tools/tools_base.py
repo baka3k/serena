@@ -320,7 +320,9 @@ class ToolRegistry:
         """
         Iterate over Tool subclasses.
         """
-        yield from iter_subclasses(Tool)
+        for cls in iter_subclasses(Tool):
+            if cls.__module__.startswith("serena.tools"):
+                yield cls
 
     @classmethod
     def _get_tool_dict(cls) -> dict[str, type[Tool]]:
