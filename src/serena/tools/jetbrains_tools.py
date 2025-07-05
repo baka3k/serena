@@ -56,7 +56,7 @@ class JetBrainsFindSymbolTool(Tool):
             If you have some knowledge about the codebase, you should use this parameter, as it will significantly
             speed up the search as well as reduce the number of results.
         :param include_body: If True, include the symbol's source code. Use judiciously.
-        :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
         :return: JSON string: a list of symbols (with locations) matching the name.
         """
         with JetBrainsPluginClient() as client:
@@ -65,6 +65,36 @@ class JetBrainsFindSymbolTool(Tool):
                 relative_path=relative_path,
                 depth=depth,
                 include_body=include_body,
+            )
+            result = json.dumps(response_dict)
+        return self._limit_length(result, max_answer_chars)
+
+
+class JetBrainsFindSymbolReferencesTool(Tool):
+    """
+    Finds symbols that reference the given symbol
+    """
+
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+    ) -> str:
+        """
+        Finds symbols that reference the symbol at the given `name_path`.
+        The result will contain metadata about the referencing symbols.
+
+        :param name_path: name path of the symbol for which to find references; matching logic as described in find symbol tool.
+        :param relative_path: the relative path to the file containing the symbol for which to find references.
+            Note that here you can't pass a directory but must pass a file.
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+        :return: a list of JSON objects with the symbols referencing the requested symbol
+        """
+        with JetBrainsPluginClient() as client:
+            response_dict = client.find_references(
+                name_path=name_path,
+                relative_path=relative_path,
             )
             result = json.dumps(response_dict)
         return self._limit_length(result, max_answer_chars)
