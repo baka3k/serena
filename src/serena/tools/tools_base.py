@@ -6,14 +6,10 @@ import inspect
 import json
 import os
 import platform
-import re
 import traceback
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from copy import copy
-from fnmatch import fnmatch
-from pathlib import Path
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self, TypeVar
 
@@ -24,8 +20,6 @@ from sensai.util.string import dict_string
 from serena.config.context_mode import SerenaAgentMode
 from serena.prompt_factory import PromptFactory
 from serena.symbol import SymbolManager
-from serena.text_utils import search_files
-from serena.util.file_system import scan_directory
 from serena.util.inspection import iter_subclasses
 from serena.util.shell import execute_shell_command
 from solidlsp import SolidLanguageServer
@@ -90,7 +84,7 @@ class Component(ABC):
         return self.agent.lines_read
 
 
-_DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
+TOOL_DEFAULT_MAX_ANSWER_LENGTH = int(2e5)
 
 
 class ToolMarkerCanEdit:
@@ -309,146 +303,12 @@ class RestartLanguageServerTool(Tool):
         return SUCCESS_RESULT
 
 
-class ReadFileTool(Tool):
-    """
-    Reads a file within the project directory.
-    """
-
-    def apply(
-        self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH
-    ) -> str:
-        """
-        Reads the given file or a chunk of it. Generally, symbolic operations
-        like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
-        Reading the entire file is only recommended if there is no other way to get the content required for the task.
-
-        :param relative_path: the relative path to the file to read
-        :param start_line: the 0-based index of the first line to be retrieved.
-        :param end_line: the 0-based index of the last line to be retrieved (inclusive). If None, read until the end of the file.
-        :param max_answer_chars: if the file (chunk) is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
-        :return: the full text of the file at the given relative path
-        """
-        self.agent.validate_relative_path(relative_path)
-
-        result = self.language_server.retrieve_full_file_content(relative_path)
-        result_lines = result.splitlines()
-        if end_line is None:
-            result_lines = result_lines[start_line:]
-        else:
-            self.lines_read.add_lines_read(relative_path, (start_line, end_line))
-            result_lines = result_lines[start_line : end_line + 1]
-        result = "\n".join(result_lines)
-
-        return self._limit_length(result, max_answer_chars)
-
-
-class CreateTextFileTool(Tool, ToolMarkerCanEdit):
-    """
-    Creates/overwrites a file in the project directory.
-    """
-
-    def apply(self, relative_path: str, content: str) -> str:
-        """
-        Write a new file (or overwrite an existing file). For existing files, it is strongly recommended
-        to use symbolic operations like replace_symbol_body or insert_after_symbol/insert_before_symbol, if possible.
-        You can also use insert_at_line to insert content at a specific line for existing files if the symbolic operations
-        are not the right choice for what you want to do.
-
-        If ever used on an existing file, the content has to be the complete content of that file (so it
-        may never end with something like "The remaining content of the file is left unchanged.").
-        For operations that just replace a part of a file, use the replace_lines or the symbolic editing tools instead.
-
-        :param relative_path: the relative path to the file to create
-        :param content: the (utf-8-encoded) content to write to the file
-        :return: a message indicating success or failure
-        """
-        self.agent.validate_relative_path(relative_path)
-
-        abs_path = (Path(self.get_project_root()) / relative_path).resolve()
-        will_overwrite_existing = abs_path.exists()
-
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding="utf-8")
-        answer = f"File created: {relative_path}."
-        if will_overwrite_existing:
-            answer += " Overwrote existing file."
-        return answer
-
-
-class ListDirTool(Tool):
-    """
-    Lists files and directories in the given directory (optionally with recursion).
-    """
-
-    def apply(self, relative_path: str, recursive: bool, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
-        """
-        Lists all non-gitignored files and directories in the given directory (optionally with recursion).
-
-        :param relative_path: the relative path to the directory to list; pass "." to scan the project root
-        :param recursive: whether to scan subdirectories recursively
-        :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task.
-        :return: a JSON object with the names of directories and files within the given directory
-        """
-        self.agent.validate_relative_path(relative_path)
-
-        dirs, files = scan_directory(
-            os.path.join(self.get_project_root(), relative_path),
-            relative_to=self.get_project_root(),
-            recursive=recursive,
-            is_ignored_dir=self.agent.path_is_gitignored,
-            is_ignored_file=self.agent.path_is_gitignored,
-        )
-
-        result = json.dumps({"dirs": dirs, "files": files})
-        return self._limit_length(result, max_answer_chars)
-
-
-class FindFileTool(Tool):
-    """
-    Finds files in the given relative paths
-    """
-
-    def apply(self, file_mask: str, relative_path: str) -> str:
-        """
-        Finds non-gitignored files matching the given file mask within the given relative path
-
-        :param file_mask: the filename or file mask (using the wildcards * or ?) to search for
-        :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
-        :return: a JSON object with the list of matching files
-        """
-        self.agent.validate_relative_path(relative_path)
-
-        dir_to_scan = os.path.join(self.get_project_root(), relative_path)
-
-        # find the files by ignoring everything that doesn't match
-        def is_ignored_file(abs_path: str) -> bool:
-            if self.agent.path_is_gitignored(abs_path):
-                return True
-            filename = os.path.basename(abs_path)
-            return not fnmatch(filename, file_mask)
-
-        dirs, files = scan_directory(
-            path=dir_to_scan,
-            recursive=True,
-            is_ignored_dir=self.agent.path_is_gitignored,
-            is_ignored_file=is_ignored_file,
-            relative_to=self.get_project_root(),
-        )
-
-        result = json.dumps({"files": files})
-        return result
-
-
 class GetSymbolsOverviewTool(Tool):
     """
     Gets an overview of the top-level symbols defined in a given file or directory.
     """
 
-    def apply(self, relative_path: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, relative_path: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Gets an overview of the given file or directory.
         For each analyzed file, we list the top-level symbols in the file (name_path, kind).
@@ -487,7 +347,7 @@ class FindSymbolTool(Tool):
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
         substring_matching: bool = False,
-        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
         Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given `name_path`,
@@ -563,7 +423,7 @@ class FindReferencingSymbolsTool(Tool):
         relative_path: str,
         include_kinds: list[int] | None = None,
         exclude_kinds: list[int] | None = None,
-        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
         Finds symbols that reference the symbol at the given `name_path`. The result will contain metadata about the referencing symbols
@@ -728,139 +588,6 @@ class EditedFileContext:
             # If they do not, we may have to add a call to notify it.
 
 
-class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
-    """
-    Replaces content in a file by using regular expressions.
-    """
-
-    def apply(
-        self,
-        relative_path: str,
-        regex: str,
-        repl: str,
-        allow_multiple_occurrences: bool = False,
-    ) -> str:
-        r"""
-        Replaces one or more occurrences of the given regular expression.
-        This is the preferred way to replace content in a file whenever the symbol-level
-        tools are not appropriate.
-        Even large sections of code can be replaced by providing a concise regular expression of
-        the form "beginning.*?end-of-text-to-be-replaced".
-        Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
-        especially if it spans several lines.
-
-        IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
-
-        :param relative_path: the relative path to the file
-        :param regex: a Python-style regular expression, matches of which will be replaced.
-            Dot matches all characters, multi-line matching is enabled.
-        :param repl: the string to replace the matched content with, which may contain
-            backreferences like \1, \2, etc.
-        :param allow_multiple_occurrences: if True, the regex may match multiple occurrences in the file
-            and all of them will be replaced.
-            If this is set to False and the regex matches multiple occurrences, an error will be returned
-            (and you may retry with a revised, more specific regex).
-        """
-        self.agent.validate_relative_path(relative_path)
-        with EditedFileContext(relative_path, self.agent) as context:
-            original_content = context.get_original_content()
-            updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
-            if n == 0:
-                return f"Error: No matches found for regex '{regex}' in file '{relative_path}'."
-            if not allow_multiple_occurrences and n > 1:
-                return (
-                    f"Error: Regex '{regex}' matches {n} occurrences in file '{relative_path}'. "
-                    "Please revise the regex to be more specific or enable allow_multiple_occurrences if this is expected."
-                )
-            context.set_updated_content(updated_content)
-        return SUCCESS_RESULT
-
-
-class DeleteLinesTool(Tool, ToolMarkerCanEdit):
-    """
-    Deletes a range of lines within a file.
-    """
-
-    def apply(
-        self,
-        relative_path: str,
-        start_line: int,
-        end_line: int,
-    ) -> str:
-        """
-        Deletes the given lines in the file.
-        Requires that the same range of lines was previously read using the `read_file` tool to verify correctness
-        of the operation.
-
-        :param relative_path: the relative path to the file
-        :param start_line: the 0-based index of the first line to be deleted
-        :param end_line: the 0-based index of the last line to be deleted
-        """
-        if not self.lines_read.were_lines_read(relative_path, (start_line, end_line)):
-            read_lines_tool = self.agent.get_tool(ReadFileTool)
-            return f"Error: Must call `{read_lines_tool.get_name_from_cls()}` first to read exactly the affected lines."
-        self.symbol_manager.delete_lines(relative_path, start_line, end_line)
-        return SUCCESS_RESULT
-
-
-class ReplaceLinesTool(Tool, ToolMarkerCanEdit):
-    """
-    Replaces a range of lines within a file with new content.
-    """
-
-    def apply(
-        self,
-        relative_path: str,
-        start_line: int,
-        end_line: int,
-        content: str,
-    ) -> str:
-        """
-        Replaces the given range of lines in the given file.
-        Requires that the same range of lines was previously read using the `read_file` tool to verify correctness
-        of the operation.
-
-        :param relative_path: the relative path to the file
-        :param start_line: the 0-based index of the first line to be deleted
-        :param end_line: the 0-based index of the last line to be deleted
-        :param content: the content to insert
-        """
-        if not content.endswith("\n"):
-            content += "\n"
-        result = self.agent.get_tool(DeleteLinesTool).apply(relative_path, start_line, end_line)
-        if result != SUCCESS_RESULT:
-            return result
-        self.agent.get_tool(InsertAtLineTool).apply(relative_path, start_line, content)
-        return SUCCESS_RESULT
-
-
-class InsertAtLineTool(Tool, ToolMarkerCanEdit):
-    """
-    Inserts content at a given line in a file.
-    """
-
-    def apply(
-        self,
-        relative_path: str,
-        line: int,
-        content: str,
-    ) -> str:
-        """
-        Inserts the given content at the given line in the file, pushing existing content of the line down.
-        In general, symbolic insert operations like insert_after_symbol or insert_before_symbol should be preferred if you know which
-        symbol you are looking for.
-        However, this can also be useful for small targeted edits of the body of a longer symbol (without replacing the entire body).
-
-        :param relative_path: the relative path to the file
-        :param line: the 0-based index of the line to insert content at
-        :param content: the content to be inserted
-        """
-        if not content.endswith("\n"):
-            content += "\n"
-        self.symbol_manager.insert_at_line(relative_path, line, content)
-        return SUCCESS_RESULT
-
-
 class CheckOnboardingPerformedTool(Tool):
     """
     Checks whether project onboarding was already performed.
@@ -910,7 +637,7 @@ class WriteMemoryTool(Tool):
     Writes a named memory (for future reference) to Serena's project-specific memory store.
     """
 
-    def apply(self, memory_name: str, content: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, memory_name: str, content: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Write some information about this project that can be useful for future tasks to a memory.
         Use markdown formatting for the content.
@@ -935,7 +662,7 @@ class ReadMemoryTool(Tool):
     Reads the memory with the given name from Serena's project-specific memory store.
     """
 
-    def apply(self, memory_file_name: str, max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH) -> str:
+    def apply(self, memory_file_name: str, max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH) -> str:
         """
         Read the content of a memory file. This tool should only be used if the information
         is relevant to the current task. You can infer whether the information
@@ -1039,114 +766,6 @@ class PrepareForNewConversationTool(Tool):
         return self.prompt_factory.create_prepare_for_new_conversation()
 
 
-class SearchForPatternTool(Tool):
-    """
-    Performs a search for a pattern in the project.
-    """
-
-    def apply(
-        self,
-        substring_pattern: str,
-        context_lines_before: int = 0,
-        context_lines_after: int = 0,
-        paths_include_glob: str | None = None,
-        paths_exclude_glob: str | None = None,
-        relative_path: str = "",
-        restrict_search_to_code_files: bool = False,
-        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
-    ) -> str:
-        """
-        Offers a flexible search for arbitrary patterns in the codebase, including the
-        possibility to search in non-code files.
-        Generally, symbolic operations like find_symbol or find_referencing_symbols
-        should be preferred if you know which symbols you are looking for.
-
-        Pattern Matching Logic:
-            For each match, the returned result will contain the full lines where the
-            substring pattern is found, as well as optionally some lines before and after it. The pattern will be compiled with
-            DOTALL, meaning that the dot will match all characters including newlines.
-            This also means that it never makes sense to have .* at the beginning or end of the pattern,
-            but it may make sense to have it in the middle for complex patterns.
-            If a pattern matches multiple lines, all those lines will be part of the match.
-            Be careful to not use greedy quantifiers unnecessarily, it is usually better to use non-greedy quantifiers like .*? to avoid
-            matching too much content.
-
-        File Selection Logic:
-            The files in which the search is performed can be restricted very flexibly.
-            Using `restrict_search_to_code_files` is useful if you are only interested in code symbols (i.e., those
-            symbols that can be manipulated with symbolic tools like find_symbol).
-            You can also restrict the search to a specific file or directory,
-            and provide glob patterns to include or exclude certain files on top of that.
-            The globs are matched against relative file paths from the project root (not to the `relative_path` parameter that
-            is used to further restrict the search).
-            Smartly combining the various restrictions allows you to perform very targeted searches.
-
-
-        :param substring_pattern: Regular expression for a substring pattern to search for
-        :param context_lines_before: Number of lines of context to include before each match
-        :param context_lines_after: Number of lines of context to include after each match
-        :param paths_include_glob: optional glob pattern specifying files to include in the search.
-            Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
-            Only matches files, not directories.
-        :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
-            Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
-            Takes precedence over paths_include_glob. Only matches files, not directories.
-        :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
-            file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
-        :param max_answer_chars: if the output is longer than this number of characters,
-            no content will be returned. Don't adjust unless there is really no other way to get the content
-            required for the task. Instead, if the output is too long, you should
-            make a stricter query.
-        :param restrict_search_to_code_files: whether to restrict the search to only those files where
-            analyzed code symbols can be found. Otherwise, will search all non-ignored files.
-            Set this to True if your search is only meant to discover code that can be manipulated with symbolic tools.
-            For example, for finding classes or methods from a name pattern.
-            Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
-            which is why it is the default.
-        :return: A JSON object mapping file paths to lists of matched consecutive lines (with context, if requested).
-        """
-        abs_path = os.path.join(self.get_project_root(), relative_path)
-        if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
-
-        if restrict_search_to_code_files:
-            matches = self.language_server.search_files_for_pattern(
-                pattern=substring_pattern,
-                relative_path=relative_path,
-                context_lines_before=context_lines_before,
-                context_lines_after=context_lines_after,
-                paths_include_glob=paths_include_glob,
-                paths_exclude_glob=paths_exclude_glob,
-            )
-        else:
-            if os.path.isfile(abs_path):
-                rel_paths_to_search = [relative_path]
-            else:
-                dirs, rel_paths_to_search = scan_directory(
-                    path=abs_path,
-                    recursive=True,
-                    is_ignored_dir=self.agent.path_is_gitignored,
-                    is_ignored_file=self.agent.path_is_gitignored,
-                    relative_to=self.get_project_root(),
-                )
-            # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
-            #   but it probably never matters and this version required no further refactoring
-            matches = search_files(
-                rel_paths_to_search,
-                substring_pattern,
-                root_path=self.get_project_root(),
-                paths_include_glob=paths_include_glob,
-                paths_exclude_glob=paths_exclude_glob,
-            )
-        # group matches by file
-        file_to_matches: dict[str, list[str]] = defaultdict(list)
-        for match in matches:
-            assert match.source_file_path is not None
-            file_to_matches[match.source_file_path].append(match.to_display_string())
-        result = json.dumps(file_to_matches)
-        return self._limit_length(result, max_answer_chars)
-
-
 class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
     """
     Executes a shell command.
@@ -1157,7 +776,7 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
         command: str,
         cwd: str | None = None,
         capture_stderr: bool = True,
-        max_answer_chars: int = _DEFAULT_MAX_ANSWER_LENGTH,
+        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
         Execute a shell command and return its output.
@@ -1286,52 +905,51 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
         return self.agent.create_system_prompt()
 
 
-def _iter_tool_classes(same_module_only: bool = True) -> Generator[type[Tool], None, None]:
-    """
-    Iterate over Tool subclasses.
-
-    :param same_module_only: Whether to only iterate over tools defined in the same module as the Tool class
-        or over all subclasses of Tool.
-    """
-    for tool_class in iter_subclasses(Tool):
-        if same_module_only and tool_class.__module__ != Tool.__module__:
-            continue
-        yield tool_class
-
-
-_TOOL_REGISTRY_DICT: dict[str, type[Tool]] = {tool_class.get_name_from_cls(): tool_class for tool_class in _iter_tool_classes()}
-"""maps tool name to the corresponding tool class"""
-
-
 class ToolRegistry:
+    _tool_dict: dict[str, type[Tool]] | None = None
+    """maps tool name to the corresponding tool class"""
+
     @staticmethod
-    def get_tool_class_by_name(tool_name: str) -> type[Tool]:
+    def _iter_tool_classes() -> Generator[type[Tool], None, None]:
+        """
+        Iterate over Tool subclasses.
+        """
+        yield from iter_subclasses(Tool)
+
+    @classmethod
+    def _get_tool_dict(cls) -> dict[str, type[Tool]]:
+        if cls._tool_dict is None:
+            cls._tool_dict = {tool_class.get_name_from_cls(): tool_class for tool_class in cls._iter_tool_classes()}
+        return cls._tool_dict
+
+    @classmethod
+    def get_tool_class_by_name(cls, tool_name: str) -> type[Tool]:
         try:
-            return _TOOL_REGISTRY_DICT[tool_name]
+            return cls._get_tool_dict()[tool_name]
         except KeyError as e:
             available_tools = "\n".join(ToolRegistry.get_tool_names())
             raise ValueError(f"Tool with name {tool_name} not found. Available tools:\n{available_tools}") from e
 
-    @staticmethod
-    def get_all_tool_classes() -> list[type[Tool]]:
-        return list(_TOOL_REGISTRY_DICT.values())
+    @classmethod
+    def get_all_tool_classes(cls) -> list[type[Tool]]:
+        return list(cls._get_tool_dict().values())
 
-    @staticmethod
-    def get_tool_names() -> list[str]:
-        return list(_TOOL_REGISTRY_DICT.keys())
+    @classmethod
+    def get_tool_names(cls) -> list[str]:
+        return list(cls._get_tool_dict().keys())
 
-    @staticmethod
-    def tool_dict() -> dict[str, type[Tool]]:
+    @classmethod
+    def tool_dict(cls) -> dict[str, type[Tool]]:
         """Maps tool name to the corresponding tool class"""
-        return copy(_TOOL_REGISTRY_DICT)
+        return copy(cls._get_tool_dict())
 
-    @staticmethod
-    def print_tool_overview(tools: Iterable[type[Tool] | Tool] | None = None) -> None:
+    @classmethod
+    def print_tool_overview(cls, tools: Iterable[type[Tool] | Tool] | None = None) -> None:
         """
         Print a summary of the tools. If no tools are passed, a summary of all tools is printed.
         """
         if tools is None:
-            tools = _TOOL_REGISTRY_DICT.values()
+            tools = cls._get_tool_dict().values()
 
         tool_dict: dict[str, type[Tool] | Tool] = {}
         for tool_class in tools:
