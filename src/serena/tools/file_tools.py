@@ -1,5 +1,9 @@
 """
-The Serena Model Context Protocol (MCP) Server
+File and file system-related tools, specifically for
+  * listing directory contents
+  * reading files
+  * creating files
+  * editing at the file level
 """
 
 import json
