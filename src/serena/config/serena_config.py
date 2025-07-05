@@ -228,6 +228,7 @@ class SerenaConfig:
                 old_config_path = os.path.join(REPO_ROOT, cls.CONFIG_FILE)
                 if os.path.exists(old_config_path):
                     log.info(f"Moving Serena configuration file from {old_config_path} to {config_path}")
+                    os.makedirs(os.path.dirname(config_path), exist_ok=True)
                     shutil.move(old_config_path, config_path)
 
             return config_path
