@@ -23,7 +23,7 @@ from sensai.util.logging import LogTime
 
 from serena import serena_version
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import Project, SerenaConfig, get_serena_managed_dir
+from serena.config.serena_config import Project, SerenaConfig, ToolSet, get_serena_managed_dir
 from serena.constants import (
     SERENA_LOG_FORMAT,
 )
@@ -234,13 +234,13 @@ class SerenaAgent:
         self._context = context
 
         # instantiate all tool classes
-        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
+        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry().get_all_tool_classes()}
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
 
-        # determine the set exposed tools (which e.g. the MCP shall see), limited by the context
-        # (which is fixed for the session)
-        excluded_tool_classes = set(self._context.get_excluded_tool_classes())
-        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if tc not in excluded_tool_classes}
+        # determine the set exposed tools (which e.g. the MCP shall see), limited by the Serena config
+        # as well as the context (which is fixed for the session)
+        tool_set = ToolSet().apply(self.serena_config, self._context)
+        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if tool_set.includes_name(t.get_name())}
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
@@ -408,42 +408,20 @@ class SerenaAgent:
     def _update_active_tools(self) -> None:
         """
         Update the active tools based on context, modes, and project configuration.
-        All tool exclusions are merged together.
         """
-        excluded_tool_classes: set[type[Tool]] = set()
-        # modes
-        for mode in self._modes:
-            mode_excluded_tool_classes = mode.get_excluded_tool_classes()
-            if len(mode_excluded_tool_classes) > 0:
-                log.info(
-                    f"Mode {mode.name} excluded {len(mode_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in mode_excluded_tool_classes])}"
-                )
-                excluded_tool_classes.update(mode_excluded_tool_classes)
-        # context
-        context_excluded_tool_classes = self._context.get_excluded_tool_classes()
-        if len(context_excluded_tool_classes) > 0:
-            log.info(
-                f"Context {self._context.name} excluded {len(context_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in context_excluded_tool_classes])}"
-            )
-            excluded_tool_classes.update(context_excluded_tool_classes)
-        # project config
+        tool_set = ToolSet().apply(self.serena_config, self._context, *self._modes)
         if self._active_project is not None:
-            project_excluded_tool_classes = self._active_project.project_config.get_excluded_tool_classes()
-            if len(project_excluded_tool_classes) > 0:
-                log.info(
-                    f"Project {self._active_project.project_name} excluded {len(project_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in project_excluded_tool_classes])}"
-                )
-                excluded_tool_classes.update(project_excluded_tool_classes)
+            tool_set.apply(self._active_project.project_config)
             if self._active_project.project_config.read_only:
-                for tool_class in self._all_tools:
-                    if tool_class.can_edit():
-                        excluded_tool_classes.add(tool_class)
+                tool_set.exclude_editing_tools()
 
         self._active_tools = {
-            tool_class: tool_instance for tool_class, tool_instance in self._all_tools.items() if tool_class not in excluded_tool_classes
+            tool_class: tool_instance
+            for tool_class, tool_instance in self._all_tools.items()
+            if tool_set.includes_name(tool_instance.get_name())
         }
 
-        log.info(f"Active tools after all exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+        log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
     def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
         """
@@ -648,7 +626,7 @@ class SerenaAgent:
         return self._all_tools[tool_class]  # type: ignore
 
     def print_tool_overview(self) -> None:
-        ToolRegistry.print_tool_overview(self._active_tools.values())
+        ToolRegistry().print_tool_overview(self._active_tools.values())
 
     def mark_file_modified(self, relativ_path: str) -> None:
         assert self.lines_read is not None

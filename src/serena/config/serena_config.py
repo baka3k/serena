@@ -4,6 +4,7 @@ The Serena Model Context Protocol (MCP) Server
 
 import os
 import shutil
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -22,7 +23,6 @@ from serena.constants import (
     SELENA_CONFIG_TEMPLATE_FILE,
     SERENA_MANAGED_DIR_NAME,
 )
-from serena.tools import Tool, ToolRegistry
 from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition
 from solidlsp.ls_config import Language
@@ -33,6 +33,53 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 DEFAULT_TOOL_TIMEOUT: float = 240
+
+
+class ToolSet:
+    def __init__(self) -> None:
+        from serena.tools import ToolRegistry
+
+        self._tool_names = set(ToolRegistry().get_tool_names_default_enabled())
+
+    def apply(self, *tool_inclusion_definitions: "ToolInclusionDefinition") -> Self:
+        from serena.tools import ToolRegistry
+
+        registry = ToolRegistry()
+        for definition in tool_inclusion_definitions:
+            for included_tool in definition.included_optional_tools:
+                if not registry.is_valid_tool_name(included_tool):
+                    raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
+                self._tool_names.add(included_tool)
+            for excluded_tool in definition.excluded_tools:
+                if not registry.is_valid_tool_name(excluded_tool):
+                    raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
+                if excluded_tool in self._tool_names:
+                    self._tool_names.remove(excluded_tool)
+        return self
+
+    def exclude_editing_tools(self) -> Self:
+        from serena.tools import ToolRegistry
+
+        registry = ToolRegistry()
+        for tool_name in list(self._tool_names):
+            if registry.get_tool_class_by_name(tool_name).can_edit():
+                self._tool_names.remove(tool_name)
+        return self
+
+    def get_tool_names(self) -> set[str]:
+        """
+        Returns the names of the tools that are currently included in the tool set.
+        """
+        return self._tool_names
+
+    def includes_name(self, tool_name: str) -> bool:
+        return tool_name in self._tool_names
+
+
+@dataclass
+class ToolInclusionDefinition:
+    excluded_tools: Iterable[str] = ()
+    included_optional_tools: Iterable[str] = ()
 
 
 class SerenaConfigError(Exception):
@@ -56,12 +103,11 @@ def is_running_in_docker() -> bool:
         return False
 
 
-@dataclass
-class ProjectConfig(ToStringMixin):
+@dataclass(kw_only=True)
+class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     project_name: str
     language: Language
     ignored_paths: list[str] = field(default_factory=list)
-    excluded_tools: set[str] = field(default_factory=set)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
@@ -123,7 +169,8 @@ class ProjectConfig(ToStringMixin):
             project_name=project_name,
             language=language,
             ignored_paths=data.get("ignored_paths", []),
-            excluded_tools=set(data.get("excluded_tools", [])),
+            excluded_tools=data.get("excluded_tools", []),
+            included_optional_tools=data.get("included_optional_tools", []),
             read_only=data.get("read_only", False),
             ignore_all_files_in_gitignore=data.get("ignore_all_files_in_gitignore", True),
             initial_prompt=data.get("initial_prompt", ""),
@@ -147,9 +194,6 @@ class ProjectConfig(ToStringMixin):
         if "project_name" not in yaml_data:
             yaml_data["project_name"] = project_root.name
         return cls._from_dict(yaml_data)
-
-    def get_excluded_tool_classes(self) -> set[type["Tool"]]:
-        return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
 
 
 @dataclass
@@ -178,7 +222,7 @@ class Project:
 
 
 @dataclass(kw_only=True)
-class SerenaConfig:
+class SerenaConfig(ToolInclusionDefinition):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
     (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
@@ -287,6 +331,8 @@ class SerenaConfig:
         instance.web_dashboard_open_on_launch = loaded_commented_yaml.get("web_dashboard_open_on_launch", True)
         instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
         instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)
+        instance.excluded_tools = loaded_commented_yaml.get("excluded_tools", [])
+        instance.included_optional_tools = loaded_commented_yaml.get("included_optional_tools", [])
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:
