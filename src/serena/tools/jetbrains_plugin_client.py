@@ -66,17 +66,18 @@ class JetBrainsPluginClient:
     def heartbeat(self) -> dict[str, Any]:
         return self._make_request("GET", "/heartbeat")
 
-    def find_symbol(self, name_path: str, include_body: bool = False, depth: int = 0) -> dict[str, Any]:
+    def find_symbol(self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0) -> dict[str, Any]:
         """
         Find symbols by name.
 
         :param name_path: the name path to match
+        :param relative_path: the relative path to which to restrict the search
         :param include_body: whether to include symbol body content
         :param depth: depth of children to include (0 = no children)
 
         :return: Dictionary containing 'symbols' list with matching symbols
         """
-        request_data = {"name": name_path, "includeBody": include_body, "depth": depth}
+        request_data = {"namePath": name_path, "relativePath": relative_path, "includeBody": include_body, "depth": depth}
 
         return self._make_request("POST", "/findSymbol", request_data)
 
