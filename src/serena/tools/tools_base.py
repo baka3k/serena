@@ -32,7 +32,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_types import SymbolKind
 
 if TYPE_CHECKING:
-    from .agent import LinesRead, MemoriesManager, SerenaAgent
+    from serena.agent import LinesRead, MemoriesManager, SerenaAgent
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
