@@ -16,8 +16,6 @@ import zipfile
 from pathlib import Path
 from typing import cast
 
-from .common import RuntimeDependency
-
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
@@ -28,6 +26,7 @@ from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
+from .common import RuntimeDependency
 
 # Runtime dependencies configuration
 RUNTIME_DEPENDENCIES = [

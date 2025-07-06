@@ -6,7 +6,6 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
 import threading
 from time import sleep
 
@@ -16,9 +15,10 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
@@ -33,7 +33,7 @@ else:
 
 # Conditionally import pwd module (Unix-only)
 if not PlatformUtils.get_platform_id().value.startswith("win"):
-    import pwd
+    pass
 
 
 class TypeScriptLanguageServer(SolidLanguageServer):

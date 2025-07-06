@@ -6,7 +6,6 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
 from time import sleep
 
 from overrides import override
@@ -15,9 +14,10 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import DefinitionParams, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
 class Intelephense(SolidLanguageServer):

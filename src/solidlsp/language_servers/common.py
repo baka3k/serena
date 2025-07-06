@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence, Dict
 
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -32,11 +32,7 @@ class RuntimeDependencyCollection:
         self._dependencies = list(dependencies)
 
     def for_platform(self, platform_id: str) -> list[RuntimeDependency]:
-        return [
-            d
-            for d in self._dependencies
-            if d.platform_id in (platform_id, "any", "platform-agnostic", None)
-        ]
+        return [d for d in self._dependencies if d.platform_id in (platform_id, "any", "platform-agnostic", None)]
 
     def for_current_platform(self) -> list[RuntimeDependency]:
         return self.for_platform(PlatformUtils.get_platform_id().value)
@@ -44,9 +40,7 @@ class RuntimeDependencyCollection:
     def single_for_current_platform(self) -> RuntimeDependency:
         deps = self.for_current_platform()
         if len(deps) != 1:
-            raise RuntimeError(
-                f"Expected exactly one runtime dependency for {PlatformUtils.get_platform_id().value}, found {len(deps)}"
-            )
+            raise RuntimeError(f"Expected exactly one runtime dependency for {PlatformUtils.get_platform_id().value}, found {len(deps)}")
         return deps[0]
 
     def binary_path(self, target_dir: str) -> str:
@@ -55,13 +49,13 @@ class RuntimeDependencyCollection:
             return target_dir
         return os.path.join(target_dir, dep.binary_name)
 
-    def install(self, logger: LanguageServerLogger, target_dir: str) -> Dict[str, str]:
+    def install(self, logger: LanguageServerLogger, target_dir: str) -> dict[str, str]:
         """Install all dependencies for the current platform into *target_dir*.
 
         Returns a mapping from dependency id to the resolved binary path.
         """
         os.makedirs(target_dir, exist_ok=True)
-        results: Dict[str, str] = {}
+        results: dict[str, str] = {}
         for dep in self.for_current_platform():
             if dep.url:
                 self._install_from_url(dep, logger, target_dir)

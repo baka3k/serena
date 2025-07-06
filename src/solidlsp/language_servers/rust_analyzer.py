@@ -13,10 +13,10 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import FileUtils, PlatformUtils
-from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
 class RustAnalyzer(SolidLanguageServer):
@@ -50,8 +50,6 @@ class RustAnalyzer(SolidLanguageServer):
         """
         Setup runtime dependencies for rust_analyzer and return the command to start the server.
         """
-        platform_id = PlatformUtils.get_platform_id()
-
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
@@ -85,8 +83,6 @@ class RustAnalyzer(SolidLanguageServer):
         #     "linux-x64",
         #     "win-x64",
         # ], "Only linux-x64 and win-x64 platform is supported for in multilspy at the moment"
-
-        dependency = deps.single_for_current_platform()
 
         rustanalyzer_ls_dir = os.path.join(cls.ls_resources_dir(), "RustAnalyzer")
         rustanalyzer_executable_path = deps.binary_path(rustanalyzer_ls_dir)

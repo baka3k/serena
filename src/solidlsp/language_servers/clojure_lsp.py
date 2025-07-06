@@ -13,10 +13,10 @@ import threading
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import FileUtils, PlatformUtils
-from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
 def run_command(cmd: list, capture_output: bool = True) -> subprocess.CompletedProcess:

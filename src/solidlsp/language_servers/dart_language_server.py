@@ -5,9 +5,9 @@ import stat
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import FileUtils, PlatformUtils
-from .common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
 class DartLanguageServer(SolidLanguageServer):
@@ -30,8 +30,6 @@ class DartLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _setup_runtime_dependencies(cls, logger: "LanguageServerLogger") -> str:
-        platform_id = PlatformUtils.get_platform_id()
-
         deps = RuntimeDependencyCollection(
             [
                 RuntimeDependency(
