@@ -38,7 +38,7 @@ jobs:
           path: |
             ~/go/bin
             ~/.cache/go-build
-          key: go-binaries-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-gopls-latest
+          key: go-binaries-${{ runner.os }}-gopls-latest
       - name: Install gopls
         if: steps.cache-go-binaries.outputs.cache-hit != 'true'
         shell: bash
@@ -78,7 +78,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: src/solidlsp/language_servers/static
-          key: language-servers-${{ runner.os }}-${{ hashFiles('src/solidlsp/language_servers/static/**') }}
+          key: language-servers-${{ runner.os }}-v1
+          restore-keys: |
+            language-servers-${{ runner.os }}-
       - name: Create virtual environment
         shell: bash
         run: |
