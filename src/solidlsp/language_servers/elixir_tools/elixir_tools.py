@@ -35,24 +35,27 @@ class ElixirTools(SolidLanguageServer):
 
     def _is_next_ls_internal_file(self, abs_path: str) -> bool:
         """Check if an absolute path is a Next LS internal file that should be ignored."""
-        return any(pattern in abs_path for pattern in [
-            ".burrito",  # Next LS runtime directory
-            "next_ls_erts-",  # Next LS Erlang runtime  
-            "_next_ls_private_",  # Next LS private files
-            "/priv/monkey/",  # Next LS monkey patching directory
-        ])
+        return any(
+            pattern in abs_path
+            for pattern in [
+                ".burrito",  # Next LS runtime directory
+                "next_ls_erts-",  # Next LS Erlang runtime
+                "_next_ls_private_",  # Next LS private files
+                "/priv/monkey/",  # Next LS monkey patching directory
+            ]
+        )
 
     @override
     def _send_references_request(self, relative_file_path: str, line: int, column: int):
         """Override to filter out Next LS internal files from references."""
         from solidlsp.ls_utils import PathUtils
-        
+
         # Get the raw response from the parent implementation
         raw_response = super()._send_references_request(relative_file_path, line, column)
-        
+
         if raw_response is None:
             return None
-            
+
         # Filter out Next LS internal files
         filtered_response = []
         for item in raw_response:
@@ -62,7 +65,7 @@ class ElixirTools(SolidLanguageServer):
                     self.logger.log(f"Filtering out Next LS internal file: {abs_path}", logging.DEBUG)
                     continue
             filtered_response.append(item)
-            
+
         return filtered_response
 
     @staticmethod
@@ -87,7 +90,7 @@ class ElixirTools(SolidLanguageServer):
             raise RuntimeError(
                 "Elixir is not installed. Please install Elixir from https://elixir-lang.org/install.html and make sure it is added to your PATH."
             )
-        
+
         logger.log(f"Found Elixir: {elixir_version}", logging.INFO)
 
         platformId = PlatformUtils.get_platform_id()
@@ -101,17 +104,17 @@ class ElixirTools(SolidLanguageServer):
         # Map platform IDs to runtime dependency keys
         platform_mapping = {
             "linux-x64": "linux-x64",
-            "osx-x64": "darwin-x64", 
+            "osx-x64": "darwin-x64",
             "osx-arm64": "darwin-arm64",
             "darwin-x64": "darwin-x64",
-            "darwin-arm64": "darwin-arm64", 
-            "win-x64": "win-x64"
+            "darwin-arm64": "darwin-arm64",
+            "win-x64": "win-x64",
         }
 
         platform_key = platform_mapping.get(platformId.value)
         if not platform_key:
             raise RuntimeError(f"Unsupported platform for Next LS: {platformId.value}")
-        
+
         # Check for Windows and provide a helpful error message
         if platformId.value.startswith("win"):
             raise RuntimeError(
@@ -122,18 +125,18 @@ class ElixirTools(SolidLanguageServer):
         dependency = runtimeDependencies["next_ls"][platform_key]
         next_ls_dir = str(PurePath(os.path.abspath(os.path.dirname(__file__)), "static", dependency["relative_extraction_path"]))
         os.makedirs(next_ls_dir, exist_ok=True)
-        
+
         executable_path = str(PurePath(next_ls_dir, dependency["executable_name"]))
         binary_path = str(PurePath(next_ls_dir, dependency["binary_name"]))
 
         if not os.path.exists(executable_path):
             logger.log(f"Downloading Next LS binary from {dependency['url']}", logging.INFO)
             FileUtils.download_file(logger, dependency["url"], binary_path)
-            
+
             # Make the binary executable on Unix-like systems
             if not platformId.value.startswith("win"):
                 os.chmod(binary_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-            
+
             # Create a symlink or copy with the expected name
             if binary_path != executable_path:
                 if os.path.exists(executable_path):
@@ -141,13 +144,14 @@ class ElixirTools(SolidLanguageServer):
                 if platformId.value.startswith("win"):
                     # On Windows, copy the file
                     import shutil
+
                     shutil.copy2(binary_path, executable_path)
                 else:
                     # On Unix-like systems, create a symlink
                     os.symlink(os.path.basename(binary_path), executable_path)
 
         assert os.path.exists(executable_path), f"Next LS executable not found at {executable_path}"
-        
+
         logger.log(f"Next LS binary ready at: {executable_path}", logging.INFO)
         return executable_path
 
@@ -163,7 +167,7 @@ class ElixirTools(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
         self.request_id = 0
-        
+
         # Set generous timeout for Next LS which can be slow to initialize and respond
         self.set_request_timeout(180.0)  # 60 seconds for all environments
 
@@ -201,7 +205,7 @@ class ElixirTools(SolidLanguageServer):
             """Handle window/logMessage notifications from Next LS"""
             message_text = msg.get("message", "")
             self.logger.log(f"LSP: window/logMessage: {message_text}", logging.INFO)
-            
+
             # Check for the specific Next LS readiness signal
             # Based on Next LS source: "Runtime for folder #{name} is ready..."
             if "Runtime for folder" in message_text and "is ready..." in message_text:
@@ -214,11 +218,11 @@ class ElixirTools(SolidLanguageServer):
         def check_server_ready(params):
             """
             Handle $/progress notifications from Next LS.
-            Keep as fallback for error detection, but primary readiness detection 
+            Keep as fallback for error detection, but primary readiness detection
             is now done via window/logMessage handler.
             """
             value = params.get("value", {})
-            
+
             # Check for initialization completion progress (fallback signal)
             if value.get("kind") == "end":
                 message = value.get("message", "")
@@ -255,10 +259,10 @@ class ElixirTools(SolidLanguageServer):
 
         # Verify server capabilities - be more lenient with Next LS
         self.logger.log(f"Next LS capabilities: {list(init_response['capabilities'].keys())}", logging.INFO)
-        
+
         # Next LS may not provide all capabilities immediately, so we check for basic ones
         assert "textDocumentSync" in init_response["capabilities"], f"Missing textDocumentSync in {init_response['capabilities']}"
-        
+
         # Some capabilities might be optional or provided later
         if "completionProvider" not in init_response["capabilities"]:
             self.logger.log("Warning: completionProvider not available in initial capabilities", logging.WARNING)
@@ -272,10 +276,10 @@ class ElixirTools(SolidLanguageServer):
         # This is the authoritative signal that Next LS is truly ready for requests
         ready_timeout = 180.0
         self.logger.log(f"Waiting up to {ready_timeout} seconds for Next LS runtime readiness...", logging.INFO)
-        
+
         if self.server_ready.wait(timeout=ready_timeout):
             self.logger.log("Next LS is ready and available for requests", logging.INFO)
-            
+
             # Add a small settling period to ensure background indexing is complete
             # Next LS often continues compilation/indexing in background after ready signal
             settling_time = 120.0
@@ -285,4 +289,4 @@ class ElixirTools(SolidLanguageServer):
         else:
             error_msg = f"Next LS failed to initialize within {ready_timeout} seconds. This may indicate a problem with the Elixir installation, project compilation, or Next LS itself."
             self.logger.log(error_msg, logging.ERROR)
-            raise RuntimeError(error_msg) 
+            raise RuntimeError(error_msg)

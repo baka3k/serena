@@ -429,7 +429,12 @@ class Symbol(ToStringMixin):
         return result
 
     def to_dict(
-        self, kind: bool = False, location: bool = False, depth: int = 0, include_body: bool = False, include_children_body: bool = False,
+        self,
+        kind: bool = False,
+        location: bool = False,
+        depth: int = 0,
+        include_body: bool = False,
+        include_children_body: bool = False,
         include_relative_path=True,
     ) -> dict[str, Any]:
         """

@@ -6,19 +6,16 @@ like request_references using the test repository.
 """
 
 import os
+
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_utils import SymbolUtils
 
 from . import NEXTLS_UNAVAILABLE, NEXTLS_UNAVAILABLE_REASON
 
 # These marks will be applied to all tests in this module
-pytestmark = [
-    pytest.mark.elixir,
-    pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=f"Next LS not available: {NEXTLS_UNAVAILABLE_REASON}")
-]
+pytestmark = [pytest.mark.elixir, pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=f"Next LS not available: {NEXTLS_UNAVAILABLE_REASON}")]
 
 
 class TestElixirBasic:
@@ -29,7 +26,7 @@ class TestElixirBasic:
         """Test finding references to a function definition."""
         file_path = os.path.join("lib", "models.ex")
         symbols = language_server.request_document_symbols(file_path)
-        
+
         # Find the User module's 'new' function
         user_new_symbol = None
         for symbol in symbols[0]:  # Top level symbols
@@ -39,22 +36,18 @@ class TestElixirBasic:
                         user_new_symbol = child
                         break
                 break
-        
+
         if not user_new_symbol or "selectionRange" not in user_new_symbol:
             pytest.skip("User.new function or its selectionRange not found")
 
         sel_start = user_new_symbol["selectionRange"]["start"]
-        references = language_server.request_references(
-            file_path, sel_start["line"], sel_start["character"]
-        )
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         assert references is not None
         assert len(references) > 0
-        
+
         # Should find at least one reference (the definition itself)
-        found_definition = any(
-            ref["uri"].endswith("models.ex") for ref in references
-        )
+        found_definition = any(ref["uri"].endswith("models.ex") for ref in references)
         assert found_definition, "Should find the function definition"
 
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
@@ -62,7 +55,7 @@ class TestElixirBasic:
         """Test finding references to create_user function."""
         file_path = os.path.join("lib", "services.ex")
         symbols = language_server.request_document_symbols(file_path)
-        
+
         # Find the UserService module's 'create_user' function
         create_user_symbol = None
         for symbol in symbols[0]:  # Top level symbols
@@ -72,14 +65,12 @@ class TestElixirBasic:
                         create_user_symbol = child
                         break
                 break
-        
+
         if not create_user_symbol or "selectionRange" not in create_user_symbol:
             pytest.skip("UserService.create_user function or its selectionRange not found")
 
         sel_start = create_user_symbol["selectionRange"]["start"]
-        references = language_server.request_references(
-            file_path, sel_start["line"], sel_start["character"]
-        )
+        references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
 
         assert references is not None
         assert len(references) > 0
@@ -89,7 +80,7 @@ class TestElixirBasic:
         """Test finding symbols that reference a specific function."""
         file_path = os.path.join("lib", "models.ex")
         symbols = language_server.request_document_symbols(file_path)
-        
+
         # Find the User module's 'new' function
         user_new_symbol = None
         for symbol in symbols[0]:  # Top level symbols
@@ -99,14 +90,12 @@ class TestElixirBasic:
                         user_new_symbol = child
                         break
                 break
-        
+
         if not user_new_symbol or "selectionRange" not in user_new_symbol:
             pytest.skip("User.new function or its selectionRange not found")
 
         sel_start = user_new_symbol["selectionRange"]["start"]
-        referencing_symbols = language_server.request_referencing_symbols(
-            file_path, sel_start["line"], sel_start["character"]
-        )
+        referencing_symbols = language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
 
         assert referencing_symbols is not None
 
@@ -120,4 +109,4 @@ class TestElixirBasic:
         # Test multiple symbol requests in succession
         for _ in range(3):
             symbols = language_server.request_document_symbols("lib/services.ex")
-            assert symbols is not None 
+            assert symbols is not None

@@ -8,6 +8,7 @@ These tests focus on the following methods:
 """
 
 import os
+
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -17,10 +18,7 @@ from solidlsp.ls_types import SymbolKind
 from . import NEXTLS_UNAVAILABLE, NEXTLS_UNAVAILABLE_REASON
 
 # These marks will be applied to all tests in this module
-pytestmark = [
-    pytest.mark.elixir,
-    pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=f"Next LS not available: {NEXTLS_UNAVAILABLE_REASON}")
-]
+pytestmark = [pytest.mark.elixir, pytest.mark.skipif(NEXTLS_UNAVAILABLE, reason=f"Next LS not available: {NEXTLS_UNAVAILABLE_REASON}")]
 
 
 class TestElixirLanguageServerSymbols:
@@ -31,7 +29,7 @@ class TestElixirLanguageServerSymbols:
         """Test request_containing_symbol for a function."""
         # Test for a position inside the create_user function
         file_path = os.path.join("lib", "services.ex")
-        
+
         # Find the create_user function in the file
         content = language_server.retrieve_full_file_content(file_path)
         lines = content.split("\n")
@@ -40,7 +38,7 @@ class TestElixirLanguageServerSymbols:
             if "def create_user(" in line:
                 create_user_line = i + 2  # Go inside the function body
                 break
-                
+
         if create_user_line is None:
             pytest.skip("Could not find create_user function")
 
@@ -59,7 +57,7 @@ class TestElixirLanguageServerSymbols:
         """Test request_containing_symbol for a module."""
         # Test for a position inside the UserService module but outside any function
         file_path = os.path.join("lib", "services.ex")
-        
+
         # Find the UserService module definition
         content = language_server.retrieve_full_file_content(file_path)
         lines = content.split("\n")
@@ -68,7 +66,7 @@ class TestElixirLanguageServerSymbols:
             if "defmodule UserService do" in line:
                 user_service_line = i + 1  # Go inside the module
                 break
-                
+
         if user_service_line is None:
             pytest.skip("Could not find UserService module")
 
@@ -84,7 +82,7 @@ class TestElixirLanguageServerSymbols:
         """Test request_containing_symbol with nested scopes."""
         # Test for a position inside a function which is inside a module
         file_path = os.path.join("lib", "services.ex")
-        
+
         # Find a function inside UserService
         content = language_server.retrieve_full_file_content(file_path)
         lines = content.split("\n")
@@ -93,7 +91,7 @@ class TestElixirLanguageServerSymbols:
             if "def create_user(" in line:
                 function_body_line = i + 3  # Go deeper into the function body
                 break
-                
+
         if function_body_line is None:
             pytest.skip("Could not find function body")
 
@@ -116,29 +114,27 @@ class TestElixirLanguageServerSymbols:
         # This is acceptable behavior for module-level positions
         assert containing_symbol is None or containing_symbol == {} or "TestRepo.Services" in str(containing_symbol)
 
-
-
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_request_referencing_symbols_struct(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a struct."""
         # Test referencing symbols for User struct
         file_path = os.path.join("lib", "models.ex")
-        
+
         symbols = language_server.request_document_symbols(file_path)
         user_symbol = None
         for symbol_group in symbols:
             user_symbol = next((s for s in symbol_group if "User" in s.get("name", "")), None)
             if user_symbol:
                 break
-                
+
         if not user_symbol or "selectionRange" not in user_symbol:
             pytest.skip("User symbol or its selectionRange not found")
-            
+
         sel_start = user_symbol["selectionRange"]["start"]
         ref_symbols = [
             ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
         ]
-        
+
         if ref_symbols:
             services_references = [
                 symbol
@@ -175,7 +171,7 @@ class TestElixirLanguageServerSymbols:
             if "User.new(" in line:
                 user_new_call_line = i
                 break
-                
+
         if user_new_call_line is None:
             pytest.skip("Could not find User.new call")
 
@@ -199,7 +195,7 @@ class TestElixirLanguageServerSymbols:
             if "alias TestRepo.Models.{User" in line:
                 user_usage_line = i
                 break
-                
+
         if user_usage_line is None:
             pytest.skip("Could not find User struct usage")
 
@@ -210,9 +206,9 @@ class TestElixirLanguageServerSymbols:
 
     @pytest.mark.xfail(
         reason="Known intermittent bug in Next LS v0.23.3: Protocol.UndefinedError for :timeout atom. "
-               "Occurs in CI environments but may pass locally. "
-               "See https://github.com/elixir-tools/next-ls/issues/543",
-        strict=False
+        "Occurs in CI environments but may pass locally. "
+        "See https://github.com/elixir-tools/next-ls/issues/543",
+        strict=False,
     )
     @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
@@ -229,7 +225,7 @@ class TestElixirLanguageServerSymbols:
     def test_symbol_methods_integration(self, language_server: SolidLanguageServer) -> None:
         """Test integration between different symbol methods."""
         file_path = os.path.join("lib", "models.ex")
-        
+
         # Find User struct definition
         content = language_server.retrieve_full_file_content(file_path)
         lines = content.split("\n")
@@ -238,20 +234,20 @@ class TestElixirLanguageServerSymbols:
             if "defmodule User do" in line:
                 user_struct_line = i
                 break
-                
+
         if user_struct_line is None:
             pytest.skip("Could not find User struct")
 
         # Test containing symbol
         containing = language_server.request_containing_symbol(file_path, user_struct_line + 5, 10)
-        
+
         if containing:
             # Test that we can find references to this symbol
             if "location" in containing and "range" in containing["location"]:
                 start_pos = containing["location"]["range"]["start"]
-                refs = [ref.symbol for ref in language_server.request_referencing_symbols(
-                    file_path, start_pos["line"], start_pos["character"]
-                )]
+                refs = [
+                    ref.symbol for ref in language_server.request_referencing_symbols(file_path, start_pos["line"], start_pos["character"])
+                ]
                 # We should find some references or none (both are valid outcomes)
                 assert isinstance(refs, list)
 
@@ -259,21 +255,21 @@ class TestElixirLanguageServerSymbols:
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol tree structure is correctly built."""
         symbol_tree = language_server.request_full_symbol_tree()
-        
+
         # Should get a tree structure
         assert len(symbol_tree) > 0
-        
+
         # Should have our test repository structure
         root = symbol_tree[0]
         assert "children" in root
-        
+
         # Look for lib directory
         lib_dir = None
         for child in root["children"]:
             if child["name"] == "lib":
                 lib_dir = child
                 break
-                
+
         if lib_dir:
             # Next LS returns module names instead of file names (e.g., 'services' instead of 'services.ex')
             file_names = [child["name"] for child in lib_dir.get("children", [])]
@@ -285,14 +281,14 @@ class TestElixirLanguageServerSymbols:
     def test_request_dir_overview(self, language_server: SolidLanguageServer) -> None:
         """Test request_dir_overview functionality."""
         lib_overview = language_server.request_dir_overview("lib")
-        
+
         # Should get an overview of the lib directory
         assert lib_overview is not None
         # Next LS returns keys like 'lib/services.ex' instead of just 'lib'
-        overview_keys = list(lib_overview.keys()) if hasattr(lib_overview, 'keys') else []
-        lib_files = [key for key in overview_keys if key.startswith('lib/')]
+        overview_keys = list(lib_overview.keys()) if hasattr(lib_overview, "keys") else []
+        lib_files = [key for key in overview_keys if key.startswith("lib/")]
         assert len(lib_files) > 0, f"Expected to find lib/ files in overview keys: {overview_keys}"
-        
+
         # Should contain information about our modules
         overview_text = str(lib_overview).lower()
         expected_terms = ["models", "services", "user", "item"]
@@ -309,10 +305,10 @@ class TestElixirLanguageServerSymbols:
     #     #
     #     file_path = os.path.join("lib", "models.ex")
     #     doc_overview = language_server.request_document_overview(file_path)
-    #     
+    #
     #     # Should get an overview of the models.ex file
     #     assert doc_overview is not None
-    #     
+    #
     #     # Should contain information about our structs and functions
     #     overview_text = str(doc_overview).lower()
     #     expected_terms = ["user", "item", "order", "struct", "defmodule"]
@@ -323,7 +319,7 @@ class TestElixirLanguageServerSymbols:
     def test_containing_symbol_of_module_attribute(self, language_server: SolidLanguageServer) -> None:
         """Test containing symbol for module attributes."""
         file_path = os.path.join("lib", "models.ex")
-        
+
         # Find a module attribute like @type or @doc
         content = language_server.retrieve_full_file_content(file_path)
         lines = content.split("\n")
@@ -332,15 +328,15 @@ class TestElixirLanguageServerSymbols:
             if line.strip().startswith("@type") or line.strip().startswith("@doc"):
                 attribute_line = i
                 break
-                
+
         if attribute_line is None:
             pytest.skip("Could not find module attribute")
 
         containing_symbol = language_server.request_containing_symbol(file_path, attribute_line, 5)
-        
+
         if containing_symbol:
             # Should be contained within a module
             assert "name" in containing_symbol
             # The containing symbol should be a module
             expected_names = ["User", "Item", "Order", "TestRepo.Models"]
-            assert any(name in containing_symbol["name"] for name in expected_names) 
+            assert any(name in containing_symbol["name"] for name in expected_names)
