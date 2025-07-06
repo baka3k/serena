@@ -161,11 +161,16 @@ class SolidLanguageServer(ABC):
             ls = CSharpLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.TYPESCRIPT:
-            from solidlsp.language_servers.typescript_language_server import (
-                TypeScriptLanguageServer,
-            )
+            # Original TypeScript Language Server implementation (commented out)
+            # from solidlsp.language_servers.typescript_language_server import (
+            #     TypeScriptLanguageServer,
+            # )
+            # ls = TypeScriptLanguageServer(config, logger, repository_root_path)
 
-            ls = TypeScriptLanguageServer(config, logger, repository_root_path)
+            # New VTS Language Server implementation
+            from solidlsp.language_servers.vts_language_server import VtsLanguageServer
+
+            ls = VtsLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.GO:
             from solidlsp.language_servers.gopls import Gopls
