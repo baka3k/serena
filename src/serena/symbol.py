@@ -189,8 +189,11 @@ class SymbolLocation:
         if self.relative_path is not None:
             self.relative_path = self.relative_path.replace("/", os.path.sep)
 
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    def to_dict(self, include_relative_path: bool = True) -> dict[str, Any]:
+        result = asdict(self)
+        if not include_relative_path:
+            result.pop("relative_path", None)
+        return result
 
     def has_position_in_file(self) -> bool:
         return self.relative_path is not None and self.line is not None and self.column is not None
@@ -426,7 +429,13 @@ class Symbol(ToStringMixin):
         return result
 
     def to_dict(
-        self, kind: bool = False, location: bool = False, depth: int = 0, include_body: bool = False, include_children_body: bool = False
+        self,
+        kind: bool = False,
+        location: bool = False,
+        depth: int = 0,
+        include_body: bool = False,
+        include_children_body: bool = False,
+        include_relative_path=True,
     ) -> dict[str, Any]:
         """
         Converts the symbol to a dictionary.
@@ -439,6 +448,8 @@ class Symbol(ToStringMixin):
             Note that the body of the children is part of the body of the parent symbol,
             so there is usually no need to set this to True unless you want process the output
             and pass the children without passing the parent body to the LM.
+        :param include_relative_path: whether to include the relative path of the symbol in the location
+            entry. Relative paths of the symbol's children are always excluded.
         :return: a dictionary representation of the symbol
         """
         result: dict[str, Any] = {"name": self.name, "name_path": self.get_name_path()}
@@ -447,7 +458,7 @@ class Symbol(ToStringMixin):
             result["kind"] = self.kind
 
         if location:
-            result["location"] = self.location.to_dict()
+            result["location"] = self.location.to_dict(include_relative_path=include_relative_path)
             body_start_line, body_end_line = self.get_body_line_numbers()
             result["body_location"] = {"start_line": body_start_line, "end_line": body_end_line}
 
@@ -466,6 +477,8 @@ class Symbol(ToStringMixin):
                         depth=depth - 1,
                         include_body=include_children_body,
                         include_children_body=include_children_body,
+                        # all children have the same relative path as the parent
+                        include_relative_path=False,
                     )
                 )
             return children

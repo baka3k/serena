@@ -104,7 +104,7 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 # Uses PYTEST_MARKERS env var for default markers
 # For custom markers, one can either adjust the env var or just use -m option in the command line,
 # as the second -m option will override the first one.
-test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust and not isolated_process}\""
+test = "pytest test -vv -m \"${PYTEST_MARKERS:-not java and not rust}\""
 _black_check = "black --check src scripts test"
 _ruff_check = "ruff check src scripts test"
 _black_format = "black src scripts test"
@@ -224,6 +224,7 @@ ignore = [
   "TID252",   # forbids relative imports
   "B904",     # forces use of raise from other_exception
   "RUF012",   # forbids mutable attributes as ClassVar
+  "SIM117",   # forbids nested with statements
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]
@@ -246,8 +247,9 @@ markers = [
   "typescript: language server running for TypeScript",
   "php: language server running for PHP",
   "csharp: language server running for C#",
+  "elixir: language server running for Elixir",
+  "terraform: language server running for Terraform",
   "snapshot: snapshot tests for symbolic editing operations",
-  "isolated_process: test runs with process isolated agent",
 ]
 
 [tool.codespell]
