@@ -2,12 +2,10 @@
 Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
 """
 
-import json
 import logging
 import os
 import pathlib
 import shutil
-import subprocess
 import threading
 from time import sleep
 
@@ -19,6 +17,8 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
@@ -33,7 +33,7 @@ else:
 
 # Conditionally import pwd module (Unix-only)
 if not PlatformUtils.get_platform_id().value.startswith("win"):
-    import pwd
+    pass
 
 
 class TypeScriptLanguageServer(SolidLanguageServer):
@@ -45,7 +45,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         """
         Creates a TypeScriptLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        ts_lsp_executable_path = self.setup_runtime_dependencies(logger, config)
+        ts_lsp_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
             logger,
@@ -65,9 +65,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "coverage",
         ]
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for TypeScript Language Server.
+        Setup runtime dependencies for TypeScript Language Server and return the command to start the server.
         """
         platform_id = PlatformUtils.get_platform_id()
 
@@ -82,12 +83,23 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
 
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
-            d = json.load(f)
-            del d["_description"]
-
-        runtime_dependencies = d.get("runtimeDependencies", [])
-        tsserver_ls_dir = os.path.join(os.path.dirname(__file__), "static", "ts-lsp")
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="typescript",
+                    description="typescript package",
+                    command="npm install --prefix ./ typescript@5.5.4",
+                    platform_id="any",
+                ),
+                RuntimeDependency(
+                    id="typescript-language-server",
+                    description="typescript-language-server package",
+                    command="npm install --prefix ./ typescript-language-server@4.3.3",
+                    platform_id="any",
+                ),
+            ]
+        )
+        tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "typescript-language-server")
 
         # Verify both node and npm are installed
@@ -99,29 +111,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # Install typescript and typescript-language-server if not already installed
         if not os.path.exists(tsserver_ls_dir):
             os.makedirs(tsserver_ls_dir, exist_ok=True)
-            for dependency in runtime_dependencies:
-                # Windows doesn't support the 'user' parameter and doesn't have pwd module
-                if PlatformUtils.get_platform_id().value.startswith("win"):
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        cwd=tsserver_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                else:
-                    # On Unix-like systems, run as non-root user
-                    user = pwd.getpwuid(os.getuid()).pw_name
-                    subprocess.run(
-                        dependency["command"],
-                        shell=True,
-                        check=True,
-                        user=user,
-                        cwd=tsserver_ls_dir,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
+            deps.install(logger, tsserver_ls_dir)
 
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
@@ -130,29 +120,46 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         ), "typescript-language-server executable not found. Please install typescript-language-server and try again."
         return f"{tsserver_executable_path} --stdio"
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the TypeScript Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
-            d = json.load(f)
-
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {"dynamicRegistration": True},
+                    "codeAction": {"dynamicRegistration": True},
+                },
+                "workspace": {
+                    "workspaceFolders": True,
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "symbol": {"dynamicRegistration": True},
+                },
+            },
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": os.path.basename(repository_absolute_path),
+                }
+            ],
+        }
+        return initialize_params
 
     def _start_server(self):
         """

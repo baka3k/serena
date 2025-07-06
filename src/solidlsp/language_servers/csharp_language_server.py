@@ -8,11 +8,11 @@ import os
 import platform
 import shutil
 import stat
+import subprocess
 import tarfile
 import threading
 import urllib.request
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -26,21 +26,7 @@ from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
-
-@dataclass
-class RuntimeDependency:
-    """Represents a runtime dependency for the C# language server."""
-
-    id: str
-    description: str
-    platform_id: str
-    archive_type: str
-    binary_name: str
-    package_name: str | None = None
-    package_version: str | None = None
-    extract_path: str | None = None
-    url: str | None = None
-
+from .common import RuntimeDependency
 
 # Runtime dependencies configuration
 RUNTIME_DEPENDENCIES = [
@@ -194,13 +180,13 @@ class CSharpLanguageServer(SolidLanguageServer):
         Creates a CSharpLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        dotnet_path, language_server_path, cache_dir = self._ensure_server_installed(logger, config)
+        dotnet_path, language_server_path = self._ensure_server_installed(logger, config)
 
         # Find solution or project file
         solution_or_project = find_solution_or_project_file(repository_root_path)
 
         # Create log directory
-        log_dir = cache_dir / "logs"
+        log_dir = Path(self.ls_resources_dir()) / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # Build command using dotnet directly
@@ -228,30 +214,21 @@ class CSharpLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
 
-    def _ensure_server_installed(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str, Path]:
+    @classmethod
+    def _ensure_server_installed(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
         """
         Ensure .NET runtime and Microsoft.CodeAnalysis.LanguageServer are available.
-        Returns a tuple of (dotnet_path, language_server_dll_path, cache_dir).
+        Returns a tuple of (dotnet_path, language_server_dll_path).
         """
-        # Determine platform runtime ID
-        runtime_id = self._get_runtime_id()
+        runtime_id = CSharpLanguageServer._get_runtime_id()
+        lang_server_dep, dotnet_runtime_dep = CSharpLanguageServer._get_runtime_dependencies(runtime_id)
+        dotnet_path = CSharpLanguageServer._ensure_dotnet_runtime(logger, dotnet_runtime_dep)
+        server_dll_path = CSharpLanguageServer._ensure_language_server(logger, lang_server_dep)
 
-        # Set up cache directory
-        cache_dir = Path.home() / ".cache" / "serena" / "language-servers" / "csharp"
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        return dotnet_path, server_dll_path
 
-        # Get runtime dependencies for this platform
-        lang_server_dep, dotnet_runtime_dep = self._get_runtime_dependencies(runtime_id)
-
-        # Ensure .NET runtime is available
-        dotnet_path = self._ensure_dotnet_runtime(logger, cache_dir, dotnet_runtime_dep)
-
-        # Ensure language server is available
-        server_dll_path = self._ensure_language_server(logger, cache_dir, lang_server_dep)
-
-        return dotnet_path, server_dll_path, cache_dir
-
-    def _get_runtime_id(self) -> str:
+    @staticmethod
+    def _get_runtime_id() -> str:
         """Determine the runtime ID based on the platform."""
         system = platform.system().lower()
         machine = platform.machine().lower()
@@ -265,7 +242,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         else:
             raise LanguageServerException(f"Unsupported platform: {system} {machine}")
 
-    def _get_runtime_dependencies(self, runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
+    @staticmethod
+    def _get_runtime_dependencies(runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
         """Get the language server and .NET runtime dependencies for the platform."""
         lang_server_dep = None
         dotnet_runtime_dep = None
@@ -283,15 +261,14 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         return lang_server_dep, dotnet_runtime_dep
 
-    def _ensure_dotnet_runtime(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
+    @staticmethod
+    def _ensure_dotnet_runtime(logger: LanguageServerLogger, runtime_dep: RuntimeDependency) -> str:
         """Ensure .NET runtime is available and return the dotnet executable path."""
-        # Check if dotnet is already available in system
+        # Check if dotnet is already available on the system
         system_dotnet = shutil.which("dotnet")
         if system_dotnet:
             # Check if it's .NET 9
             try:
-                import subprocess
-
                 result = subprocess.run([system_dotnet, "--list-runtimes"], capture_output=True, text=True, check=True)
                 if "Microsoft.NETCore.App 9." in result.stdout:
                     logger.log("Found system .NET 9 runtime", logging.INFO)
@@ -300,14 +277,15 @@ class CSharpLanguageServer(SolidLanguageServer):
                 pass
 
         # Download .NET 9 runtime using config
-        return self._ensure_dotnet_runtime_from_config(logger, cache_dir, runtime_dep)
+        return CSharpLanguageServer._ensure_dotnet_runtime_from_config(logger, runtime_dep)
 
-    def _ensure_language_server(self, logger: LanguageServerLogger, cache_dir: Path, lang_server_dep: RuntimeDependency) -> str:
+    @classmethod
+    def _ensure_language_server(cls, logger: LanguageServerLogger, lang_server_dep: RuntimeDependency) -> str:
         """Ensure language server is available and return the DLL path."""
         package_name = lang_server_dep.package_name
         package_version = lang_server_dep.package_version
 
-        server_dir = cache_dir / f"{package_name}.{package_version}"
+        server_dir = Path(cls.ls_resources_dir()) / f"{package_name}.{package_version}"
         server_dll = server_dir / lang_server_dep.binary_name
 
         if server_dll.exists():
@@ -316,10 +294,10 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Download and install the language server
         logger.log(f"Downloading {package_name} version {package_version}...", logging.INFO)
-        package_path = self._download_nuget_package_direct(logger, package_name, package_version, cache_dir)
+        package_path = CSharpLanguageServer._download_nuget_package_direct(logger, package_name, package_version)
 
         # Extract and install
-        self._extract_language_server(lang_server_dep, package_path, server_dir)
+        CSharpLanguageServer._extract_language_server(lang_server_dep, package_path, server_dir)
 
         if not server_dll.exists():
             raise LanguageServerException("Microsoft.CodeAnalysis.LanguageServer.dll not found after extraction")
@@ -331,7 +309,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
         return str(server_dll)
 
-    def _extract_language_server(self, lang_server_dep: RuntimeDependency, package_path: Path, server_dir: Path) -> None:
+    @staticmethod
+    def _extract_language_server(lang_server_dep: RuntimeDependency, package_path: Path, server_dir: Path) -> None:
         """Extract language server files from downloaded package."""
         extract_path = lang_server_dep.extract_path or "lib/net9.0"
         source_dir = package_path / extract_path
@@ -353,9 +332,8 @@ class CSharpLanguageServer(SolidLanguageServer):
         server_dir.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source_dir, server_dir, dirs_exist_ok=True)
 
-    def _download_nuget_package_direct(
-        self, logger: LanguageServerLogger, package_name: str, package_version: str, cache_dir: Path
-    ) -> Path:
+    @classmethod
+    def _download_nuget_package_direct(cls, logger: LanguageServerLogger, package_name: str, package_version: str) -> Path:
         """
         Download a NuGet package directly from the Azure NuGet feed.
         Returns the path to the extracted package directory.
@@ -363,7 +341,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         azure_feed_url = "https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-impl/nuget/v3/index.json"
 
         # Create temporary directory for package download
-        temp_dir = cache_dir / "temp_downloads"
+        temp_dir = Path(cls.ls_resources_dir()) / "temp_downloads"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -411,18 +389,17 @@ class CSharpLanguageServer(SolidLanguageServer):
                 f"Failed to download package {package_name} version {package_version} from Azure NuGet feed: {e}"
             ) from e
 
-    def _ensure_dotnet_runtime_from_config(self, logger: LanguageServerLogger, cache_dir: Path, runtime_dep: RuntimeDependency) -> str:
+    @classmethod
+    def _ensure_dotnet_runtime_from_config(cls, logger: LanguageServerLogger, runtime_dep: RuntimeDependency) -> str:
         """
         Ensure .NET 9 runtime is available using runtime dependency configuration.
         Returns the path to the dotnet executable.
         """
-        # Check if dotnet is already available in system
+        # Check if dotnet is already available on the system
         system_dotnet = shutil.which("dotnet")
         if system_dotnet:
             # Check if it's .NET 9
             try:
-                import subprocess
-
                 result = subprocess.run([system_dotnet, "--list-runtimes"], capture_output=True, text=True, check=True)
                 if "Microsoft.NETCore.App 9." in result.stdout:
                     logger.log("Found system .NET 9 runtime", logging.INFO)
@@ -431,7 +408,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                 pass
 
         # Download .NET 9 runtime using config
-        dotnet_dir = cache_dir / "dotnet-runtime-9.0"
+        dotnet_dir = Path(cls.ls_resources_dir()) / "dotnet-runtime-9.0"
         dotnet_exe = dotnet_dir / runtime_dep.binary_name
 
         if dotnet_exe.exists():
@@ -499,9 +476,7 @@ class CSharpLanguageServer(SolidLanguageServer):
                         "didChangeWatchedFiles": {"dynamicRegistration": True},
                         "symbol": {
                             "dynamicRegistration": True,
-                            "symbolKind": {
-                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                            },
+                            "symbolKind": {"valueSet": list(range(1, 27))},
                         },
                         "executeCommand": {"dynamicRegistration": True},
                         "configuration": True,
@@ -510,20 +485,6 @@ class CSharpLanguageServer(SolidLanguageServer):
                     },
                     "textDocument": {
                         "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
-                        "completion": {
-                            "dynamicRegistration": True,
-                            "contextSupport": True,
-                            "completionItem": {
-                                "snippetSupport": True,
-                                "commitCharactersSupport": True,
-                                "documentationFormat": ["markdown", "plaintext"],
-                                "deprecatedSupport": True,
-                                "preselectSupport": True,
-                            },
-                            "completionItemKind": {
-                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-                            },
-                        },
                         "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                         "signatureHelp": {
                             "dynamicRegistration": True,
@@ -534,38 +495,11 @@ class CSharpLanguageServer(SolidLanguageServer):
                         },
                         "definition": {"dynamicRegistration": True},
                         "references": {"dynamicRegistration": True},
-                        "documentHighlight": {"dynamicRegistration": True},
                         "documentSymbol": {
                             "dynamicRegistration": True,
-                            "symbolKind": {
-                                "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
-                            },
+                            "symbolKind": {"valueSet": list(range(1, 27))},
                             "hierarchicalDocumentSymbolSupport": True,
                         },
-                        "codeAction": {
-                            "dynamicRegistration": True,
-                            "codeActionLiteralSupport": {
-                                "codeActionKind": {
-                                    "valueSet": [
-                                        "",
-                                        "quickfix",
-                                        "refactor",
-                                        "refactor.extract",
-                                        "refactor.inline",
-                                        "refactor.rewrite",
-                                        "source",
-                                        "source.organizeImports",
-                                    ]
-                                }
-                            },
-                        },
-                        "codeLens": {"dynamicRegistration": True},
-                        "formatting": {"dynamicRegistration": True},
-                        "rangeFormatting": {"dynamicRegistration": True},
-                        "onTypeFormatting": {"dynamicRegistration": True},
-                        "rename": {"dynamicRegistration": True},
-                        "publishDiagnostics": {"relatedInformation": True},
-                        "foldingRange": {"dynamicRegistration": True, "rangeLimit": 5000, "lineFoldingOnly": True},
                     },
                 },
             },

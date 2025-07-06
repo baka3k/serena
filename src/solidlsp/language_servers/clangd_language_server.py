@@ -2,7 +2,6 @@
 Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
 """
 
-import json
 import logging
 import os
 import pathlib
@@ -12,9 +11,10 @@ import threading
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+
+from .common import RuntimeDependency, RuntimeDependencyCollection
 
 
 class ClangdLanguageServer(SolidLanguageServer):
@@ -28,7 +28,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clangd_executable_path = self.setup_runtime_dependencies(logger, config)
+        clangd_executable_path = self._setup_runtime_dependencies(logger, config)
         super().__init__(
             config,
             logger,
@@ -41,42 +41,49 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
 
-    def setup_runtime_dependencies(self, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @staticmethod
+    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """
-        Setup runtime dependencies for ClangdLanguageServer.
+        Setup runtime dependencies for ClangdLanguageServer and return the command to start the server.
         """
-        platform_id = PlatformUtils.get_platform_id()
-
-        with open(os.path.join(os.path.dirname(__file__), "runtime_dependencies.json")) as f:
-            d = json.load(f)
-            del d["_description"]
-
-        assert platform_id.value in [
-            "linux-x64",
-            "win-x64",
-            "osx-arm64",
-        ], (
-            "Unsupported platform: " + platform_id.value
+        deps = RuntimeDependencyCollection(
+            [
+                RuntimeDependency(
+                    id="Clangd",
+                    description="Clangd for Linux (x64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-linux-19.1.2.zip",
+                    platform_id="linux-x64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd",
+                ),
+                RuntimeDependency(
+                    id="Clangd",
+                    description="Clangd for Windows (x64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-windows-19.1.2.zip",
+                    platform_id="win-x64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd.exe",
+                ),
+                RuntimeDependency(
+                    id="Clangd",
+                    description="Clangd for macOS (Arm64)",
+                    url="https://github.com/clangd/clangd/releases/download/19.1.2/clangd-mac-19.1.2.zip",
+                    platform_id="osx-arm64",
+                    archive_type="zip",
+                    binary_name="clangd_19.1.2/bin/clangd",
+                ),
+            ]
         )
 
-        runtime_dependencies = d["runtimeDependencies"]
-        runtime_dependencies = [dependency for dependency in runtime_dependencies if dependency["platformId"] == platform_id.value]
-        assert len(runtime_dependencies) == 1
-        # Select dependency matching the current platform
-        dependency = next((dep for dep in runtime_dependencies if dep["platformId"] == platform_id.value), None)
-        if dependency is None:
-            raise RuntimeError(f"No runtime dependency found for platform {platform_id.value}")
-
         clangd_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clangd")
-        clangd_executable_path = os.path.join(clangd_ls_dir, "clangd_19.1.2", "bin", dependency["binaryName"])
+        dep = deps.single_for_current_platform()
+        clangd_executable_path = deps.binary_path(clangd_ls_dir)
         if not os.path.exists(clangd_executable_path):
-            clangd_url = dependency["url"]
-            logger.log(f"Clangd executable not found at {clangd_executable_path}. Downloading from {clangd_url}", logging.INFO)
-            os.makedirs(clangd_ls_dir, exist_ok=True)
-            if dependency["archiveType"] == "zip":
-                FileUtils.download_and_extract_archive(logger, clangd_url, clangd_ls_dir, dependency["archiveType"])
-            else:
-                raise RuntimeError(f"Unsupported archive type: {dependency['archiveType']}")
+            logger.log(
+                f"Clangd executable not found at {clangd_executable_path}. Downloading from {dep.url}",
+                logging.INFO,
+            )
+            deps.install(logger, clangd_ls_dir)
         if not os.path.exists(clangd_executable_path):
             raise FileNotFoundError(
                 f"Clangd executable not found at {clangd_executable_path}.\n"
@@ -86,29 +93,34 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         return clangd_executable_path
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    @staticmethod
+    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the clangd Language Server.
         """
-        with open(os.path.join(os.path.dirname(__file__), "initialize_params.json")) as f:
-            d = json.load(f)
+        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        initialize_params = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
+                    "definition": {"dynamicRegistration": True},
+                },
+                "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+            },
+            "processId": os.getpid(),
+            "rootPath": repository_absolute_path,
+            "rootUri": root_uri,
+            "workspaceFolders": [
+                {
+                    "uri": root_uri,
+                    "name": "$name",
+                }
+            ],
+        }
 
-        del d["_description"]
-
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
-
-        return d
+        return initialize_params
 
     def _start_server(self):
         """
