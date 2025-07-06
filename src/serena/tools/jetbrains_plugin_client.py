@@ -3,9 +3,11 @@ Client for the Serena JetBrains Plugin
 """
 
 import json
-from typing import Any, Optional, Self
+from typing import Any, Optional, Self, TypeVar
 
 import requests
+
+T = TypeVar("T")
 
 
 class SerenaClientError(Exception):
@@ -49,7 +51,7 @@ class JetBrainsPluginClient:
 
             # Try to parse JSON response
             try:
-                return response.json()
+                return self._pythonify_response(response.json())
             except json.JSONDecodeError:
                 # If response is not JSON, return raw text
                 return {"response": response.text}
@@ -62,6 +64,25 @@ class JetBrainsPluginClient:
             raise APIError(f"API request failed with status {response.status_code}: {response.text}")
         except requests.exceptions.RequestException as e:
             raise SerenaClientError(f"Request failed: {e}")
+
+    @staticmethod
+    def _pythonify_response(response: T) -> T:
+        """
+        Converts dictionary keys from camelCase to snake_case recursively.
+
+        :response: the response in which to convert keys (dictionary or list)
+        """
+        to_snake_case = lambda s: "".join(["_" + c.lower() if c.isupper() else c for c in s])
+
+        def convert(x):
+            if isinstance(x, dict):
+                return {to_snake_case(k): convert(v) for k, v in x.items()}
+            elif isinstance(x, list):
+                return [convert(item) for item in x]
+            else:
+                return x
+
+        return convert(response)
 
     def heartbeat(self) -> dict[str, Any]:
         return self._make_request("GET", "/heartbeat")
@@ -127,5 +148,5 @@ if __name__ == "__main__":
         # find references
         if symbols:
             first_symbol = symbols[0]
-            refs_response = client.find_references(name_path=first_symbol["namePath"], relative_path=first_symbol["relativePath"])
+            refs_response = client.find_references(name_path=first_symbol["name_path"], relative_path=first_symbol["relative_path"])
             pprint(refs_response)
