@@ -6,6 +6,8 @@ prompt: |
 excluded_tools:
   - find_symbol
   - find_referencing_symbols
+  - get_symbols_overview
 included_optional_tools:
   - jet_brains_find_symbol
   - jet_brains_find_symbol_references
+  - jet_brains_get_symbols_overview

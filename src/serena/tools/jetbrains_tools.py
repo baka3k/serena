@@ -98,3 +98,29 @@ class JetBrainsFindSymbolReferencesTool(Tool, ToolMarkerOptional):
             )
             result = json.dumps(response_dict)
         return self._limit_length(result, max_answer_chars)
+
+
+class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerOptional):
+    """
+    Retrieves an overview of the top-level symbols within a specified file
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
+    ) -> str:
+        """
+        Gets an overview of the top-level symbols in the given file.
+        Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
+
+        :param relative_path: the relative path to the file to get the overview of
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+        :return: a JSON object containing the symbols
+        """
+        with JetBrainsPluginClient() as client:
+            response_dict = client.get_symbols_overview(
+                relative_path=relative_path,
+            )
+            result = json.dumps(response_dict)
+        return self._limit_length(result, max_answer_chars)

@@ -99,7 +99,6 @@ class JetBrainsPluginClient:
         :return: Dictionary containing 'symbols' list with matching symbols
         """
         request_data = {"namePath": name_path, "relativePath": relative_path, "includeBody": include_body, "depth": depth}
-
         return self._make_request("POST", "/findSymbol", request_data)
 
     def find_references(self, name_path: str, relative_path: str) -> dict[str, Any]:
@@ -111,8 +110,14 @@ class JetBrainsPluginClient:
         :return: dictionary containing 'symbols' list with symbol references
         """
         request_data = {"namePath": name_path, "relativePath": relative_path}
-
         return self._make_request("POST", "/findReferences", request_data)
+
+    def get_symbols_overview(self, relative_path: str) -> dict[str, Any]:
+        """
+        :param relative_path: the relative path to a source file
+        """
+        request_data = {"relativePath": relative_path}
+        return self._make_request("POST", "/getSymbolsOverview", request_data)
 
     def is_service_available(self) -> bool:
         try:
