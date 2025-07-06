@@ -14,7 +14,6 @@ jobs:
   cpu:
     name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    if: "!contains(github.event.head_commit.message, 'ci skip')"
     strategy:
       fail-fast: false
       matrix:
@@ -32,9 +31,25 @@ jobs:
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
+      - name: Cache Go binaries
+        id: cache-go-binaries
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/bin
+            ~/.cache/go-build
+          key: go-binaries-${{ runner.os }}-gopls-latest
       - name: Install gopls
+        if: steps.cache-go-binaries.outputs.cache-hit != 'true'
         shell: bash
         run: go install golang.org/x/tools/gopls@latest
+      - name: Set up Elixir
+        if: runner.os != 'Windows'
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.18.4'
+          otp-version: '26.1'
+
       - name: Prepare java
         uses: actions/setup-java@v3
         with:
@@ -44,6 +59,11 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+          terraform_wrapper: false
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -53,6 +73,14 @@ jobs:
         with:
           path: .venv
           key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+      - name: Cache language servers
+        id: cache-language-servers
+        uses: actions/cache@v3
+        with:
+          path: src/solidlsp/language_servers/static
+          key: language-servers-${{ runner.os }}-v1
+          restore-keys: |
+            language-servers-${{ runner.os }}-
       - name: Create virtual environment
         shell: bash
         run: |

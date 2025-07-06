@@ -204,6 +204,7 @@ pylint.html
 # dynamic LS installations
 /src/multilspy/language_servers/*/static
 /src/solidlsp/language_servers/*/static
+/src/solidlsp/language_servers/static
 
 # clojure-lsp temporary files
 .calva/
@@ -221,3 +222,8 @@ tmp/
 
 # Claude settings
 .claude/settings.local.json
+
+# Elixir
+/test/resources/repos/elixir/test_repo/deps
+# Exception: Don't ignore Elixir test repository lib directory (contains source code)
+!/test/resources/repos/elixir/test_repo/lib

@@ -1,4 +1,4 @@
-from serena.config import SerenaAgentContext, SerenaAgentMode
+from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 
 if __name__ == "__main__":
     print("---------- Available modes: ----------")

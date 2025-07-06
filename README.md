@@ -73,6 +73,7 @@ With Serena, we provide
      * Rust
      * C# (requires dotnet to be installed. We switched the underlying language server recently, please report any issues you encounter)
      * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
+     * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
      * Clojure
      * C/C++ (You may experience issues with finding references, we are working on it)
  * indirect support (may require some code changes/manual installation) for:
@@ -201,9 +202,15 @@ This and other settings can be adjusted in the [configuration](#configuration) a
    git clone https://github.com/oraios/serena
    cd serena
    ```
-2. Optionally create a config file from the template and adjust it according to your preferences.
+2. Optionally create the configuration file in your home directory, i.e.
+
+      * `~/.serena/serena_config.yml` on Linux and macOS, or
+      * `%USERPROFILE%\.serena\serena_config.yml` on Windows.  
+
+   by copying the template and then adjusting it according to your needs:   
    ```shell
-   cp src/serena/resources/serena_config.template.yml serena_config.yml
+   mkdir ~/.serena
+   cp src/serena/resources/serena_config.template.yml ~/.serena/serena_config.yml
    ```
    If you just want the default config, you can skip this part, and a config file will be created when you first run Serena.
 3. Run the server with `uv`:
@@ -279,7 +286,9 @@ Run with parameter `--help` to get a list of available options.
 
 Serena's behavior (active tools and prompts as well as logging configuration, etc.) is configured in four places:
 
-1. The `serena_config.yml` for general settings that apply to all clients and projects
+1. The `serena_config.yml` for general settings that apply to all clients and projects.
+   It is located in your user directory under `.serena/serena_config.yml`.
+   If you do not explicitly create the file, it will be auto-generated when you first run Serena.
 2. In the arguments passed to the `serena-mcp-server` in your client's config (see below), 
    which will apply to all sessions started by the respective client. In particular, the [context](#contexts) parameter
    should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
@@ -346,7 +355,8 @@ claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-
 ```
 
 ℹ️ Once in Claude Code, you should ask Claude to "Read the initial instructions" as your first prompt, such that it will receive information
-on how to use Serena's tools.
+on how to use Serena's tools. Provide this prompt whenever you start a new conversation and perhaps even after a compacting operation,
+such that Claude is correctly primed to use Serena's tools at all times.
 
 
 ### Claude Desktop

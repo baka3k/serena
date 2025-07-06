@@ -90,6 +90,17 @@ class SolidLanguageServer(ABC):
         return dirname.startswith(".")
 
     @classmethod
+    def ls_resources_dir(cls, mkdir: bool = True) -> str:
+        """
+        Returns the directory where the language server resources are downloaded.
+        This is used to store language server binaries, configuration files, etc.
+        """
+        result = os.path.join(os.path.dirname(__file__), "language_servers", "static", cls.__name__)
+        if mkdir:
+            os.makedirs(result, exist_ok=True)
+        return result
+
+    @classmethod
     def create(
         cls, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, timeout: float | None = None
     ) -> "SolidLanguageServer":
@@ -108,28 +119,32 @@ class SolidLanguageServer(ABC):
         ls: SolidLanguageServer
 
         if config.code_language == Language.PYTHON:
-            from solidlsp.language_servers.pyright_language_server.pyright_server import (
+            # We can also use jedi
+            # from solidlsp.language_servers.jedi_server import JediServer
+            #
+            # ls = JediServer(config, logger, repository_root_path)
+            from solidlsp.language_servers.pyright_server import (
                 PyrightServer,
             )
 
             ls = PyrightServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.JAVA:
-            from solidlsp.language_servers.eclipse_jdtls.eclipse_jdtls import (
+            from solidlsp.language_servers.eclipse_jdtls import (
                 EclipseJDTLS,
             )
 
             ls = EclipseJDTLS(config, logger, repository_root_path)
 
         elif config.code_language == Language.KOTLIN:
-            from solidlsp.language_servers.kotlin_language_server.kotlin_language_server import (
+            from solidlsp.language_servers.kotlin_language_server import (
                 KotlinLanguageServer,
             )
 
             ls = KotlinLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.RUST:
-            from solidlsp.language_servers.rust_analyzer.rust_analyzer import (
+            from solidlsp.language_servers.rust_analyzer import (
                 RustAnalyzer,
             )
 
@@ -141,46 +156,56 @@ class SolidLanguageServer(ABC):
             # from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
             # ls = OmniSharp(config, logger, repository_root_path)
 
-            from solidlsp.language_servers.csharp_language_server.csharp_language_server import CSharpLanguageServer
+            from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
 
             ls = CSharpLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.TYPESCRIPT:
-            from solidlsp.language_servers.typescript_language_server.typescript_language_server import (
+            from solidlsp.language_servers.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
 
             ls = TypeScriptLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.GO:
-            from solidlsp.language_servers.gopls.gopls import Gopls
+            from solidlsp.language_servers.gopls import Gopls
 
             ls = Gopls(config, logger, repository_root_path)
 
         elif config.code_language == Language.RUBY:
-            from solidlsp.language_servers.solargraph.solargraph import Solargraph
+            from solidlsp.language_servers.solargraph import Solargraph
 
             ls = Solargraph(config, logger, repository_root_path)
 
         elif config.code_language == Language.DART:
-            from solidlsp.language_servers.dart_language_server.dart_language_server import DartLanguageServer
+            from solidlsp.language_servers.dart_language_server import DartLanguageServer
 
             ls = DartLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CPP:
-            from solidlsp.language_servers.clangd_language_server.clangd_language_server import ClangdLanguageServer
+            from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
 
             ls = ClangdLanguageServer(config, logger, repository_root_path)
 
         elif config.code_language == Language.PHP:
-            from solidlsp.language_servers.intelephense.intelephense import Intelephense
+            from solidlsp.language_servers.intelephense import Intelephense
 
             ls = Intelephense(config, logger, repository_root_path)
 
         elif config.code_language == Language.CLOJURE:
-            from solidlsp.language_servers.clojure_lsp.clojure_lsp import ClojureLSP
+            from solidlsp.language_servers.clojure_lsp import ClojureLSP
 
             ls = ClojureLSP(config, logger, repository_root_path)
+
+        elif config.code_language == Language.ELIXIR:
+            from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
+
+            ls = ElixirTools(config, logger, repository_root_path)
+
+        elif config.code_language == Language.TERRAFORM:
+            from solidlsp.language_servers.terraform_ls import TerraformLS
+
+            ls = TerraformLS(config, logger, repository_root_path)
 
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
@@ -664,6 +689,14 @@ class SolidLanguageServer(ABC):
             assert LSPConstants.RANGE in item
 
             abs_path = PathUtils.uri_to_path(item[LSPConstants.URI])
+            if not Path(abs_path).is_relative_to(self.repository_root_path):
+                self.logger.log(
+                    "Found a reference in a path outside the repository, probably the LS is parsing things in installed packages or in the standardlib! "
+                    f"Path: {abs_path}. This is a bug but we currently simply skip these references.",
+                    logging.WARNING,
+                )
+                continue
+
             rel_path = Path(abs_path).relative_to(self.repository_root_path)
             if self.is_ignored_path(str(rel_path)):
                 self.logger.log(f"Ignoring reference in {rel_path} since it should be ignored", logging.DEBUG)

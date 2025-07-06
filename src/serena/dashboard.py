@@ -150,11 +150,8 @@ class SerenaDashboardAPI:
         if self._shutdown_callback:
             self._shutdown_callback()
         else:
-            # Try to use the global shutdown function from process_isolated_agent
-            from serena.process_isolated_agent import request_global_shutdown
-
-            request_global_shutdown()
             # noinspection PyProtectedMember
+            # noinspection PyUnresolvedReferences
             os._exit(0)
 
     @staticmethod
