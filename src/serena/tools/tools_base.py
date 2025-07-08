@@ -2,10 +2,10 @@ import inspect
 import os
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Generator, Iterable
 from copy import copy
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
@@ -96,6 +96,12 @@ class ToolInterface(ABC):
         ...
 
 
+class ApplyMethodProtocol(Protocol):
+    """Callable protocol for the apply method of a tool."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> str: pass
+
+
 class Tool(Component, ToolInterface):
     # NOTE: each tool should implement the apply method, which is then used in
     # the central method of the Tool class `apply_ex`.
@@ -119,7 +125,7 @@ class Tool(Component, ToolInterface):
     def get_name(self) -> str:
         return self.get_name_from_cls()
 
-    def get_apply_fn(self) -> Callable:
+    def get_apply_fn(self) -> ApplyMethodProtocol:
         apply_fn = getattr(self, "apply")
         if apply_fn is None:
             raise RuntimeError(f"apply not defined in {self}. Did you forget to implement it?")
