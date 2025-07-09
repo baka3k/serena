@@ -498,7 +498,7 @@ class Symbol(AbstractSymbol, ToStringMixin):
         depth: int = 0,
         include_body: bool = False,
         include_children_body: bool = False,
-        include_relative_path=True,
+        include_relative_path: bool = True,
     ) -> dict[str, Any]:
         """
         Converts the symbol to a dictionary.
