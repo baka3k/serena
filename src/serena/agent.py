@@ -361,6 +361,12 @@ class SerenaAgent:
         future = self.issue_task(task)
         return future.result()
 
+    def is_using_language_server(self) -> bool:
+        """
+        :return: whether this agent uses language server-based code analysis
+        """
+        return not self.serena_config.jetbrains
+
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
         self._active_project = project
@@ -376,8 +382,9 @@ class SerenaAgent:
                 self.reset_language_server()
                 assert self.language_server is not None
 
-        # initialize the language server in the background
-        self.issue_task(init_language_server)
+        # initialize the language server in the background (if in language server mode)
+        if self.is_using_language_server():
+            self.issue_task(init_language_server)
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()

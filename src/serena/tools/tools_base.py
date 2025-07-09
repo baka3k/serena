@@ -46,6 +46,8 @@ class Component(ABC):
         return self.agent.memories_manager
 
     def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
+        if not self.agent.is_using_language_server():
+            raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
         language_server = self.agent.language_server
         assert language_server is not None
         return LanguageServerSymbolRetriever(language_server, agent=self.agent)
@@ -57,10 +59,10 @@ class Component(ABC):
     def create_code_editor(self) -> "CodeEditor":
         from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
 
-        if self.agent.serena_config.jetbrains:
-            return JetBrainsCodeEditor(project=self.project, agent=self.agent)
-        else:
+        if self.agent.is_using_language_server():
             return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
+        else:
+            return JetBrainsCodeEditor(project=self.project, agent=self.agent)
 
     @property
     def lines_read(self) -> "LinesRead":
@@ -223,7 +225,7 @@ class Tool(Component):
                             "Error: No active project. Ask to user to select a project from this list: "
                             + f"{self.agent.serena_config.project_names}"
                         )
-                    if not self.agent.is_language_server_running():
+                    if self.agent.is_using_language_server() and not self.agent.is_language_server_running():
                         log.info("Language server is not running. Starting it ...")
                         self.agent.reset_language_server()
 
