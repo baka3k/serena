@@ -709,10 +709,6 @@ class SymbolManager:
 
         return [ReferenceInSymbol.from_lsp_reference(r) for r in references]
 
-    def _get_code_file_content(self, relative_path: str) -> str:
-        """Get the content of a file using the language server."""
-        return self._lang_server.language_server.retrieve_full_file_content(relative_path)
-
     @dataclass
     class SymbolOverviewElement:
         name_path: str
