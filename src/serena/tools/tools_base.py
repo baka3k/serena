@@ -19,6 +19,7 @@ from solidlsp import SolidLanguageServer
 
 if TYPE_CHECKING:
     from serena.agent import LinesRead, MemoriesManager, SerenaAgent
+    from serena.code_editor import CodeEditor
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -53,6 +54,14 @@ class Component(ABC):
     def symbol_manager(self) -> SymbolManager:
         assert self.agent.symbol_manager is not None
         return self.agent.symbol_manager
+
+    def create_code_editor(self) -> "CodeEditor":
+        from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
+
+        if self.agent.serena_config.jetbrains:
+            return JetBrainsCodeEditor(project=self.agent.get_active_project(), agent=self.agent)
+        else:
+            return LanguageServerCodeEditor(self.symbol_manager, agent=self.agent)
 
     @property
     def lines_read(self) -> "LinesRead":

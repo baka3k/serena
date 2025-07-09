@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
-from serena.code_editor import LanguageServerCodeEditor
 from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, Tool, ToolMarkerCanEdit
 from solidlsp.ls_types import SymbolKind
 
@@ -223,7 +222,7 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         :param body: the new symbol body. Important: Begin directly with the symbol definition and provide no
             leading indentation for the first line (but do indent the rest of the body according to the context).
         """
-        code_editor = LanguageServerCodeEditor(self.symbol_manager)
+        code_editor = self.create_code_editor()
         code_editor.replace_body(
             name_path,
             relative_file_path=relative_path,
@@ -252,7 +251,7 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
         """
-        code_editor = LanguageServerCodeEditor(self.symbol_manager)
+        code_editor = self.create_code_editor()
         code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
@@ -277,6 +276,6 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        code_editor = LanguageServerCodeEditor(self.symbol_manager)
+        code_editor = self.create_code_editor()
         code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT

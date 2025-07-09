@@ -12,7 +12,7 @@ from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_utils import TextUtils
 
 from .config.serena_config import Project
-from .tools import JetBrainsPluginClient
+from .tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent

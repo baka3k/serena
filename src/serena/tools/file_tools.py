@@ -13,7 +13,6 @@ from collections import defaultdict
 from fnmatch import fnmatch
 from pathlib import Path
 
-from serena.code_editor import LanguageServerCodeEditor
 from serena.text_utils import search_files
 from serena.tools import SUCCESS_RESULT, TOOL_DEFAULT_MAX_ANSWER_LENGTH, EditedFileContext, Tool, ToolMarkerCanEdit
 from serena.util.file_system import scan_directory
@@ -224,7 +223,7 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit):
         if not self.lines_read.were_lines_read(relative_path, (start_line, end_line)):
             read_lines_tool = self.agent.get_tool(ReadFileTool)
             return f"Error: Must call `{read_lines_tool.get_name_from_cls()}` first to read exactly the affected lines."
-        code_editor = LanguageServerCodeEditor(self.symbol_manager)
+        code_editor = self.create_code_editor()
         code_editor.delete_lines(relative_path, start_line, end_line)
         return SUCCESS_RESULT
 
@@ -283,7 +282,7 @@ class InsertAtLineTool(Tool, ToolMarkerCanEdit):
         """
         if not content.endswith("\n"):
             content += "\n"
-        code_editor = LanguageServerCodeEditor(self.symbol_manager)
+        code_editor = self.create_code_editor()
         code_editor.insert_at_line(relative_path, line, content)
         return SUCCESS_RESULT
 
