@@ -700,6 +700,20 @@ class SymbolManager:
         """Get the content of a file using the language server."""
         return self._lang_server.language_server.retrieve_full_file_content(relative_path)
 
+    @dataclass
+    class SymbolOverviewElement:
+        name_path: str
+        kind: int
+
+    def get_symbol_overview(self, relative_path: str) -> dict[str, list[SymbolOverviewElement]]:
+        path_to_symbol_infos = self._lang_server.request_overview(relative_path)
+        result = {}
+        for file_path, symbols in path_to_symbol_infos.items():
+            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
+            #  The language server methods would need to be adjusted for this.
+            result[file_path] = [self.SymbolOverviewElement(name_path=symbol[0], kind=int(symbol[1])) for symbol in symbols]
+        return result
+
 
 class JetBrainsSymbol(AbstractSymbol):
     def __init__(self, symbol_dict: dict, project: Project) -> None:

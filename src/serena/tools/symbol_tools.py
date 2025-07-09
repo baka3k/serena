@@ -2,6 +2,7 @@
 Language server-related tools
 """
 
+import dataclasses
 import json
 from collections.abc import Sequence
 from copy import copy
@@ -60,14 +61,8 @@ class GetSymbolsOverviewTool(Tool):
             (e.g. a subdirectory).
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name_path, kind).
         """
-        path_to_symbol_infos = self.language_server.request_overview(relative_path)
-        result = {}
-        for file_path, symbols in path_to_symbol_infos.items():
-            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
-            #  The language server methods would need to be adjusted for this.
-            result[file_path] = [{"name_path": symbol[0], "kind": int(symbol[1])} for symbol in symbols]
-
-        result_json_str = json.dumps(result)
+        result = self.symbol_manager.get_symbol_overview(relative_path)
+        result_json_str = json.dumps({k: [dataclasses.asdict(i) for i in l] for k, l in result.items()})
         return self._limit_length(result_json_str, max_answer_chars)
 
 
