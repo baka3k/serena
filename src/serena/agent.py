@@ -32,7 +32,6 @@ from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.symbol import SymbolManager
 from serena.tools import Tool, ToolRegistry
-from serena.util.file_system import match_path
 from solidlsp import SolidLanguageServer
 
 if TYPE_CHECKING:
@@ -282,48 +281,6 @@ class SerenaAgent:
         if project is None:
             raise ValueError("Cannot get project root if no project is active.")
         return project.project_root
-
-    def path_is_inside_project(self, path: str | Path) -> bool:
-        """
-        Checks if the given (absolute or relative) path is inside the project directory.
-        Note that even relative paths may be outside if the contain ".." or point to symlinks.
-        """
-        path = Path(path)
-        _proj_root = Path(self.get_project_root())
-        if not path.is_absolute():
-            path = _proj_root / path
-
-        path = path.resolve()
-        return path.is_relative_to(_proj_root)
-
-    # TODO: Move to project
-    def path_is_gitignored(self, path: str | Path) -> bool:
-        """
-        Checks if the given path is ignored by git. Non absolute paths are assumed to be relative to the project root.
-        """
-        path = Path(path)
-        if path.is_absolute():
-            relative_path = path.relative_to(self.get_project_root())
-        else:
-            relative_path = path
-
-        # always ignore paths inside .git
-        if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
-            return True
-
-        project = self.get_active_project_or_raise()
-        return match_path(str(relative_path), project.get_ignore_spec(), root_path=self.get_project_root())
-
-    def validate_relative_path(self, relative_path: str) -> None:
-        """
-        Validates that the given relative path is safe to read or edit,
-        meaning it's inside the project directory and is not ignored by git.
-        """
-        if not self.path_is_inside_project(relative_path):
-            raise ValueError(f"{relative_path=} points to path outside of the repository root, can't use it for safety reasons")
-
-        if self.path_is_gitignored(relative_path):
-            raise ValueError(f"File {relative_path} is gitignored, can't read or edit it for safety reasons")
 
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """

@@ -89,7 +89,7 @@ class Project:
     def is_ignored_dirname(self, dirname: str) -> bool:
         return dirname.startswith(".")
 
-    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    def is_ignored_relative_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
         """
         Determine whether a path should be ignored based on file type and ignore patterns.
 
@@ -124,6 +124,48 @@ class Project:
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.project_root)
 
+    def is_ignored_path(self, path: str | Path) -> bool:
+        """
+        Checks whether the given path is ignored
+
+        :param path: the path to check, can be absolute or relative
+        """
+        path = Path(path)
+        if path.is_absolute():
+            relative_path = path.relative_to(self.project_root)
+        else:
+            relative_path = path
+
+        # always ignore paths inside .git
+        if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
+            return True
+
+        return match_path(str(relative_path), self.get_ignore_spec(), root_path=self.project_root)
+
+    def is_path_in_project(self, path: str | Path) -> bool:
+        """
+        Checks if the given (absolute or relative) path is inside the project directory.
+        Note that even relative paths may be outside if they contain ".." or point to symlinks.
+        """
+        path = Path(path)
+        _proj_root = Path(self.project_root)
+        if not path.is_absolute():
+            path = _proj_root / path
+
+        path = path.resolve()
+        return path.is_relative_to(_proj_root)
+
+    def validate_relative_path(self, relative_path: str) -> None:
+        """
+        Validates that the given relative path is safe to read or edit,
+        meaning it's inside the project directory and is not ignored by git.
+        """
+        if not self.is_path_in_project(relative_path):
+            raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
+
+        if self.is_ignored_path(relative_path):
+            raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
+
     def gather_source_files(self, relative_path: str = "") -> list[str]:
         """Retrieves relative paths of all source files, optionally limited to the given path
 
@@ -137,11 +179,11 @@ class Project:
             return [relative_path]
         else:
             for root, dirs, files in os.walk(start_path, followlinks=True):
-                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+                dirs[:] = [d for d in dirs if not self.is_ignored_relative_path(os.path.join(root, d))]
                 for file in files:
                     rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root)
                     try:
-                        if not self.is_ignored_path(rel_file_path):
+                        if not self.is_ignored_relative_path(rel_file_path):
                             rel_file_paths.append(rel_file_path)
                     except FileNotFoundError:
                         log.warning(

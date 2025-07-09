@@ -39,7 +39,7 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
         result = self.project.read_file(relative_path)
         result_lines = result.splitlines()
@@ -73,7 +73,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         :param content: the (utf-8-encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
         abs_path = (Path(self.get_project_root()) / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
@@ -102,14 +102,14 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.agent.path_is_gitignored,
-            is_ignored_file=self.agent.path_is_gitignored,
+            is_ignored_dir=self.project.is_ignored_path,
+            is_ignored_file=self.project.is_ignored_path,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})
@@ -129,13 +129,13 @@ class FindFileTool(Tool):
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
         :return: a JSON object with the list of matching files
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
         dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
         # find the files by ignoring everything that doesn't match
         def is_ignored_file(abs_path: str) -> bool:
-            if self.agent.path_is_gitignored(abs_path):
+            if self.project.is_ignored_path(abs_path):
                 return True
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
@@ -143,7 +143,7 @@ class FindFileTool(Tool):
         dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
-            is_ignored_dir=self.agent.path_is_gitignored,
+            is_ignored_dir=self.project.is_ignored_path,
             is_ignored_file=is_ignored_file,
             relative_to=self.get_project_root(),
         )
@@ -185,7 +185,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
             If this is set to False and the regex matches multiple occurrences, an error will be returned
             (and you may retry with a revised, more specific regex).
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
             updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
@@ -373,8 +373,8 @@ class SearchForPatternTool(Tool):
                 dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
                     recursive=True,
-                    is_ignored_dir=self.agent.path_is_gitignored,
-                    is_ignored_file=self.agent.path_is_gitignored,
+                    is_ignored_dir=self.project.is_ignored_path,
+                    is_ignored_file=self.project.is_ignored_path,
                     relative_to=self.get_project_root(),
                 )
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
