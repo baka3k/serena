@@ -11,6 +11,7 @@ from typing import Literal
 
 import pytest
 
+from serena.code_editor import CodeEditor, LanguageServerCodeEditor
 from serena.symbol import CodeDiff
 from solidlsp.ls_config import Language
 from src.serena.symbol import SymbolManager
@@ -76,13 +77,14 @@ class EditingTest:
     def run_test(self, content_after_ground_truth: str) -> None:
         with self._setup() as symbol_manager:
             content_before = self._read_file(self.rel_path)
-            self._apply_edit(symbol_manager)
+            code_editor = LanguageServerCodeEditor(symbol_manager)
+            self._apply_edit(code_editor)
             content_after = self._read_file(self.rel_path)
             code_diff = CodeDiff(self.rel_path, original_content=content_before, modified_content=content_after)
             self._test_diff(code_diff, content_after_ground_truth)
 
     @abstractmethod
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
         pass
 
     def _test_diff(self, code_diff: CodeDiff, snapshot: str) -> None:
@@ -102,8 +104,8 @@ class DeleteSymbolTest(EditingTest):
         self.deleted_symbol = deleted_symbol
         self.rel_path = rel_path
 
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
-        symbol_manager.delete_symbol(self.deleted_symbol, self.rel_path)
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.delete_symbol(self.deleted_symbol, self.rel_path)
 
 
 @pytest.mark.parametrize(
@@ -170,12 +172,12 @@ class InsertInRelToSymbolTest(EditingTest):
     def set_mode(self, mode: Literal["before", "after"]):
         self.mode = mode
 
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
         assert self.mode is not None
         if self.mode == "before":
-            symbol_manager.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
+            code_editor.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content)
         elif self.mode == "after":
-            symbol_manager.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
+            code_editor.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content)
 
 
 @pytest.mark.parametrize("mode", ["before", "after"])
@@ -266,8 +268,8 @@ class ReplaceBodyTest(EditingTest):
         self.symbol_name = symbol_name
         self.new_body = new_body
 
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
-        symbol_manager.replace_body(self.symbol_name, self.rel_path, self.new_body, use_same_indentation=False)
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.replace_body(self.symbol_name, self.rel_path, self.new_body)
 
 
 @pytest.mark.parametrize(
