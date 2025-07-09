@@ -32,10 +32,8 @@ from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.symbol import SymbolManager
 from serena.tools import Tool, ToolRegistry
-from serena.util.file_system import GitignoreParser, match_path
+from serena.util.file_system import match_path
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
@@ -44,7 +42,6 @@ log = logging.getLogger(__name__)
 TTool = TypeVar("TTool", bound="Tool")
 T = TypeVar("T")
 SUCCESS_RESULT = "OK"
-DEFAULT_TOOL_TIMEOUT: float = 240
 
 
 class ProjectNotFoundError(Exception):
@@ -118,57 +115,6 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
         return f"Memory {name} deleted."
 
 
-def create_ls_for_project(
-    project: str | Project,
-    log_level: int = logging.INFO,
-    ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
-    trace_lsp_communication: bool = False,
-) -> SolidLanguageServer:
-    """
-    Create a language server for a project. Note that you will have to start it
-    before performing any LS operations.
-
-    :param project: either a path to the project root or a ProjectConfig instance.
-        If no project.yml is found, the default project configuration will be used.
-    :param log_level: the log level for the language server
-    :param ls_timeout: the timeout for the language server
-    :param trace_lsp_communication: whether to trace LSP communication
-    :return: the language server
-    """
-    if isinstance(project, str):
-        project_instance = Project.load(project, autogenerate=True)
-    else:
-        project_instance = project
-
-    # TODO: This is duplicated in Project.__init__
-    project_config = project_instance.project_config
-    ignored_paths = project_config.ignored_paths
-    if len(ignored_paths) > 0:
-        log.info(f"Using {len(ignored_paths)} ignored paths from the explicit project configuration.")
-        log.debug(f"Ignored paths: {ignored_paths}")
-    if project_config.ignore_all_files_in_gitignore:
-        log.info(f"Parsing all gitignore files in {project_instance.project_root}")
-        gitignore_parser = GitignoreParser(project_instance.project_root)
-        log.info(f"Found {len(gitignore_parser.get_ignore_specs())} gitignore files.")
-        for spec in gitignore_parser.get_ignore_specs():
-            log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
-            ignored_paths.extend(spec.patterns)
-    log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
-    multilspy_config = LanguageServerConfig(
-        code_language=project_instance.language,
-        ignored_paths=ignored_paths,
-        trace_lsp_communication=trace_lsp_communication,
-    )
-    ls_logger = LanguageServerLogger(log_level=log_level)
-    log.info(f"Creating language server instance for {project_instance.project_root}.")
-    return SolidLanguageServer.create(
-        multilspy_config,
-        ls_logger,
-        project_instance.project_root,
-        timeout=ls_timeout,
-    )
-
-
 @click.command()
 @click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
 @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
@@ -181,7 +127,7 @@ def index_project(project: str, log_level: str = "INFO") -> None:
     log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
     project_instance = Project.load(os.path.abspath(project))
     print(f"Indexing symbols in project {project}")
-    ls = create_ls_for_project(project, log_level=log_level_int)
+    ls = project_instance.create_language_server(log_level=log_level_int)
     save_after_n_files = 10
     with ls.start_server():
         parsed_files = project_instance.gather_source_files()
@@ -628,8 +574,7 @@ class SerenaAgent:
 
         # instantiate and start the language server
         assert self._active_project is not None
-        self.language_server = create_ls_for_project(
-            self._active_project,
+        self.language_server = self._active_project.create_language_server(
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,

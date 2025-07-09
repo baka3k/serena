@@ -5,10 +5,12 @@ from typing import Self
 
 import pathspec
 
-from serena.config.serena_config import ProjectConfig
+from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
-from solidlsp.ls_config import Language
+from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_logger import LanguageServerLogger
 
 log = logging.getLogger(__name__)
 
@@ -198,4 +200,51 @@ class Project:
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
             source_file_path=relative_file_path,
+        )
+
+    def create_language_server(
+        self,
+        log_level: int = logging.INFO,
+        ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
+        trace_lsp_communication: bool = False,
+    ) -> SolidLanguageServer:
+        """
+        Create a language server for a project. Note that you will have to start it
+        before performing any LS operations.
+
+        :param project: either a path to the project root or a ProjectConfig instance.
+            If no project.yml is found, the default project configuration will be used.
+        :param log_level: the log level for the language server
+        :param ls_timeout: the timeout for the language server
+        :param trace_lsp_communication: whether to trace LSP communication
+        :return: the language server
+        """
+        # TODO: This is duplicated in Project.__init__
+        project_config = self.project_config
+        ignored_paths = project_config.ignored_paths
+        if len(ignored_paths) > 0:
+            log.info(f"Using {len(ignored_paths)} ignored paths from the explicit project configuration.")
+            log.debug(f"Ignored paths: {ignored_paths}")
+        if project_config.ignore_all_files_in_gitignore:
+            log.info(f"Parsing all gitignore files in {self.project_root}")
+            gitignore_parser = GitignoreParser(self.project_root)
+            log.info(f"Found {len(gitignore_parser.get_ignore_specs())} gitignore files.")
+            for spec in gitignore_parser.get_ignore_specs():
+                log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
+                ignored_paths.extend(spec.patterns)
+        log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
+
+        ls_config = LanguageServerConfig(
+            code_language=self.language,
+            ignored_paths=ignored_paths,
+            trace_lsp_communication=trace_lsp_communication,
+        )
+        ls_logger = LanguageServerLogger(log_level=log_level)
+
+        log.info(f"Creating language server instance for {self.project_root}.")
+        return SolidLanguageServer.create(
+            ls_config,
+            ls_logger,
+            self.project_root,
+            timeout=ls_timeout,
         )
