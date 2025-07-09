@@ -13,7 +13,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
-from .config.serena_config import Project
+from .project import Project
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent

@@ -11,7 +11,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_utils import TextUtils
 
-from .config.serena_config import Project
+from .project import Project
 from .tools.jetbrains_plugin_client import JetBrainsPluginClient
 
 if TYPE_CHECKING:

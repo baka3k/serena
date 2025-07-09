@@ -23,11 +23,12 @@ from sensai.util.logging import LogTime
 
 from serena import serena_version
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import Project, SerenaConfig, ToolSet, get_serena_managed_dir
+from serena.config.serena_config import SerenaConfig, ToolSet, get_serena_managed_dir
 from serena.constants import (
     SERENA_LOG_FORMAT,
 )
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
+from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.symbol import SymbolManager
 from serena.tools import Tool, ToolRegistry
