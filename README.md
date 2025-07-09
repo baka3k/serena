@@ -73,6 +73,7 @@ With Serena, we provide
      * Rust
      * C# (requires dotnet to be installed. We switched the underlying language server recently, please report any issues you encounter)
      * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
+     * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
      * Clojure
      * C/C++ (You may experience issues with finding references, we are working on it)
  * indirect support (may require some code changes/manual installation) for:
@@ -353,9 +354,8 @@ For example, when using `uvx`, you would run
 claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-mcp-server --context ide-assistant --project $(pwd)
 ```
 
-ℹ️ Once in Claude Code, you should ask Claude to "Read the initial instructions" as your first prompt, such that it will receive information
-on how to use Serena's tools. Provide this prompt whenever you start a new conversation and perhaps even after a compacting operation,
-such that Claude is correctly primed to use Serena's tools at all times.
+ℹ️ Once in Claude Code, run `/mcp__serena__initial_instructions` to load instructions for using Serena's tools. Run this command 
+whenever you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
 
 
 ### Claude Desktop
@@ -857,3 +857,4 @@ Here is the full list of Serena's tools with a short description (output of `uv 
  * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
  * `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
  * `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
+
