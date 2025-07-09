@@ -8,7 +8,6 @@ import platform
 import sys
 import threading
 import webbrowser
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -63,25 +62,7 @@ class LinesRead:
             del self.files[relative_path]
 
 
-class MemoriesManager(ABC):
-    @abstractmethod
-    def load_memory(self, name: str) -> str:
-        pass
-
-    @abstractmethod
-    def save_memory(self, name: str, content: str) -> str:
-        pass
-
-    @abstractmethod
-    def list_memories(self) -> list[str]:
-        pass
-
-    @abstractmethod
-    def delete_memory(self, name: str) -> str:
-        pass
-
-
-class MemoriesManagerMDFilesInProject(MemoriesManager):
+class MemoriesManager:
     def __init__(self, project_root: str):
         self._memory_dir = Path(get_serena_managed_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
@@ -388,7 +369,7 @@ class SerenaAgent:
         self._update_active_tools()
 
         # initialize project-specific instances which do not depend on the language server
-        self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
+        self.memories_manager = MemoriesManager(project.project_root)
         self.lines_read = LinesRead()
 
         # reset project-specific instances that depend on the language server
