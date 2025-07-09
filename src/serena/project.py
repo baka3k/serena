@@ -30,3 +30,15 @@ class Project:
 
     def path_to_project_yml(self) -> str:
         return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
+
+    def read_file(self, relative_path: str) -> str:
+        """
+        Reads a file relative to the project root.
+
+        :param relative_path: the path to the file relative to the project root
+        :return: the content of the file
+        """
+        abs_path = Path(self.project_root) / relative_path
+        if not abs_path.exists():
+            raise FileNotFoundError(f"File not found: {abs_path}")
+        return abs_path.read_text(encoding=self.project_config.encoding)

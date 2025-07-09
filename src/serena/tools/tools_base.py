@@ -11,6 +11,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
+from serena.project import Project
 from serena.prompt_factory import PromptFactory
 from serena.symbol import SymbolManager
 from serena.util.class_decorators import singleton
@@ -55,11 +56,18 @@ class Component(ABC):
         assert self.agent.symbol_manager is not None
         return self.agent.symbol_manager
 
+    @property
+    def project(self) -> Project:
+        project = self.agent.get_active_project()
+        if project is None:
+            raise ValueError("No active project")
+        return project
+
     def create_code_editor(self) -> "CodeEditor":
         from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
 
         if self.agent.serena_config.jetbrains:
-            return JetBrainsCodeEditor(project=self.agent.get_active_project(), agent=self.agent)
+            return JetBrainsCodeEditor(project=self.project, agent=self.agent)
         else:
             return LanguageServerCodeEditor(self.symbol_manager, agent=self.agent)
 

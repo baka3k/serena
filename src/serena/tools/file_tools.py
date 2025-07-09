@@ -41,7 +41,7 @@ class ReadFileTool(Tool):
         """
         self.agent.validate_relative_path(relative_path)
 
-        result = self.language_server.retrieve_full_file_content(relative_path)
+        result = self.project.read_file(relative_path)
         result_lines = result.splitlines()
         if end_line is None:
             result_lines = result_lines[start_line:]
