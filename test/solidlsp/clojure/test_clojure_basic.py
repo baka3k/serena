@@ -1,5 +1,6 @@
 import pytest
 
+from serena.project import Project
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -121,22 +122,6 @@ class TestLanguageServerBasics:
         assert definition["relativePath"] == CORE_PATH, "Should find the definition of greet in core.clj"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
-    def test_search_files_for_pattern(self, language_server: SolidLanguageServer):
-        result = language_server.search_files_for_pattern("defn.*greet")
-
-        assert result is not None, "Pattern search should return results"
-        assert len(result) > 0, "Should find at least one match for 'defn.*greet'"
-
-        core_matches = [match for match in result if match.source_file_path and "core.clj" in match.source_file_path]
-        assert len(core_matches) > 0, "Should find greet function in core.clj"
-
-        result = language_server.search_files_for_pattern(":require")
-
-        assert result is not None, "Should find require statements"
-        utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]
-        assert len(utils_matches) > 0, "Should find require statement in utils.clj"
-
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_request_references_with_content(self, language_server: SolidLanguageServer):
         """Test references to multiply function with content"""
         result = language_server.request_references_with_content(CORE_PATH, 12, 6, 3)
@@ -214,3 +199,21 @@ class TestLanguageServerBasics:
                 break
 
         assert found_relevant_references, f"Should have found calculate-area referencing multiply, but got: {result}"
+
+
+class TestProjectBasics:
+    @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
+    def test_search_files_for_pattern(self, project: Project) -> None:
+        result = project.search_files_for_pattern("defn.*greet")
+
+        assert result is not None, "Pattern search should return results"
+        assert len(result) > 0, "Should find at least one match for 'defn.*greet'"
+
+        core_matches = [match for match in result if match.source_file_path and "core.clj" in match.source_file_path]
+        assert len(core_matches) > 0, "Should find greet function in core.clj"
+
+        result = project.search_files_for_pattern(":require")
+
+        assert result is not None, "Should find require statements"
+        utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]
+        assert len(utils_matches) > 0, "Should find require statement in utils.clj"

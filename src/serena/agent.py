@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 import click
-from pathspec import PathSpec
 from sensai.util import logging
 from sensai.util.logging import LogTime
+from tqdm import tqdm
 
 from serena import serena_version
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
@@ -140,6 +140,7 @@ def create_ls_for_project(
     else:
         project_instance = project
 
+    # TODO: This is duplicated in Project.__init__
     project_config = project_instance.project_config
     ignored_paths = project_config.ignored_paths
     if len(ignored_paths) > 0:
@@ -178,11 +179,22 @@ def index_project(project: str, log_level: str = "INFO") -> None:
     :param project: the project to index. By default, the current working directory is used.
     """
     log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
-    project = os.path.abspath(project)
+    project_instance = Project.load(os.path.abspath(project))
     print(f"Indexing symbols in project {project}")
     ls = create_ls_for_project(project, log_level=log_level_int)
+    save_after_n_files = 10
     with ls.start_server():
-        ls.index_repository()
+        parsed_files = project_instance.request_parsed_files()
+        files_processed = 0
+        pbar = tqdm(parsed_files, disable=False)
+        for relative_file_path in pbar:
+            pbar.set_description(f"Indexing ({os.path.basename(relative_file_path)})")
+            ls.request_document_symbols(relative_file_path, include_body=False)
+            ls.request_document_symbols(relative_file_path, include_body=True)
+            files_processed += 1
+            if files_processed % save_after_n_files == 0:
+                ls.save_cache()
+        ls.save_cache()
     print(f"Symbols saved to {ls.cache_path}")
 
 
@@ -285,8 +297,6 @@ class SerenaAgent:
         self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
-        self.ignore_spec: PathSpec  # not set to None to avoid assert statements
-        """Ignore spec, extracted from the project's gitignore files and the explicitly configured ignored paths."""
 
         # set the active modes
         if modes is None:
@@ -340,6 +350,7 @@ class SerenaAgent:
         path = path.resolve()
         return path.is_relative_to(_proj_root)
 
+    # TODO: Move to project
     def path_is_gitignored(self, path: str | Path) -> bool:
         """
         Checks if the given path is ignored by git. Non absolute paths are assumed to be relative to the project root.
@@ -354,7 +365,8 @@ class SerenaAgent:
         if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
             return True
 
-        return match_path(str(relative_path), self.ignore_spec, root_path=self.get_project_root())
+        project = self.get_active_project_or_raise()
+        return match_path(str(relative_path), project.get_ignore_spec(), root_path=self.get_project_root())
 
     def validate_relative_path(self, relative_path: str) -> None:
         """
@@ -383,6 +395,15 @@ class SerenaAgent:
         :return: the active project or None if no project is active
         """
         return self._active_project
+
+    def get_active_project_or_raise(self) -> Project:
+        """
+        :return: the active project or raises an exception if no project is active
+        """
+        project = self.get_active_project()
+        if project is None:
+            raise ValueError("No active project. Please activate a project first.")
+        return project
 
     def set_modes(self, modes: list[SerenaAgentMode]) -> None:
         """
@@ -475,7 +496,6 @@ class SerenaAgent:
             with LogTime("Language server initialization", logger=log):
                 self.reset_language_server()
                 assert self.language_server is not None
-                self.ignore_spec = self.language_server.get_ignore_spec()
 
             # initialize project-specific instances which depend on the language server
             log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")

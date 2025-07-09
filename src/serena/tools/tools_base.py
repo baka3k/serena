@@ -58,10 +58,7 @@ class Component(ABC):
 
     @property
     def project(self) -> Project:
-        project = self.agent.get_active_project()
-        if project is None:
-            raise ValueError("No active project")
-        return project
+        return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
         from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor

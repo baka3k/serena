@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
 
 import yaml
 from ruamel.yaml.comments import CommentedMap
@@ -23,13 +23,12 @@ from serena.constants import (
     SELENA_CONFIG_TEMPLATE_FILE,
     SERENA_MANAGED_DIR_NAME,
 )
-from serena.project import Project
 from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition
 from solidlsp.ls_config import Language
 
 if TYPE_CHECKING:
-    pass
+    from ..project import Project
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -233,7 +232,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     For testing purposes, it can also be instantiated directly with the desired parameters.
     """
 
-    projects: list[Project] = field(default_factory=list)
+    projects: list["Project"] = field(default_factory=list)
     gui_log_window_enabled: bool = False
     log_level: int = logging.INFO
     trace_lsp_communication: bool = False
@@ -293,6 +292,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         """
         Static constructor to create SerenaConfig from the configuration file
         """
+        from ..project import Project
+
         config_file_path = cls._determine_config_file_path()
 
         # create the configuration file from the template if necessary
@@ -387,7 +388,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     def project_names(self) -> list[str]:
         return sorted(project.project_config.project_name for project in self.projects)
 
-    def get_project(self, project_root_or_name: str) -> Project | None:
+    def get_project(self, project_root_or_name: str) -> Optional["Project"]:
         for project in self.projects:
             if project.project_config.project_name == project_root_or_name:
                 return project
@@ -398,7 +399,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
                     return project
         return None
 
-    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple[Project, bool]:
+    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple["Project", bool]:
         """
         Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
         name or path is already registered.
@@ -410,6 +411,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             saved to disk. It may be that no new project configuration was generated if the project configuration already
             exists on disk but the project itself was not added yet to the Serena configuration.
         """
+        from ..project import Project
+
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Error: Path does not exist: {project_root}")
