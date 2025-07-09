@@ -6,7 +6,7 @@ from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Generic, Optional, TypeVar
 
-from serena.symbol import AbstractSymbol, JetBrainsSymbol, PositionInFile, Symbol, SymbolManager
+from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_utils import TextUtils
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
-TSymbol = TypeVar("TSymbol", bound=AbstractSymbol)
+TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 
 class CodeEditor(Generic[TSymbol], ABC):
@@ -211,8 +211,8 @@ class CodeEditor(Generic[TSymbol], ABC):
             edited_file.delete_text_between_positions(start_pos, end_pos)
 
 
-class LanguageServerCodeEditor(CodeEditor[Symbol]):
-    def __init__(self, symbol_manager: SymbolManager, agent: Optional["SerenaAgent"] = None):
+class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
+    def __init__(self, symbol_manager: LanguageServerSymbolRetriever, agent: Optional["SerenaAgent"] = None):
         super().__init__(project_root=symbol_manager.get_language_server().repository_root_path, agent=agent)
         self._symbol_manager = symbol_manager
 
@@ -244,7 +244,7 @@ class LanguageServerCodeEditor(CodeEditor[Symbol]):
         """Get the content of a file using the language server."""
         return self._lang_server.language_server.retrieve_full_file_content(relative_path)
 
-    def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> Symbol:
+    def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> LanguageServerSymbol:
         symbol_candidates = self._symbol_manager.find_by_name(name_path, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
             raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")

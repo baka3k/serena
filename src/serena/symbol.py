@@ -167,7 +167,7 @@ class CodeDiff:
 
 
 @dataclass
-class SymbolLocation:
+class LanguageServerSymbolLocation:
     """
     Represents the (start) location of a symbol identifier, which, within Serena, uniquely identifies the symbol.
     """
@@ -203,6 +203,10 @@ class SymbolLocation:
 
 @dataclass
 class PositionInFile:
+    """
+    Represents a character position within a file
+    """
+
     line: int
     """
     the 0-based line number in the file
@@ -219,7 +223,7 @@ class PositionInFile:
         return Position(line=self.line, character=self.col)
 
 
-class AbstractSymbol(ABC):
+class Symbol(ABC):
     @abstractmethod
     def get_body_start_position(self) -> PositionInFile | None:
         pass
@@ -254,7 +258,7 @@ class AbstractSymbol(ABC):
         """
 
 
-class Symbol(AbstractSymbol, ToStringMixin):
+class LanguageServerSymbol(Symbol, ToStringMixin):
     _NAME_PATH_SEP = "/"
 
     @staticmethod
@@ -269,7 +273,7 @@ class Symbol(AbstractSymbol, ToStringMixin):
         """
         assert name_path, "name_path must not be empty"
         assert symbol_name_path_parts, "symbol_name_path_parts must not be empty"
-        name_path_sep = Symbol._NAME_PATH_SEP
+        name_path_sep = LanguageServerSymbol._NAME_PATH_SEP
 
         is_absolute_pattern = name_path.startswith(name_path_sep)
         pattern_parts = name_path.lstrip(name_path_sep).rstrip(name_path_sep).split(name_path_sep)
@@ -325,11 +329,11 @@ class Symbol(AbstractSymbol, ToStringMixin):
         return None
 
     @property
-    def location(self) -> SymbolLocation:
+    def location(self) -> LanguageServerSymbolLocation:
         """
         :return: the start location of the actual symbol identifier
         """
-        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
+        return LanguageServerSymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
 
     @property
     def body_start_position(self) -> Position | None:
@@ -471,18 +475,18 @@ class Symbol(AbstractSymbol, ToStringMixin):
         """
         result = []
 
-        def should_include(s: "Symbol") -> bool:
+        def should_include(s: "LanguageServerSymbol") -> bool:
             if include_kinds is not None and s.symbol_kind not in include_kinds:
                 return False
             if exclude_kinds is not None and s.symbol_kind in exclude_kinds:
                 return False
-            return Symbol.match_name_path(
+            return LanguageServerSymbol.match_name_path(
                 name_path=name_path,
                 symbol_name_path_parts=s.get_name_path_parts(),
                 substring_matching=substring_matching,
             )
 
-        def traverse(s: "Symbol") -> None:
+        def traverse(s: "LanguageServerSymbol") -> None:
             if should_include(s):
                 result.append(s)
             for c in s.iter_children():
@@ -553,24 +557,36 @@ class Symbol(AbstractSymbol, ToStringMixin):
 
 
 @dataclass
-class ReferenceInSymbol(ToStringMixin):
-    """Same as the class of the same name in the language server, but using Serena's Symbol class.
-    Be careful to not confuse it with counterpart!
+class ReferenceInLanguageServerSymbol(ToStringMixin):
+    """
+    Represents the location of a reference to another symbol within a symbol/file.
+
+    The contained symbol is the symbol within which the reference is located,
+    not the symbol that is referenced.
     """
 
-    symbol: Symbol
+    symbol: LanguageServerSymbol
+    """
+    the symbol within which the reference is located
+    """
     line: int
+    """
+    the line number in which the reference is located (0-based)
+    """
     character: int
+    """
+    the column number in which the reference is located (0-based)
+    """
+
+    @classmethod
+    def from_lsp_reference(cls, reference: LSPReferenceInSymbol) -> Self:
+        return cls(symbol=LanguageServerSymbol(reference.symbol), line=reference.line, character=reference.character)
 
     def get_relative_path(self) -> str | None:
         return self.symbol.location.relative_path
 
-    @classmethod
-    def from_lsp_reference(cls, reference: LSPReferenceInSymbol) -> Self:
-        return cls(symbol=Symbol(reference.symbol), line=reference.line, character=reference.character)
 
-
-class SymbolManager:
+class LanguageServerSymbolRetriever:
     def __init__(self, lang_server: SolidLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
         """
         :param lang_server: the language server to use for symbol retrieval as well as editing operations.
@@ -598,33 +614,33 @@ class SymbolManager:
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
         within_relative_path: str | None = None,
-    ) -> list[Symbol]:
+    ) -> list[LanguageServerSymbol]:
         """
         Find all symbols that match the given name. See docstring of `Symbol.find` for more details.
         The only parameter not mentioned there is `within_relative_path`, which can be used to restrict the search
         to symbols within a specific file or directory.
         """
-        symbols: list[Symbol] = []
+        symbols: list[LanguageServerSymbol] = []
         symbol_roots = self._lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
         for root in symbol_roots:
             symbols.extend(
-                Symbol(root).find(
+                LanguageServerSymbol(root).find(
                     name_path, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
                 )
             )
         return symbols
 
-    def get_document_symbols(self, relative_path: str) -> list[Symbol]:
+    def get_document_symbols(self, relative_path: str) -> list[LanguageServerSymbol]:
         symbol_dicts, roots = self._lang_server.request_document_symbols(relative_path, include_body=False)
-        symbols = [Symbol(s) for s in symbol_dicts]
+        symbols = [LanguageServerSymbol(s) for s in symbol_dicts]
         return symbols
 
-    def find_by_location(self, location: SymbolLocation) -> Symbol | None:
+    def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
         if location.relative_path is None:
             return None
         symbol_dicts, roots = self._lang_server.request_document_symbols(location.relative_path, include_body=False)
         for symbol_dict in symbol_dicts:
-            symbol = Symbol(symbol_dict)
+            symbol = LanguageServerSymbol(symbol_dict)
             if symbol.location == location:
                 return symbol
         return None
@@ -636,7 +652,7 @@ class SymbolManager:
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
-    ) -> list[ReferenceInSymbol]:
+    ) -> list[ReferenceInLanguageServerSymbol]:
         """
         Find all symbols that reference the symbol with the given name.
         If multiple symbols fit the name (e.g. for variables that are overwritten), will use the first one.
@@ -666,11 +682,11 @@ class SymbolManager:
 
     def find_referencing_symbols_by_location(
         self,
-        symbol_location: SymbolLocation,
+        symbol_location: LanguageServerSymbolLocation,
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
-    ) -> list[ReferenceInSymbol]:
+    ) -> list[ReferenceInLanguageServerSymbol]:
         """
         Find all symbols that reference the symbol at the given location.
 
@@ -707,7 +723,7 @@ class SymbolManager:
         if exclude_kinds is not None:
             references = [s for s in references if s.symbol["kind"] not in exclude_kinds]
 
-        return [ReferenceInSymbol.from_lsp_reference(r) for r in references]
+        return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
     @dataclass
     class SymbolOverviewElement:
@@ -724,7 +740,7 @@ class SymbolManager:
         return result
 
 
-class JetBrainsSymbol(AbstractSymbol):
+class JetBrainsSymbol(Symbol):
     def __init__(self, symbol_dict: dict, project: Project) -> None:
         """
         :param symbol_dict: dictionary as returned by the JetBrains plugin client.

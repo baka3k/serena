@@ -29,7 +29,6 @@ from serena.constants import (
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
-from serena.symbol import SymbolManager
 from serena.tools import Tool, ToolRegistry
 from solidlsp import SolidLanguageServer
 
@@ -220,7 +219,6 @@ class SerenaAgent:
         self._active_project: Project | None = None
         self._active_project_root: str | None = None
         self.language_server: SolidLanguageServer | None = None
-        self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
 
@@ -372,18 +370,11 @@ class SerenaAgent:
         self.memories_manager = MemoriesManager(project.project_root)
         self.lines_read = LinesRead()
 
-        # reset project-specific instances that depend on the language server
-        self.symbol_manager = None
-
         def init_language_server() -> None:
             # start the language server
             with LogTime("Language server initialization", logger=log):
                 self.reset_language_server()
                 assert self.language_server is not None
-
-            # initialize project-specific instances which depend on the language server
-            log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")
-            self.symbol_manager = SymbolManager(self.language_server, self)
 
         # initialize the language server in the background
         self.issue_task(init_language_server)
@@ -523,11 +514,6 @@ class SerenaAgent:
             raise RuntimeError(
                 f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
             )
-        if self.symbol_manager is not None:
-            log.debug("Setting the language server in the agent's symbol manager")
-            self.symbol_manager.set_language_server(self.language_server)
-        else:
-            log.debug("No symbol manager available yet, skipping setting the language server")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore

@@ -61,7 +61,8 @@ class GetSymbolsOverviewTool(Tool):
             (e.g. a subdirectory).
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name_path, kind).
         """
-        result = self.symbol_manager.get_symbol_overview(relative_path)
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        result = symbol_retriever.get_symbol_overview(relative_path)
         result_json_str = json.dumps({k: [dataclasses.asdict(i) for i in l] for k, l in result.items()})
         return self._limit_length(result_json_str, max_answer_chars)
 
@@ -132,7 +133,8 @@ class FindSymbolTool(Tool):
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbols = self.symbol_manager.find_by_name(
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        symbols = symbol_retriever.find_by_name(
             name_path,
             include_body=include_body,
             include_kinds=parsed_include_kinds,
@@ -175,7 +177,8 @@ class FindReferencingSymbolsTool(Tool):
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        references_in_symbols = self.symbol_manager.find_referencing_symbols(
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
             include_body=include_body,

@@ -13,7 +13,7 @@ from sensai.util.string import dict_string
 
 from serena.project import Project
 from serena.prompt_factory import PromptFactory
-from serena.symbol import SymbolManager
+from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 
@@ -45,10 +45,10 @@ class Component(ABC):
         assert self.agent.memories_manager is not None
         return self.agent.memories_manager
 
-    @property
-    def symbol_manager(self) -> SymbolManager:
-        assert self.agent.symbol_manager is not None
-        return self.agent.symbol_manager
+    def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
+        language_server = self.agent.language_server
+        assert language_server is not None
+        return LanguageServerSymbolRetriever(language_server, agent=self.agent)
 
     @property
     def project(self) -> Project:
@@ -60,7 +60,7 @@ class Component(ABC):
         if self.agent.serena_config.jetbrains:
             return JetBrainsCodeEditor(project=self.project, agent=self.agent)
         else:
-            return LanguageServerCodeEditor(self.symbol_manager, agent=self.agent)
+            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
 
     @property
     def lines_read(self) -> "LinesRead":

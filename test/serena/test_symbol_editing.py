@@ -14,7 +14,7 @@ import pytest
 from serena.code_editor import CodeEditor, LanguageServerCodeEditor
 from serena.symbol import CodeDiff
 from solidlsp.ls_config import Language
-from src.serena.symbol import SymbolManager
+from src.serena.symbol import LanguageServerSymbolRetriever
 from test.conftest import create_ls, get_repo_path
 
 pytestmark = pytest.mark.snapshot
@@ -34,7 +34,7 @@ class EditingTest:
         self.repo_path: Path | None = None
 
     @contextmanager
-    def _setup(self) -> Iterator[SymbolManager]:
+    def _setup(self) -> Iterator[LanguageServerSymbolRetriever]:
         """Context manager for setup/teardown with a temporary directory, providing the symbol manager."""
         temp_dir = Path(tempfile.mkdtemp())
         self.repo_path = temp_dir / self.original_repo_path.name
@@ -51,7 +51,7 @@ class EditingTest:
             log.info(f"Starting language server for {self.language} {self.rel_path}")
             language_server.start()
             log.info(f"Language server started for {self.language} {self.rel_path}")
-            yield SymbolManager(lang_server=language_server)
+            yield LanguageServerSymbolRetriever(lang_server=language_server)
         finally:
             if language_server is not None and language_server.is_running():
                 log.info(f"Stopping language server for {self.language} {self.rel_path}")
