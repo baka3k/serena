@@ -7,13 +7,11 @@ from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
-from sensai.util.datastruct import Maybe
 from sensai.util.string import ToStringMixin
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
-from solidlsp.ls_utils import TextUtils
 
 from .config.serena_config import Project
 
@@ -736,8 +734,8 @@ class JetBrainsSymbol(AbstractSymbol):
         if not self.is_position_in_file_available():
             return None
         if self._cached_body_start_position is None:
-            index = self._dict["text_range"]["start_offset"]
-            line, col = TextUtils.get_line_col_from_index(self.get_file_content(), index)
+            pos = self._dict["text_range"]["start_pos"]
+            line, col = pos["line"], pos["col"]
             self._cached_body_start_position = PositionInFile(line=line, col=col)
         return self._cached_body_start_position
 
@@ -745,8 +743,8 @@ class JetBrainsSymbol(AbstractSymbol):
         if not self.is_position_in_file_available():
             return None
         if self._cached_body_end_position is None:
-            index = self._dict["text_range"]["end_offset"]
-            line, col = TextUtils.get_line_col_from_index(self.get_file_content(), index)
+            pos = self._dict["text_range"]["end_pos"]
+            line, col = pos["line"], pos["col"]
             self._cached_body_end_position = PositionInFile(line=line, col=col)
         return self._cached_body_end_position
 
