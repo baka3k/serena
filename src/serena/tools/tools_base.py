@@ -1,7 +1,7 @@
 import inspect
 import os
 import traceback
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from types import TracebackType
@@ -87,31 +87,7 @@ class ToolMarkerOptional:
     """
 
 
-class ToolInterface(ABC):
-    """Protocol defining the complete interface that make_tool() expects from a tool."""
-
-    @abstractmethod
-    def get_name(self) -> str:
-        """Get the tool name."""
-        ...
-
-    @abstractmethod
-    def get_apply_docstring(self) -> str:
-        """Get the docstring for the tool application, used by the MCP server."""
-        ...
-
-    @abstractmethod
-    def get_apply_fn_metadata(self) -> FuncMetadata:
-        """Get the metadata for the tool application function, used by the MCP server."""
-        ...
-
-    @abstractmethod
-    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs: Any) -> str:
-        """Apply the tool with logging and exception handling."""
-        ...
-
-
-class Tool(Component, ToolInterface):
+class Tool(Component):
     # NOTE: each tool should implement the apply method, which is then used in
     # the central method of the Tool class `apply_ex`.
     # Failure to do so will result in a RuntimeError at tool execution time.
@@ -176,11 +152,11 @@ class Tool(Component, ToolInterface):
         return docstring.strip()
 
     def get_apply_docstring(self) -> str:
-        """Get the docstring for the apply method (instance method implementing ToolProtocol)."""
+        """Gets the docstring for the tool application, used by the MCP server."""
         return self.get_apply_docstring_from_cls()
 
     def get_apply_fn_metadata(self) -> FuncMetadata:
-        """Get the metadata for the apply method (instance method implementing ToolProtocol)."""
+        """Gets the metadata for the tool application function, used by the MCP server."""
         return self.get_apply_fn_metadata_from_cls()
 
     @classmethod
@@ -225,7 +201,7 @@ class Tool(Component, ToolInterface):
 
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
         """
-        Applies the tool with the given arguments
+        Applies the tool with logging and exception handling, using the given keyword arguments
         """
 
         def task() -> str:
