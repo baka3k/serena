@@ -74,7 +74,7 @@ class JetBrainsPluginClient:
         """
         to_snake_case = lambda s: "".join(["_" + c.lower() if c.isupper() else c for c in s])
 
-        def convert(x):
+        def convert(x):  # type: ignore
             if isinstance(x, dict):
                 return {to_snake_case(k): convert(v) for k, v in x.items()}
             elif isinstance(x, list):
