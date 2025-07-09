@@ -177,3 +177,25 @@ class Project:
             paths_include_glob=paths_include_glob,
             paths_exclude_glob=paths_exclude_glob,
         )
+
+    def retrieve_content_around_line(
+        self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0
+    ) -> MatchedConsecutiveLines:
+        """
+        Retrieve the content of the given file around the given line.
+
+        :param relative_file_path: The relative path of the file to retrieve the content from
+        :param line: The line number to retrieve the content around
+        :param context_lines_before: The number of lines to retrieve before the given line
+        :param context_lines_after: The number of lines to retrieve after the given line
+
+        :return MatchedConsecutiveLines: A container with the desired lines.
+        """
+        file_contents = self.read_file(relative_file_path)
+        return MatchedConsecutiveLines.from_file_contents(
+            file_contents,
+            line=line,
+            context_lines_before=context_lines_before,
+            context_lines_after=context_lines_after,
+            source_file_path=relative_file_path,
+        )

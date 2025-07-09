@@ -92,24 +92,6 @@ class TestLanguageServerBasics:
         assert any("add" in name.lower() for name in symbol_names), f"Should find 'add' function in symbols: {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
-    def test_retrieve_content_around_line(self, language_server: SolidLanguageServer):
-        """Test retrieving content around specific lines"""
-        # Test retrieving content around the greet function definition (line 2)
-        result = language_server.retrieve_content_around_line(CORE_PATH, 2, 2)
-
-        assert result is not None, "Should retrieve content around line 2"
-        content_str = result.to_display_string()
-        assert "greet" in content_str, "Should contain the greet function definition"
-        assert "defn" in content_str, "Should contain defn keyword"
-
-        # Test retrieving content around multiply function (around line 13)
-        result = language_server.retrieve_content_around_line(CORE_PATH, 13, 1)
-
-        assert result is not None, "Should retrieve content around line 13"
-        content_str = result.to_display_string()
-        assert "multiply" in content_str, "Should contain multiply function"
-
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_namespace_functions(self, language_server: SolidLanguageServer):
         """Test definition lookup for core/greet usage in utils.clj"""
         # Position of 'greet' in core/greet call
@@ -124,7 +106,10 @@ class TestLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_request_references_with_content(self, language_server: SolidLanguageServer):
         """Test references to multiply function with content"""
-        result = language_server.request_references_with_content(CORE_PATH, 12, 6, 3)
+        references = language_server.request_references(CORE_PATH, 12, 6)
+        result = [
+            language_server.retrieve_content_around_line(ref1["relativePath"], ref1["range"]["start"]["line"], 3, 0) for ref1 in references
+        ]
 
         assert result is not None, "Should find references with content"
         assert isinstance(result, list)
@@ -202,6 +187,24 @@ class TestLanguageServerBasics:
 
 
 class TestProjectBasics:
+    @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
+    def test_retrieve_content_around_line(self, project: Project):
+        """Test retrieving content around specific lines"""
+        # Test retrieving content around the greet function definition (line 2)
+        result = project.retrieve_content_around_line(CORE_PATH, 2, 2)
+
+        assert result is not None, "Should retrieve content around line 2"
+        content_str = result.to_display_string()
+        assert "greet" in content_str, "Should contain the greet function definition"
+        assert "defn" in content_str, "Should contain defn keyword"
+
+        # Test retrieving content around multiply function (around line 13)
+        result = project.retrieve_content_around_line(CORE_PATH, 13, 1)
+
+        assert result is not None, "Should retrieve content around line 13"
+        content_str = result.to_display_string()
+        assert "multiply" in content_str, "Should contain multiply function"
+
     @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
     def test_search_files_for_pattern(self, project: Project) -> None:
         result = project.search_source_files_for_pattern("defn.*greet")

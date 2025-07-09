@@ -16,7 +16,6 @@ from serena.prompt_factory import PromptFactory
 from serena.symbol import SymbolManager
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
-from solidlsp import SolidLanguageServer
 
 if TYPE_CHECKING:
     from serena.agent import LinesRead, MemoriesManager, SerenaAgent
@@ -30,11 +29,6 @@ SUCCESS_RESULT = "OK"
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
-
-    @property
-    def language_server(self) -> SolidLanguageServer:
-        assert self.agent.language_server is not None
-        return self.agent.language_server
 
     def get_project_root(self) -> str:
         """
@@ -275,7 +269,8 @@ class Tool(Component, ToolInterface):
                 log.info(f"Result: {result}")
 
             try:
-                self.language_server.save_cache()
+                if self.agent.language_server is not None:
+                    self.agent.language_server.save_cache()
             except Exception as e:
                 log.error(f"Error saving language server cache: {e}")
 
