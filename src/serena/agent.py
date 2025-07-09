@@ -184,7 +184,7 @@ def index_project(project: str, log_level: str = "INFO") -> None:
     ls = create_ls_for_project(project, log_level=log_level_int)
     save_after_n_files = 10
     with ls.start_server():
-        parsed_files = project_instance.request_parsed_files()
+        parsed_files = project_instance.gather_source_files()
         files_processed = 0
         pbar = tqdm(parsed_files, disable=False)
         for relative_file_path in pbar:

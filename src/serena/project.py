@@ -122,10 +122,10 @@ class Project:
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.project_root)
 
-    def request_parsed_files(self, relative_path: str = "") -> list[str]:
-        """Retrieves relative paths of all files analyzed by the Language Server.
+    def gather_source_files(self, relative_path: str = "") -> list[str]:
+        """Retrieves relative paths of all source files, optionally limited to the given path
 
-        :param relative_path: will only retrieve files that are subpaths of this.
+        :param relative_path: if provided, restrict search to this path
         """
         rel_file_paths = []
         start_path = os.path.join(self.project_root, relative_path)
@@ -147,7 +147,7 @@ class Project:
                         )
             return rel_file_paths
 
-    def search_files_for_pattern(
+    def search_source_files_for_pattern(
         self,
         pattern: str,
         relative_path: str = "",
@@ -167,7 +167,7 @@ class Project:
         :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
         :return: List of matched consecutive lines with context
         """
-        relative_file_paths = self.request_parsed_files(relative_path=relative_path)
+        relative_file_paths = self.gather_source_files(relative_path=relative_path)
         return search_files(
             relative_file_paths,
             pattern,

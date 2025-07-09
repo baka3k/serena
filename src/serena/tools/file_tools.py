@@ -358,7 +358,7 @@ class SearchForPatternTool(Tool):
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
 
         if restrict_search_to_code_files:
-            matches = self.project.search_files_for_pattern(
+            matches = self.project.search_source_files_for_pattern(
                 pattern=substring_pattern,
                 relative_path=relative_path,
                 context_lines_before=context_lines_before,
