@@ -7,11 +7,15 @@ from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
 
+from sensai.util.datastruct import Maybe
 from sensai.util.string import ToStringMixin
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
+from solidlsp.ls_utils import TextUtils
+
+from .config.serena_config import Project
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
@@ -697,3 +701,55 @@ class SymbolManager:
     def _get_code_file_content(self, relative_path: str) -> str:
         """Get the content of a file using the language server."""
         return self._lang_server.language_server.retrieve_full_file_content(relative_path)
+
+
+class JetBrainsSymbol(AbstractSymbol):
+    def __init__(self, symbol_dict: dict, project: Project) -> None:
+        """
+        :param symbol_dict: dictionary as returned by the JetBrains plugin client.
+        """
+        self._project = project
+        self._dict = symbol_dict
+        self._cached_file_content: str | None = None
+        self._cached_body_start_position: PositionInFile | None = None
+        self._cached_body_end_position: PositionInFile | None = None
+
+    def get_relative_path(self) -> str:
+        return self._dict["relative_path"]
+
+    def get_file_content(self) -> str:
+        if self._cached_file_content is None:
+            path = os.path.join(self._project.project_root, self.get_relative_path())
+            with open(path, encoding=self._project.project_config.encoding) as f:
+                self._cached_file_content = f.read()
+        return self._cached_file_content
+
+    def is_position_in_file_available(self) -> bool:
+        return "text_range" in self._dict
+
+    @property
+    def _body_indices(self) -> tuple[int, int]:
+        text_range = self._dict["text_range"]
+        return text_range["start_offset"], text_range["end_offset"]
+
+    def get_body_start_position(self) -> PositionInFile | None:
+        if not self.is_position_in_file_available():
+            return None
+        if self._cached_body_start_position is None:
+            index = self._dict["text_range"]["start_offset"]
+            line, col = TextUtils.get_line_col_from_index(self.get_file_content(), index)
+            self._cached_body_start_position = PositionInFile(line=line, col=col)
+        return self._cached_body_start_position
+
+    def get_body_end_position(self) -> PositionInFile | None:
+        if not self.is_position_in_file_available():
+            return None
+        if self._cached_body_end_position is None:
+            index = self._dict["text_range"]["end_offset"]
+            line, col = TextUtils.get_line_col_from_index(self.get_file_content(), index)
+            self._cached_body_end_position = PositionInFile(line=line, col=col)
+        return self._cached_body_end_position
+
+    def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
+        # NOTE: Symbol types cannot really be differentiated, because types are not handled in a language-agnostic way.
+        return False

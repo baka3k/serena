@@ -1,18 +1,24 @@
 import json
+import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Generic, Optional, TypeVar
 
-from serena.symbol import AbstractSymbol, PositionInFile, Symbol, SymbolManager
+from serena.symbol import AbstractSymbol, JetBrainsSymbol, PositionInFile, Symbol, SymbolManager
 from solidlsp import SolidLanguageServer
 from solidlsp.ls import LSPFileBuffer
+from solidlsp.ls_utils import TextUtils
+
+from .config.serena_config import Project
+from .tools import JetBrainsPluginClient
 
 if TYPE_CHECKING:
     from .agent import SerenaAgent
 
 
+log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=AbstractSymbol)
 
 
@@ -248,3 +254,44 @@ class LanguageServerCodeEditor(CodeEditor[Symbol]):
                 "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
             )
         return symbol_candidates[0]
+
+
+class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
+    def __init__(self, project: Project, agent: Optional["SerenaAgent"] = None) -> None:
+        self._project = project
+        super().__init__(project_root=project.project_root, agent=agent)
+
+    class EditedFile(CodeEditor.EditedFile):
+        def __init__(self, relative_path: str, project: Project):
+            path = os.path.join(project.project_root, relative_path)
+            log.info("Editing file: %s", path)
+            with open(path, encoding=project.project_config.encoding) as f:
+                self._content = f.read()
+
+        def get_contents(self) -> str:
+            return self._content
+
+        def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
+            self._content, _ = TextUtils.delete_text_between_positions(
+                self._content, start_pos.line, start_pos.col, end_pos.line, end_pos.col
+            )
+
+        def insert_text_at_position(self, pos: PositionInFile, text: str) -> None:
+            self._content, _, _ = TextUtils.insert_text_at_position(self._content, pos.line, pos.col, text)
+
+    @contextmanager
+    def _open_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
+        yield self.EditedFile(relative_path, self._project)
+
+    def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> JetBrainsSymbol:
+        with JetBrainsPluginClient() as client:
+            result = client.find_symbol(name_path, relative_path=relative_file_path, include_body=False, depth=0, include_location=True)
+            symbols = result["symbols"]
+            if not symbols:
+                raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
+            if len(symbols) > 1:
+                raise ValueError(
+                    f"Found multiple {len(symbols)} symbols with name {name_path} in file {relative_file_path}. "
+                    "Their locations are: \n " + json.dumps([s["location"] for s in symbols], indent=2)
+                )
+            return JetBrainsSymbol(symbols[0], self._project)

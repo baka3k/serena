@@ -87,7 +87,9 @@ class JetBrainsPluginClient:
     def heartbeat(self) -> dict[str, Any]:
         return self._make_request("GET", "/heartbeat")
 
-    def find_symbol(self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0) -> dict[str, Any]:
+    def find_symbol(
+        self, name_path: str, relative_path: str | None = None, include_body: bool = False, depth: int = 0, include_location: bool = False
+    ) -> dict[str, Any]:
         """
         Find symbols by name.
 
@@ -98,7 +100,13 @@ class JetBrainsPluginClient:
 
         :return: Dictionary containing 'symbols' list with matching symbols
         """
-        request_data = {"namePath": name_path, "relativePath": relative_path, "includeBody": include_body, "depth": depth}
+        request_data = {
+            "namePath": name_path,
+            "relativePath": relative_path,
+            "includeBody": include_body,
+            "depth": depth,
+            "includeLocation": include_location,
+        }
         return self._make_request("POST", "/findSymbol", request_data)
 
     def find_references(self, name_path: str, relative_path: str) -> dict[str, Any]:
