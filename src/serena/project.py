@@ -76,14 +76,9 @@ class Project:
         return abs_path.read_text(encoding=self.project_config.encoding)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
-        """Returns the pathspec matcher for the paths that were configured to be ignored through
-        the multilspy config.
-
-        This is is a subset of the full language-specific ignore spec that determines
-        which files are relevant for the language server.
-
-        This matcher is useful for operations outside of the language server,
-        such as when searching for relevant non-language files in the project.
+        """
+        :return: the pathspec matcher for the paths that were configured to be ignored,
+            either explicitly or implicitly through .gitignore files.
         """
         return self._ignore_spec
 
