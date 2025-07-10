@@ -6,19 +6,166 @@ import time
 from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import pytest
 
-from serena.symbol import CodeDiff
+from serena.code_editor import CodeEditor, LanguageServerCodeEditor
 from solidlsp.ls_config import Language
-from src.serena.symbol import SymbolManager
+from src.serena.symbol import LanguageServerSymbolRetriever
 from test.conftest import create_ls, get_repo_path
 
 pytestmark = pytest.mark.snapshot
 
 log = logging.getLogger(__name__)
+
+
+class LineChange(NamedTuple):
+    """Represents a change to a specific line or range of lines."""
+
+    operation: Literal["insert", "delete", "replace"]
+    original_start: int
+    original_end: int
+    modified_start: int
+    modified_end: int
+    original_lines: list[str]
+    modified_lines: list[str]
+
+
+@dataclass
+class CodeDiff:
+    """
+    Represents the difference between original and modified code.
+    Provides object-oriented access to diff information including line numbers.
+    """
+
+    relative_path: str
+    original_content: str
+    modified_content: str
+    _line_changes: list[LineChange] = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Compute the diff using difflib's SequenceMatcher."""
+        original_lines = self.original_content.splitlines(keepends=True)
+        modified_lines = self.modified_content.splitlines(keepends=True)
+
+        matcher = SequenceMatcher(None, original_lines, modified_lines)
+        self._line_changes = []
+
+        for tag, orig_start, orig_end, mod_start, mod_end in matcher.get_opcodes():
+            if tag == "equal":
+                continue
+            if tag == "insert":
+                self._line_changes.append(
+                    LineChange(
+                        operation="insert",
+                        original_start=orig_start,
+                        original_end=orig_start,
+                        modified_start=mod_start,
+                        modified_end=mod_end,
+                        original_lines=[],
+                        modified_lines=modified_lines[mod_start:mod_end],
+                    )
+                )
+            elif tag == "delete":
+                self._line_changes.append(
+                    LineChange(
+                        operation="delete",
+                        original_start=orig_start,
+                        original_end=orig_end,
+                        modified_start=mod_start,
+                        modified_end=mod_start,
+                        original_lines=original_lines[orig_start:orig_end],
+                        modified_lines=[],
+                    )
+                )
+            elif tag == "replace":
+                self._line_changes.append(
+                    LineChange(
+                        operation="replace",
+                        original_start=orig_start,
+                        original_end=orig_end,
+                        modified_start=mod_start,
+                        modified_end=mod_end,
+                        original_lines=original_lines[orig_start:orig_end],
+                        modified_lines=modified_lines[mod_start:mod_end],
+                    )
+                )
+
+    @property
+    def line_changes(self) -> list[LineChange]:
+        """Get all line changes in the diff."""
+        return self._line_changes
+
+    @property
+    def has_changes(self) -> bool:
+        """Check if there are any changes."""
+        return len(self._line_changes) > 0
+
+    @property
+    def added_lines(self) -> list[tuple[int, str]]:
+        """Get all added lines with their line numbers (0-based) in the modified file."""
+        result = []
+        for change in self._line_changes:
+            if change.operation in ("insert", "replace"):
+                for i, line in enumerate(change.modified_lines):
+                    result.append((change.modified_start + i, line))
+        return result
+
+    @property
+    def deleted_lines(self) -> list[tuple[int, str]]:
+        """Get all deleted lines with their line numbers (0-based) in the original file."""
+        result = []
+        for change in self._line_changes:
+            if change.operation in ("delete", "replace"):
+                for i, line in enumerate(change.original_lines):
+                    result.append((change.original_start + i, line))
+        return result
+
+    @property
+    def modified_line_numbers(self) -> list[int]:
+        """Get all line numbers (0-based) that were modified in the modified file."""
+        line_nums: set[int] = set()
+        for change in self._line_changes:
+            if change.operation in ("insert", "replace"):
+                line_nums.update(range(change.modified_start, change.modified_end))
+        return sorted(line_nums)
+
+    @property
+    def affected_original_line_numbers(self) -> list[int]:
+        """Get all line numbers (0-based) that were affected in the original file."""
+        line_nums: set[int] = set()
+        for change in self._line_changes:
+            if change.operation in ("delete", "replace"):
+                line_nums.update(range(change.original_start, change.original_end))
+        return sorted(line_nums)
+
+    def get_unified_diff(self, context_lines: int = 3) -> str:
+        """Get the unified diff as a string."""
+        import difflib
+
+        original_lines = self.original_content.splitlines(keepends=True)
+        modified_lines = self.modified_content.splitlines(keepends=True)
+
+        diff = difflib.unified_diff(
+            original_lines, modified_lines, fromfile=f"a/{self.relative_path}", tofile=f"b/{self.relative_path}", n=context_lines
+        )
+        return "".join(diff)
+
+    def get_context_diff(self, context_lines: int = 3) -> str:
+        """Get the context diff as a string."""
+        import difflib
+
+        original_lines = self.original_content.splitlines(keepends=True)
+        modified_lines = self.modified_content.splitlines(keepends=True)
+
+        diff = difflib.context_diff(
+            original_lines, modified_lines, fromfile=f"a/{self.relative_path}", tofile=f"b/{self.relative_path}", n=context_lines
+        )
+        return "".join(diff)
 
 
 class EditingTest:
@@ -33,7 +180,7 @@ class EditingTest:
         self.repo_path: Path | None = None
 
     @contextmanager
-    def _setup(self) -> Iterator[SymbolManager]:
+    def _setup(self) -> Iterator[LanguageServerSymbolRetriever]:
         """Context manager for setup/teardown with a temporary directory, providing the symbol manager."""
         temp_dir = Path(tempfile.mkdtemp())
         self.repo_path = temp_dir / self.original_repo_path.name
@@ -50,7 +197,7 @@ class EditingTest:
             log.info(f"Starting language server for {self.language} {self.rel_path}")
             language_server.start()
             log.info(f"Language server started for {self.language} {self.rel_path}")
-            yield SymbolManager(lang_server=language_server)
+            yield LanguageServerSymbolRetriever(lang_server=language_server)
         finally:
             if language_server is not None and language_server.is_running():
                 log.info(f"Stopping language server for {self.language} {self.rel_path}")
@@ -74,15 +221,16 @@ class EditingTest:
             return f.read()
 
     def run_test(self, content_after_ground_truth: str) -> None:
-        with self._setup() as symbol_manager:
+        with self._setup() as symbol_retriever:
             content_before = self._read_file(self.rel_path)
-            self._apply_edit(symbol_manager)
+            code_editor = LanguageServerCodeEditor(symbol_retriever)
+            self._apply_edit(code_editor)
             content_after = self._read_file(self.rel_path)
             code_diff = CodeDiff(self.rel_path, original_content=content_before, modified_content=content_after)
             self._test_diff(code_diff, content_after_ground_truth)
 
     @abstractmethod
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
         pass
 
     def _test_diff(self, code_diff: CodeDiff, snapshot: str) -> None:
@@ -102,8 +250,8 @@ class DeleteSymbolTest(EditingTest):
         self.deleted_symbol = deleted_symbol
         self.rel_path = rel_path
 
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
-        symbol_manager.delete_symbol(self.deleted_symbol, self.rel_path)
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.delete_symbol(self.deleted_symbol, self.rel_path)
 
 
 @pytest.mark.parametrize(
@@ -170,12 +318,12 @@ class InsertInRelToSymbolTest(EditingTest):
     def set_mode(self, mode: Literal["before", "after"]):
         self.mode = mode
 
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
         assert self.mode is not None
         if self.mode == "before":
-            symbol_manager.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
+            code_editor.insert_before_symbol(self.symbol_name, self.rel_path, self.new_content)
         elif self.mode == "after":
-            symbol_manager.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content, use_same_indentation=False)
+            code_editor.insert_after_symbol(self.symbol_name, self.rel_path, self.new_content)
 
 
 @pytest.mark.parametrize("mode", ["before", "after"])
@@ -266,8 +414,8 @@ class ReplaceBodyTest(EditingTest):
         self.symbol_name = symbol_name
         self.new_body = new_body
 
-    def _apply_edit(self, symbol_manager: SymbolManager) -> None:
-        symbol_manager.replace_body(self.symbol_name, self.rel_path, self.new_body, use_same_indentation=False)
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.replace_body(self.symbol_name, self.rel_path, self.new_body)
 
 
 @pytest.mark.parametrize(

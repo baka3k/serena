@@ -39,9 +39,9 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
-        result = self.language_server.retrieve_full_file_content(relative_path)
+        result = self.project.read_file(relative_path)
         result_lines = result.splitlines()
         if end_line is None:
             result_lines = result_lines[start_line:]
@@ -73,7 +73,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         :param content: the (utf-8-encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
         abs_path = (Path(self.get_project_root()) / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
@@ -102,14 +102,14 @@ class ListDirTool(Tool):
             required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.agent.path_is_gitignored,
-            is_ignored_file=self.agent.path_is_gitignored,
+            is_ignored_dir=self.project.is_ignored_path,
+            is_ignored_file=self.project.is_ignored_path,
         )
 
         result = json.dumps({"dirs": dirs, "files": files})
@@ -129,13 +129,13 @@ class FindFileTool(Tool):
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
         :return: a JSON object with the list of matching files
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
 
         dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
         # find the files by ignoring everything that doesn't match
         def is_ignored_file(abs_path: str) -> bool:
-            if self.agent.path_is_gitignored(abs_path):
+            if self.project.is_ignored_path(abs_path):
                 return True
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
@@ -143,7 +143,7 @@ class FindFileTool(Tool):
         dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
-            is_ignored_dir=self.agent.path_is_gitignored,
+            is_ignored_dir=self.project.is_ignored_path,
             is_ignored_file=is_ignored_file,
             relative_to=self.get_project_root(),
         )
@@ -185,7 +185,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
             If this is set to False and the regex matches multiple occurrences, an error will be returned
             (and you may retry with a revised, more specific regex).
         """
-        self.agent.validate_relative_path(relative_path)
+        self.project.validate_relative_path(relative_path)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
             updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
@@ -223,7 +223,8 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit):
         if not self.lines_read.were_lines_read(relative_path, (start_line, end_line)):
             read_lines_tool = self.agent.get_tool(ReadFileTool)
             return f"Error: Must call `{read_lines_tool.get_name_from_cls()}` first to read exactly the affected lines."
-        self.symbol_manager.delete_lines(relative_path, start_line, end_line)
+        code_editor = self.create_code_editor()
+        code_editor.delete_lines(relative_path, start_line, end_line)
         return SUCCESS_RESULT
 
 
@@ -281,7 +282,8 @@ class InsertAtLineTool(Tool, ToolMarkerCanEdit):
         """
         if not content.endswith("\n"):
             content += "\n"
-        self.symbol_manager.insert_at_line(relative_path, line, content)
+        code_editor = self.create_code_editor()
+        code_editor.insert_at_line(relative_path, line, content)
         return SUCCESS_RESULT
 
 
@@ -356,7 +358,7 @@ class SearchForPatternTool(Tool):
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
 
         if restrict_search_to_code_files:
-            matches = self.language_server.search_files_for_pattern(
+            matches = self.project.search_source_files_for_pattern(
                 pattern=substring_pattern,
                 relative_path=relative_path,
                 context_lines_before=context_lines_before,
@@ -371,8 +373,8 @@ class SearchForPatternTool(Tool):
                 dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
                     recursive=True,
-                    is_ignored_dir=self.agent.path_is_gitignored,
-                    is_ignored_file=self.agent.path_is_gitignored,
+                    is_ignored_dir=self.project.is_ignored_path,
+                    is_ignored_file=self.project.is_ignored_path,
                     relative_to=self.get_project_root(),
                 )
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided

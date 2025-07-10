@@ -1,5 +1,6 @@
 import pytest
 
+from serena.project import Project
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -91,24 +92,6 @@ class TestLanguageServerBasics:
         assert any("add" in name.lower() for name in symbol_names), f"Should find 'add' function in symbols: {symbol_names}"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
-    def test_retrieve_content_around_line(self, language_server: SolidLanguageServer):
-        """Test retrieving content around specific lines"""
-        # Test retrieving content around the greet function definition (line 2)
-        result = language_server.retrieve_content_around_line(CORE_PATH, 2, 2)
-
-        assert result is not None, "Should retrieve content around line 2"
-        content_str = result.to_display_string()
-        assert "greet" in content_str, "Should contain the greet function definition"
-        assert "defn" in content_str, "Should contain defn keyword"
-
-        # Test retrieving content around multiply function (around line 13)
-        result = language_server.retrieve_content_around_line(CORE_PATH, 13, 1)
-
-        assert result is not None, "Should retrieve content around line 13"
-        content_str = result.to_display_string()
-        assert "multiply" in content_str, "Should contain multiply function"
-
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_namespace_functions(self, language_server: SolidLanguageServer):
         """Test definition lookup for core/greet usage in utils.clj"""
         # Position of 'greet' in core/greet call
@@ -121,25 +104,12 @@ class TestLanguageServerBasics:
         assert definition["relativePath"] == CORE_PATH, "Should find the definition of greet in core.clj"
 
     @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
-    def test_search_files_for_pattern(self, language_server: SolidLanguageServer):
-        result = language_server.search_files_for_pattern("defn.*greet")
-
-        assert result is not None, "Pattern search should return results"
-        assert len(result) > 0, "Should find at least one match for 'defn.*greet'"
-
-        core_matches = [match for match in result if match.source_file_path and "core.clj" in match.source_file_path]
-        assert len(core_matches) > 0, "Should find greet function in core.clj"
-
-        result = language_server.search_files_for_pattern(":require")
-
-        assert result is not None, "Should find require statements"
-        utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]
-        assert len(utils_matches) > 0, "Should find require statement in utils.clj"
-
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
     def test_request_references_with_content(self, language_server: SolidLanguageServer):
         """Test references to multiply function with content"""
-        result = language_server.request_references_with_content(CORE_PATH, 12, 6, 3)
+        references = language_server.request_references(CORE_PATH, 12, 6)
+        result = [
+            language_server.retrieve_content_around_line(ref1["relativePath"], ref1["range"]["start"]["line"], 3, 0) for ref1 in references
+        ]
 
         assert result is not None, "Should find references with content"
         assert isinstance(result, list)
@@ -214,3 +184,39 @@ class TestLanguageServerBasics:
                 break
 
         assert found_relevant_references, f"Should have found calculate-area referencing multiply, but got: {result}"
+
+
+class TestProjectBasics:
+    @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
+    def test_retrieve_content_around_line(self, project: Project):
+        """Test retrieving content around specific lines"""
+        # Test retrieving content around the greet function definition (line 2)
+        result = project.retrieve_content_around_line(CORE_PATH, 2, 2)
+
+        assert result is not None, "Should retrieve content around line 2"
+        content_str = result.to_display_string()
+        assert "greet" in content_str, "Should contain the greet function definition"
+        assert "defn" in content_str, "Should contain defn keyword"
+
+        # Test retrieving content around multiply function (around line 13)
+        result = project.retrieve_content_around_line(CORE_PATH, 13, 1)
+
+        assert result is not None, "Should retrieve content around line 13"
+        content_str = result.to_display_string()
+        assert "multiply" in content_str, "Should contain multiply function"
+
+    @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
+    def test_search_files_for_pattern(self, project: Project) -> None:
+        result = project.search_source_files_for_pattern("defn.*greet")
+
+        assert result is not None, "Pattern search should return results"
+        assert len(result) > 0, "Should find at least one match for 'defn.*greet'"
+
+        core_matches = [match for match in result if match.source_file_path and "core.clj" in match.source_file_path]
+        assert len(core_matches) > 0, "Should find greet function in core.clj"
+
+        result = project.search_source_files_for_pattern(":require")
+
+        assert result is not None, "Should find require statements"
+        utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]
+        assert len(utils_matches) > 0, "Should find require statement in utils.clj"

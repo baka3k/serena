@@ -8,7 +8,6 @@ import platform
 import sys
 import threading
 import webbrowser
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -17,24 +16,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 import click
-from pathspec import PathSpec
 from sensai.util import logging
 from sensai.util.logging import LogTime
+from tqdm import tqdm
 
 from serena import serena_version
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import Project, SerenaConfig, get_serena_managed_dir
+from serena.config.serena_config import SerenaConfig, ToolSet, get_serena_managed_dir
 from serena.constants import (
     SERENA_LOG_FORMAT,
 )
 from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
+from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
-from serena.symbol import SymbolManager
 from serena.tools import Tool, ToolRegistry
-from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewerHandler
@@ -43,7 +39,6 @@ log = logging.getLogger(__name__)
 TTool = TypeVar("TTool", bound="Tool")
 T = TypeVar("T")
 SUCCESS_RESULT = "OK"
-DEFAULT_TOOL_TIMEOUT: float = 240
 
 
 class ProjectNotFoundError(Exception):
@@ -66,25 +61,7 @@ class LinesRead:
             del self.files[relative_path]
 
 
-class MemoriesManager(ABC):
-    @abstractmethod
-    def load_memory(self, name: str) -> str:
-        pass
-
-    @abstractmethod
-    def save_memory(self, name: str, content: str) -> str:
-        pass
-
-    @abstractmethod
-    def list_memories(self) -> list[str]:
-        pass
-
-    @abstractmethod
-    def delete_memory(self, name: str) -> str:
-        pass
-
-
-class MemoriesManagerMDFilesInProject(MemoriesManager):
+class MemoriesManager:
     def __init__(self, project_root: str):
         self._memory_dir = Path(get_serena_managed_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
@@ -117,56 +94,6 @@ class MemoriesManagerMDFilesInProject(MemoriesManager):
         return f"Memory {name} deleted."
 
 
-def create_ls_for_project(
-    project: str | Project,
-    log_level: int = logging.INFO,
-    ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
-    trace_lsp_communication: bool = False,
-) -> SolidLanguageServer:
-    """
-    Create a language server for a project. Note that you will have to start it
-    before performing any LS operations.
-
-    :param project: either a path to the project root or a ProjectConfig instance.
-        If no project.yml is found, the default project configuration will be used.
-    :param log_level: the log level for the language server
-    :param ls_timeout: the timeout for the language server
-    :param trace_lsp_communication: whether to trace LSP communication
-    :return: the language server
-    """
-    if isinstance(project, str):
-        project_instance = Project.load(project, autogenerate=True)
-    else:
-        project_instance = project
-
-    project_config = project_instance.project_config
-    ignored_paths = project_config.ignored_paths
-    if len(ignored_paths) > 0:
-        log.info(f"Using {len(ignored_paths)} ignored paths from the explicit project configuration.")
-        log.debug(f"Ignored paths: {ignored_paths}")
-    if project_config.ignore_all_files_in_gitignore:
-        log.info(f"Parsing all gitignore files in {project_instance.project_root}")
-        gitignore_parser = GitignoreParser(project_instance.project_root)
-        log.info(f"Found {len(gitignore_parser.get_ignore_specs())} gitignore files.")
-        for spec in gitignore_parser.get_ignore_specs():
-            log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
-            ignored_paths.extend(spec.patterns)
-    log.debug(f"Using {len(ignored_paths)} ignored paths in total.")
-    multilspy_config = LanguageServerConfig(
-        code_language=project_instance.language,
-        ignored_paths=ignored_paths,
-        trace_lsp_communication=trace_lsp_communication,
-    )
-    ls_logger = LanguageServerLogger(log_level=log_level)
-    log.info(f"Creating language server instance for {project_instance.project_root}.")
-    return SolidLanguageServer.create(
-        multilspy_config,
-        ls_logger,
-        project_instance.project_root,
-        timeout=ls_timeout,
-    )
-
-
 @click.command()
 @click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
 @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
@@ -177,11 +104,22 @@ def index_project(project: str, log_level: str = "INFO") -> None:
     :param project: the project to index. By default, the current working directory is used.
     """
     log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
-    project = os.path.abspath(project)
+    project_instance = Project.load(os.path.abspath(project))
     print(f"Indexing symbols in project {project}")
-    ls = create_ls_for_project(project, log_level=log_level_int)
+    ls = project_instance.create_language_server(log_level=log_level_int)
+    save_after_n_files = 10
     with ls.start_server():
-        ls.index_repository()
+        parsed_files = project_instance.gather_source_files()
+        files_processed = 0
+        pbar = tqdm(parsed_files, disable=False)
+        for relative_file_path in pbar:
+            pbar.set_description(f"Indexing ({os.path.basename(relative_file_path)})")
+            ls.request_document_symbols(relative_file_path, include_body=False)
+            ls.request_document_symbols(relative_file_path, include_body=True)
+            files_processed += 1
+            if files_processed % save_after_n_files == 0:
+                ls.save_cache()
+        ls.save_cache()
     print(f"Symbols saved to {ls.cache_path}")
 
 
@@ -234,13 +172,8 @@ class SerenaAgent:
         self._context = context
 
         # instantiate all tool classes
-        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry.get_all_tool_classes()}
+        self._all_tools: dict[type[Tool], Tool] = {tool_class: tool_class(self) for tool_class in ToolRegistry().get_all_tool_classes()}
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
-
-        # determine the set exposed tools (which e.g. the MCP shall see), limited by the context
-        # (which is fixed for the session)
-        excluded_tool_classes = set(self._context.get_excluded_tool_classes())
-        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if tc not in excluded_tool_classes}
 
         # If GUI log window is enabled, set the tool names for highlighting
         if self._gui_log_handler is not None:
@@ -261,6 +194,16 @@ class SerenaAgent:
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
         log.info("Configuration file: %s", self.serena_config.config_file_path)
         log.info("Available projects: {}".format(", ".join(self.serena_config.project_names)))
+        log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
+
+        # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
+        # limited by the Serena config, the context (which is fixed for the session) and JetBrains mode
+        tool_inclusion_definitions = [self.serena_config, self._context]
+        if self.serena_config.jetbrains:
+            tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
+        self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
+        self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if self._base_tool_set.includes_name(t.get_name())}
+        log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
@@ -276,20 +219,13 @@ class SerenaAgent:
         self._active_project: Project | None = None
         self._active_project_root: str | None = None
         self.language_server: SolidLanguageServer | None = None
-        self.symbol_manager: SymbolManager | None = None
         self.memories_manager: MemoriesManager | None = None
         self.lines_read: LinesRead | None = None
-        self.ignore_spec: PathSpec  # not set to None to avoid assert statements
-        """Ignore spec, extracted from the project's gitignore files and the explicitly configured ignored paths."""
 
         # set the active modes
         if modes is None:
             modes = SerenaAgentMode.load_default_modes()
         self._modes = modes
-
-        # log tool information
-        log.info(f"Loaded tools ({len(self._all_tools)}): {', '.join([tool.get_name_from_cls() for tool in self._all_tools.values()])}")
-        log.info(f"Number of exposed tools given {self._context}: {len(self._exposed_tools)}")
 
         self._active_tools: dict[type[Tool], Tool] = {}
         self._update_active_tools()
@@ -325,46 +261,6 @@ class SerenaAgent:
             raise ValueError("Cannot get project root if no project is active.")
         return project.project_root
 
-    def path_is_inside_project(self, path: str | Path) -> bool:
-        """
-        Checks if the given (absolute or relative) path is inside the project directory.
-        Note that even relative paths may be outside if the contain ".." or point to symlinks.
-        """
-        path = Path(path)
-        _proj_root = Path(self.get_project_root())
-        if not path.is_absolute():
-            path = _proj_root / path
-
-        path = path.resolve()
-        return path.is_relative_to(_proj_root)
-
-    def path_is_gitignored(self, path: str | Path) -> bool:
-        """
-        Checks if the given path is ignored by git. Non absolute paths are assumed to be relative to the project root.
-        """
-        path = Path(path)
-        if path.is_absolute():
-            relative_path = path.relative_to(self.get_project_root())
-        else:
-            relative_path = path
-
-        # always ignore paths inside .git
-        if len(relative_path.parts) > 0 and relative_path.parts[0] == ".git":
-            return True
-
-        return match_path(str(relative_path), self.ignore_spec, root_path=self.get_project_root())
-
-    def validate_relative_path(self, relative_path: str) -> None:
-        """
-        Validates that the given relative path is safe to read or edit,
-        meaning it's inside the project directory and is not ignored by git.
-        """
-        if not self.path_is_inside_project(relative_path):
-            raise ValueError(f"{relative_path=} points to path outside of the repository root, can't use it for safety reasons")
-
-        if self.path_is_gitignored(relative_path):
-            raise ValueError(f"File {relative_path} is gitignored, can't read or edit it for safety reasons")
-
     def get_exposed_tool_instances(self) -> list["Tool"]:
         """
         :return: the tool instances which are exposed (e.g. to the MCP client).
@@ -381,6 +277,15 @@ class SerenaAgent:
         :return: the active project or None if no project is active
         """
         return self._active_project
+
+    def get_active_project_or_raise(self) -> Project:
+        """
+        :return: the active project or raises an exception if no project is active
+        """
+        project = self.get_active_project()
+        if project is None:
+            raise ValueError("No active project. Please activate a project first.")
+        return project
 
     def set_modes(self, modes: list[SerenaAgentMode]) -> None:
         """
@@ -407,43 +312,23 @@ class SerenaAgent:
 
     def _update_active_tools(self) -> None:
         """
-        Update the active tools based on context, modes, and project configuration.
-        All tool exclusions are merged together.
+        Update the active tools based on enabled modes and the active project.
+        The base tool set already takes the Serena configuration and the context into account
+        (as well as any internal modes that are not handled dynamically, such as JetBrains mode).
         """
-        excluded_tool_classes: set[type[Tool]] = set()
-        # modes
-        for mode in self._modes:
-            mode_excluded_tool_classes = mode.get_excluded_tool_classes()
-            if len(mode_excluded_tool_classes) > 0:
-                log.info(
-                    f"Mode {mode.name} excluded {len(mode_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in mode_excluded_tool_classes])}"
-                )
-                excluded_tool_classes.update(mode_excluded_tool_classes)
-        # context
-        context_excluded_tool_classes = self._context.get_excluded_tool_classes()
-        if len(context_excluded_tool_classes) > 0:
-            log.info(
-                f"Context {self._context.name} excluded {len(context_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in context_excluded_tool_classes])}"
-            )
-            excluded_tool_classes.update(context_excluded_tool_classes)
-        # project config
+        tool_set = self._base_tool_set.apply(*self._modes)
         if self._active_project is not None:
-            project_excluded_tool_classes = self._active_project.project_config.get_excluded_tool_classes()
-            if len(project_excluded_tool_classes) > 0:
-                log.info(
-                    f"Project {self._active_project.project_name} excluded {len(project_excluded_tool_classes)} tools: {', '.join([tool.get_name_from_cls() for tool in project_excluded_tool_classes])}"
-                )
-                excluded_tool_classes.update(project_excluded_tool_classes)
+            tool_set = tool_set.apply(self._active_project.project_config)
             if self._active_project.project_config.read_only:
-                for tool_class in self._all_tools:
-                    if tool_class.can_edit():
-                        excluded_tool_classes.add(tool_class)
+                tool_set = tool_set.without_editing_tools()
 
         self._active_tools = {
-            tool_class: tool_instance for tool_class, tool_instance in self._all_tools.items() if tool_class not in excluded_tool_classes
+            tool_class: tool_instance
+            for tool_class, tool_instance in self._all_tools.items()
+            if tool_set.includes_name(tool_instance.get_name())
         }
 
-        log.info(f"Active tools after all exclusions ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
+        log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
     def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
         """
@@ -476,31 +361,30 @@ class SerenaAgent:
         future = self.issue_task(task)
         return future.result()
 
+    def is_using_language_server(self) -> bool:
+        """
+        :return: whether this agent uses language server-based code analysis
+        """
+        return not self.serena_config.jetbrains
+
     def _activate_project(self, project: Project) -> None:
         log.info(f"Activating {project.project_name} at {project.project_root}")
         self._active_project = project
         self._update_active_tools()
 
         # initialize project-specific instances which do not depend on the language server
-        self.memories_manager = MemoriesManagerMDFilesInProject(project.project_root)
+        self.memories_manager = MemoriesManager(project.project_root)
         self.lines_read = LinesRead()
-
-        # reset project-specific instances that depend on the language server
-        self.symbol_manager = None
 
         def init_language_server() -> None:
             # start the language server
             with LogTime("Language server initialization", logger=log):
                 self.reset_language_server()
                 assert self.language_server is not None
-                self.ignore_spec = self.language_server.get_ignore_spec()
 
-            # initialize project-specific instances which depend on the language server
-            log.debug(f"Initializing symbol and memories manager for {project.project_name} at {project.project_root}")
-            self.symbol_manager = SymbolManager(self.language_server, self)
-
-        # initialize the language server in the background
-        self.issue_task(init_language_server)
+        # initialize the language server in the background (if in language server mode)
+        if self.is_using_language_server():
+            self.issue_task(init_language_server)
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
@@ -626,8 +510,7 @@ class SerenaAgent:
 
         # instantiate and start the language server
         assert self._active_project is not None
-        self.language_server = create_ls_for_project(
-            self._active_project,
+        self.language_server = self._active_project.create_language_server(
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
@@ -638,17 +521,12 @@ class SerenaAgent:
             raise RuntimeError(
                 f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
             )
-        if self.symbol_manager is not None:
-            log.debug("Setting the language server in the agent's symbol manager")
-            self.symbol_manager.set_language_server(self.language_server)
-        else:
-            log.debug("No symbol manager available yet, skipping setting the language server")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
 
     def print_tool_overview(self) -> None:
-        ToolRegistry.print_tool_overview(self._active_tools.values())
+        ToolRegistry().print_tool_overview(self._active_tools.values())
 
     def mark_file_modified(self, relativ_path: str) -> None:
         assert self.lines_read is not None

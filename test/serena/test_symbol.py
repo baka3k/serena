@@ -1,6 +1,6 @@
 import pytest
 
-from src.serena.symbol import Symbol
+from src.serena.symbol import LanguageServerSymbol
 
 
 class TestSymbolNameMatching:
@@ -77,7 +77,7 @@ class TestSymbolNameMatching:
     )
     def test_match_simple_name(self, name_path_pattern, symbol_name_path_parts, is_substring_match, expected):
         """Tests matching for simple names (no '/' in pattern)."""
-        result = Symbol.match_name_path(name_path_pattern, symbol_name_path_parts, is_substring_match)
+        result = LanguageServerSymbol.match_name_path(name_path_pattern, symbol_name_path_parts, is_substring_match)
         error_msg = self._create_assertion_error_message(name_path_pattern, symbol_name_path_parts, is_substring_match, expected, result)
         assert result == expected, error_msg
 
@@ -157,6 +157,6 @@ class TestSymbolNameMatching:
     )
     def test_match_name_path_pattern_path_len_2(self, name_path_pattern, symbol_name_path_parts, is_substring_match, expected):
         """Tests matching for qualified names (e.g. 'module/class/func')."""
-        result = Symbol.match_name_path(name_path_pattern, symbol_name_path_parts, is_substring_match)
+        result = LanguageServerSymbol.match_name_path(name_path_pattern, symbol_name_path_parts, is_substring_match)
         error_msg = self._create_assertion_error_message(name_path_pattern, symbol_name_path_parts, is_substring_match, expected, result)
         assert result == expected, error_msg
