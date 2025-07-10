@@ -70,7 +70,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerOptional):
         return self._limit_length(result, max_answer_chars)
 
 
-class JetBrainsFindSymbolReferencesTool(Tool, ToolMarkerOptional):
+class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerOptional):
     """
     Finds symbols that reference the given symbol
     """
