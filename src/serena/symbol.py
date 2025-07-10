@@ -618,11 +618,6 @@ class JetBrainsSymbol(Symbol):
     def is_position_in_file_available(self) -> bool:
         return "text_range" in self._dict
 
-    @property
-    def _body_indices(self) -> tuple[int, int]:
-        text_range = self._dict["text_range"]
-        return text_range["start_offset"], text_range["end_offset"]
-
     def get_body_start_position(self) -> PositionInFile | None:
         if not self.is_position_in_file_available():
             return None
