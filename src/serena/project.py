@@ -82,15 +82,16 @@ class Project:
         """
         return self._ignore_spec
 
-    def is_ignored_dirname(self, dirname: str) -> bool:
+    def _is_ignored_dirname(self, dirname: str) -> bool:
         return dirname.startswith(".")
 
-    def is_ignored_relative_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    def _is_ignored_relative_path(self, relative_path: str, ignore_non_source_files: bool = True) -> bool:
         """
         Determine whether a path should be ignored based on file type and ignore patterns.
 
         :param relative_path: Relative path to check
-        :param ignore_unsupported_files: whether files that are not source files shall be ignored
+        :param ignore_non_source_files: whether files that are not source files (according to the file masks
+            determined by the project's programming language) shall be ignored
 
         :return: whether the path should be ignored
         """
@@ -100,7 +101,7 @@ class Project:
 
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
-        if is_file and ignore_unsupported_files:
+        if is_file and ignore_non_source_files:
             fn_matcher = self.language.get_source_fn_matcher()
             if not fn_matcher.is_relevant_filename(abs_path):
                 return True
@@ -115,7 +116,7 @@ class Project:
         for part in dir_parts:
             if not part:  # Skip empty parts (e.g., from leading '/')
                 continue
-            if self.is_ignored_dirname(part):
+            if self._is_ignored_dirname(part):
                 return True
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.project_root)
@@ -175,11 +176,11 @@ class Project:
             return [relative_path]
         else:
             for root, dirs, files in os.walk(start_path, followlinks=True):
-                dirs[:] = [d for d in dirs if not self.is_ignored_relative_path(os.path.join(root, d))]
+                dirs[:] = [d for d in dirs if not self._is_ignored_relative_path(os.path.join(root, d))]
                 for file in files:
                     rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root)
                     try:
-                        if not self.is_ignored_relative_path(rel_file_path):
+                        if not self._is_ignored_relative_path(rel_file_path):
                             rel_file_paths.append(rel_file_path)
                     except FileNotFoundError:
                         log.warning(
