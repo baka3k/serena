@@ -221,9 +221,9 @@ class EditingTest:
             return f.read()
 
     def run_test(self, content_after_ground_truth: str) -> None:
-        with self._setup() as symbol_manager:
+        with self._setup() as symbol_retriever:
             content_before = self._read_file(self.rel_path)
-            code_editor = LanguageServerCodeEditor(symbol_manager)
+            code_editor = LanguageServerCodeEditor(symbol_retriever)
             self._apply_edit(code_editor)
             content_after = self._read_file(self.rel_path)
             code_diff = CodeDiff(self.rel_path, original_content=content_before, modified_content=content_after)

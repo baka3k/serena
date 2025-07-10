@@ -212,13 +212,13 @@ class CodeEditor(Generic[TSymbol], ABC):
 
 
 class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
-    def __init__(self, symbol_manager: LanguageServerSymbolRetriever, agent: Optional["SerenaAgent"] = None):
-        super().__init__(project_root=symbol_manager.get_language_server().repository_root_path, agent=agent)
-        self._symbol_manager = symbol_manager
+    def __init__(self, symbol_retriever: LanguageServerSymbolRetriever, agent: Optional["SerenaAgent"] = None):
+        super().__init__(project_root=symbol_retriever.get_language_server().repository_root_path, agent=agent)
+        self._symbol_retriever = symbol_retriever
 
     @property
     def _lang_server(self) -> SolidLanguageServer:
-        return self._symbol_manager.get_language_server()
+        return self._symbol_retriever.get_language_server()
 
     class EditedFile(CodeEditor.EditedFile):
         def __init__(self, lang_server: SolidLanguageServer, relative_path: str, file_buffer: LSPFileBuffer):
@@ -245,7 +245,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         return self._lang_server.language_server.retrieve_full_file_content(relative_path)
 
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> LanguageServerSymbol:
-        symbol_candidates = self._symbol_manager.find_by_name(name_path, within_relative_path=relative_file_path)
+        symbol_candidates = self._symbol_retriever.find_by_name(name_path, within_relative_path=relative_file_path)
         if len(symbol_candidates) == 0:
             raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
         if len(symbol_candidates) > 1:
