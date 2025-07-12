@@ -1,11 +1,10 @@
 import json
 import logging
 import os
-from collections.abc import Iterable, Iterator, Reversible, Sequence
-from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
-from difflib import SequenceMatcher
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, Union
+from abc import ABC, abstractmethod
+from collections.abc import Iterator, Sequence
+from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING, Any, Self, Union
 
 from sensai.util.string import ToStringMixin
 
@@ -13,159 +12,16 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 
+from .project import Project
+
 if TYPE_CHECKING:
     from .agent import SerenaAgent
 
 log = logging.getLogger(__name__)
 
 
-class LineChange(NamedTuple):
-    """Represents a change to a specific line or range of lines."""
-
-    operation: Literal["insert", "delete", "replace"]
-    original_start: int
-    original_end: int
-    modified_start: int
-    modified_end: int
-    original_lines: list[str]
-    modified_lines: list[str]
-
-
 @dataclass
-class CodeDiff:
-    """
-    Represents the difference between original and modified code.
-    Provides object-oriented access to diff information including line numbers.
-    """
-
-    relative_path: str
-    original_content: str
-    modified_content: str
-    _line_changes: list[LineChange] = field(init=False)
-
-    def __post_init__(self) -> None:
-        """Compute the diff using difflib's SequenceMatcher."""
-        original_lines = self.original_content.splitlines(keepends=True)
-        modified_lines = self.modified_content.splitlines(keepends=True)
-
-        matcher = SequenceMatcher(None, original_lines, modified_lines)
-        self._line_changes = []
-
-        for tag, orig_start, orig_end, mod_start, mod_end in matcher.get_opcodes():
-            if tag == "equal":
-                continue
-            if tag == "insert":
-                self._line_changes.append(
-                    LineChange(
-                        operation="insert",
-                        original_start=orig_start,
-                        original_end=orig_start,
-                        modified_start=mod_start,
-                        modified_end=mod_end,
-                        original_lines=[],
-                        modified_lines=modified_lines[mod_start:mod_end],
-                    )
-                )
-            elif tag == "delete":
-                self._line_changes.append(
-                    LineChange(
-                        operation="delete",
-                        original_start=orig_start,
-                        original_end=orig_end,
-                        modified_start=mod_start,
-                        modified_end=mod_start,
-                        original_lines=original_lines[orig_start:orig_end],
-                        modified_lines=[],
-                    )
-                )
-            elif tag == "replace":
-                self._line_changes.append(
-                    LineChange(
-                        operation="replace",
-                        original_start=orig_start,
-                        original_end=orig_end,
-                        modified_start=mod_start,
-                        modified_end=mod_end,
-                        original_lines=original_lines[orig_start:orig_end],
-                        modified_lines=modified_lines[mod_start:mod_end],
-                    )
-                )
-
-    @property
-    def line_changes(self) -> list[LineChange]:
-        """Get all line changes in the diff."""
-        return self._line_changes
-
-    @property
-    def has_changes(self) -> bool:
-        """Check if there are any changes."""
-        return len(self._line_changes) > 0
-
-    @property
-    def added_lines(self) -> list[tuple[int, str]]:
-        """Get all added lines with their line numbers (0-based) in the modified file."""
-        result = []
-        for change in self._line_changes:
-            if change.operation in ("insert", "replace"):
-                for i, line in enumerate(change.modified_lines):
-                    result.append((change.modified_start + i, line))
-        return result
-
-    @property
-    def deleted_lines(self) -> list[tuple[int, str]]:
-        """Get all deleted lines with their line numbers (0-based) in the original file."""
-        result = []
-        for change in self._line_changes:
-            if change.operation in ("delete", "replace"):
-                for i, line in enumerate(change.original_lines):
-                    result.append((change.original_start + i, line))
-        return result
-
-    @property
-    def modified_line_numbers(self) -> list[int]:
-        """Get all line numbers (0-based) that were modified in the modified file."""
-        line_nums: set[int] = set()
-        for change in self._line_changes:
-            if change.operation in ("insert", "replace"):
-                line_nums.update(range(change.modified_start, change.modified_end))
-        return sorted(line_nums)
-
-    @property
-    def affected_original_line_numbers(self) -> list[int]:
-        """Get all line numbers (0-based) that were affected in the original file."""
-        line_nums: set[int] = set()
-        for change in self._line_changes:
-            if change.operation in ("delete", "replace"):
-                line_nums.update(range(change.original_start, change.original_end))
-        return sorted(line_nums)
-
-    def get_unified_diff(self, context_lines: int = 3) -> str:
-        """Get the unified diff as a string."""
-        import difflib
-
-        original_lines = self.original_content.splitlines(keepends=True)
-        modified_lines = self.modified_content.splitlines(keepends=True)
-
-        diff = difflib.unified_diff(
-            original_lines, modified_lines, fromfile=f"a/{self.relative_path}", tofile=f"b/{self.relative_path}", n=context_lines
-        )
-        return "".join(diff)
-
-    def get_context_diff(self, context_lines: int = 3) -> str:
-        """Get the context diff as a string."""
-        import difflib
-
-        original_lines = self.original_content.splitlines(keepends=True)
-        modified_lines = self.modified_content.splitlines(keepends=True)
-
-        diff = difflib.context_diff(
-            original_lines, modified_lines, fromfile=f"a/{self.relative_path}", tofile=f"b/{self.relative_path}", n=context_lines
-        )
-        return "".join(diff)
-
-
-@dataclass
-class SymbolLocation:
+class LanguageServerSymbolLocation:
     """
     Represents the (start) location of a symbol identifier, which, within Serena, uniquely identifies the symbol.
     """
@@ -199,7 +55,64 @@ class SymbolLocation:
         return self.relative_path is not None and self.line is not None and self.column is not None
 
 
-class Symbol(ToStringMixin):
+@dataclass
+class PositionInFile:
+    """
+    Represents a character position within a file
+    """
+
+    line: int
+    """
+    the 0-based line number in the file
+    """
+    col: int
+    """
+    the 0-based column
+    """
+
+    def to_lsp_position(self) -> Position:
+        """
+        Convert to LSP Position.
+        """
+        return Position(line=self.line, character=self.col)
+
+
+class Symbol(ABC):
+    @abstractmethod
+    def get_body_start_position(self) -> PositionInFile | None:
+        pass
+
+    @abstractmethod
+    def get_body_end_position(self) -> PositionInFile | None:
+        pass
+
+    def get_body_start_position_or_raise(self) -> PositionInFile:
+        """
+        Get the start position of the symbol body, raising an error if it is not defined.
+        """
+        pos = self.get_body_start_position()
+        if pos is None:
+            raise ValueError(f"Body start position is not defined for {self}")
+        return pos
+
+    def get_body_end_position_or_raise(self) -> PositionInFile:
+        """
+        Get the end position of the symbol body, raising an error if it is not defined.
+        """
+        pos = self.get_body_end_position()
+        if pos is None:
+            raise ValueError(f"Body end position is not defined for {self}")
+        return pos
+
+    @abstractmethod
+    def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
+        """
+        :return: whether a symbol definition of this symbol's kind is usually separated from the
+            previous/next definition by at least one empty line.
+        """
+
+
+class LanguageServerSymbol(Symbol, ToStringMixin):
     _NAME_PATH_SEP = "/"
 
     @staticmethod
@@ -214,7 +127,7 @@ class Symbol(ToStringMixin):
         """
         assert name_path, "name_path must not be empty"
         assert symbol_name_path_parts, "symbol_name_path_parts must not be empty"
-        name_path_sep = Symbol._NAME_PATH_SEP
+        name_path_sep = LanguageServerSymbol._NAME_PATH_SEP
 
         is_absolute_pattern = name_path.startswith(name_path_sep)
         pattern_parts = name_path.lstrip(name_path_sep).rstrip(name_path_sep).split(name_path_sep)
@@ -260,10 +173,6 @@ class Symbol(ToStringMixin):
         return self.symbol_root["kind"]
 
     def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
-        """
-        :return: whether a symbol definition of this symbol's kind is usually separated from the
-            previous/next definition by at least one empty line.
-        """
         return self.symbol_kind in (SymbolKind.Function, SymbolKind.Method, SymbolKind.Class, SymbolKind.Interface, SymbolKind.Struct)
 
     @property
@@ -274,11 +183,11 @@ class Symbol(ToStringMixin):
         return None
 
     @property
-    def location(self) -> SymbolLocation:
+    def location(self) -> LanguageServerSymbolLocation:
         """
         :return: the start location of the actual symbol identifier
         """
-        return SymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
+        return LanguageServerSymbolLocation(relative_path=self.relative_path, line=self.line, column=self.column)
 
     @property
     def body_start_position(self) -> Position | None:
@@ -301,6 +210,18 @@ class Symbol(ToStringMixin):
                 if end_pos:
                     return end_pos
         return None
+
+    def get_body_start_position(self) -> PositionInFile | None:
+        start_pos = self.body_start_position
+        if start_pos is None:
+            return None
+        return PositionInFile(line=start_pos["line"], col=start_pos["character"])
+
+    def get_body_end_position(self) -> PositionInFile | None:
+        end_pos = self.body_end_position
+        if end_pos is None:
+            return None
+        return PositionInFile(line=end_pos["line"], col=end_pos["character"])
 
     def get_body_line_numbers(self) -> tuple[int | None, int | None]:
         start_pos = self.body_start_position
@@ -408,18 +329,18 @@ class Symbol(ToStringMixin):
         """
         result = []
 
-        def should_include(s: "Symbol") -> bool:
+        def should_include(s: "LanguageServerSymbol") -> bool:
             if include_kinds is not None and s.symbol_kind not in include_kinds:
                 return False
             if exclude_kinds is not None and s.symbol_kind in exclude_kinds:
                 return False
-            return Symbol.match_name_path(
+            return LanguageServerSymbol.match_name_path(
                 name_path=name_path,
                 symbol_name_path_parts=s.get_name_path_parts(),
                 substring_matching=substring_matching,
             )
 
-        def traverse(s: "Symbol") -> None:
+        def traverse(s: "LanguageServerSymbol") -> None:
             if should_include(s):
                 result.append(s)
             for c in s.iter_children():
@@ -490,24 +411,36 @@ class Symbol(ToStringMixin):
 
 
 @dataclass
-class ReferenceInSymbol(ToStringMixin):
-    """Same as the class of the same name in the language server, but using Serena's Symbol class.
-    Be careful to not confuse it with counterpart!
+class ReferenceInLanguageServerSymbol(ToStringMixin):
+    """
+    Represents the location of a reference to another symbol within a symbol/file.
+
+    The contained symbol is the symbol within which the reference is located,
+    not the symbol that is referenced.
     """
 
-    symbol: Symbol
+    symbol: LanguageServerSymbol
+    """
+    the symbol within which the reference is located
+    """
     line: int
+    """
+    the line number in which the reference is located (0-based)
+    """
     character: int
+    """
+    the column number in which the reference is located (0-based)
+    """
+
+    @classmethod
+    def from_lsp_reference(cls, reference: LSPReferenceInSymbol) -> Self:
+        return cls(symbol=LanguageServerSymbol(reference.symbol), line=reference.line, character=reference.character)
 
     def get_relative_path(self) -> str | None:
         return self.symbol.location.relative_path
 
-    @classmethod
-    def from_lsp_reference(cls, reference: LSPReferenceInSymbol) -> Self:
-        return cls(symbol=Symbol(reference.symbol), line=reference.line, character=reference.character)
 
-
-class SymbolManager:
+class LanguageServerSymbolRetriever:
     def __init__(self, lang_server: SolidLanguageServer, agent: Union["SerenaAgent", None] = None) -> None:
         """
         :param lang_server: the language server to use for symbol retrieval as well as editing operations.
@@ -524,6 +457,9 @@ class SymbolManager:
         """
         self._lang_server = lang_server
 
+    def get_language_server(self) -> SolidLanguageServer:
+        return self._lang_server
+
     def find_by_name(
         self,
         name_path: str,
@@ -532,33 +468,33 @@ class SymbolManager:
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
         within_relative_path: str | None = None,
-    ) -> list[Symbol]:
+    ) -> list[LanguageServerSymbol]:
         """
         Find all symbols that match the given name. See docstring of `Symbol.find` for more details.
         The only parameter not mentioned there is `within_relative_path`, which can be used to restrict the search
         to symbols within a specific file or directory.
         """
-        symbols: list[Symbol] = []
+        symbols: list[LanguageServerSymbol] = []
         symbol_roots = self._lang_server.request_full_symbol_tree(within_relative_path=within_relative_path, include_body=include_body)
         for root in symbol_roots:
             symbols.extend(
-                Symbol(root).find(
+                LanguageServerSymbol(root).find(
                     name_path, include_kinds=include_kinds, exclude_kinds=exclude_kinds, substring_matching=substring_matching
                 )
             )
         return symbols
 
-    def get_document_symbols(self, relative_path: str) -> list[Symbol]:
+    def get_document_symbols(self, relative_path: str) -> list[LanguageServerSymbol]:
         symbol_dicts, roots = self._lang_server.request_document_symbols(relative_path, include_body=False)
-        symbols = [Symbol(s) for s in symbol_dicts]
+        symbols = [LanguageServerSymbol(s) for s in symbol_dicts]
         return symbols
 
-    def find_by_location(self, location: SymbolLocation) -> Symbol | None:
+    def find_by_location(self, location: LanguageServerSymbolLocation) -> LanguageServerSymbol | None:
         if location.relative_path is None:
             return None
         symbol_dicts, roots = self._lang_server.request_document_symbols(location.relative_path, include_body=False)
         for symbol_dict in symbol_dicts:
-            symbol = Symbol(symbol_dict)
+            symbol = LanguageServerSymbol(symbol_dict)
             if symbol.location == location:
                 return symbol
         return None
@@ -570,7 +506,7 @@ class SymbolManager:
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
-    ) -> list[ReferenceInSymbol]:
+    ) -> list[ReferenceInLanguageServerSymbol]:
         """
         Find all symbols that reference the symbol with the given name.
         If multiple symbols fit the name (e.g. for variables that are overwritten), will use the first one.
@@ -600,11 +536,11 @@ class SymbolManager:
 
     def find_referencing_symbols_by_location(
         self,
-        symbol_location: SymbolLocation,
+        symbol_location: LanguageServerSymbolLocation,
         include_body: bool = False,
         include_kinds: Sequence[SymbolKind] | None = None,
         exclude_kinds: Sequence[SymbolKind] | None = None,
-    ) -> list[ReferenceInSymbol]:
+    ) -> list[ReferenceInLanguageServerSymbol]:
         """
         Find all symbols that reference the symbol at the given location.
 
@@ -641,284 +577,65 @@ class SymbolManager:
         if exclude_kinds is not None:
             references = [s for s in references if s.symbol["kind"] not in exclude_kinds]
 
-        return [ReferenceInSymbol.from_lsp_reference(r) for r in references]
+        return [ReferenceInLanguageServerSymbol.from_lsp_reference(r) for r in references]
 
-    @contextmanager
-    def _edited_file(self, relative_path: str) -> Iterator[None]:
-        with self._lang_server.open_file(relative_path) as file_buffer:
-            yield
-            root_path = self._lang_server.language_server.repository_root_path
-            abs_path = os.path.join(root_path, relative_path)
-            with open(abs_path, "w", encoding="utf-8") as f:
-                f.write(file_buffer.contents)
-            if self.agent is not None:
-                self.agent.mark_file_modified(relative_path)
+    @dataclass
+    class SymbolOverviewElement:
+        name_path: str
+        kind: int
 
-    @contextmanager
-    def _edited_symbol_location(self, location: SymbolLocation) -> Iterator[Symbol]:
+    def get_symbol_overview(self, relative_path: str) -> dict[str, list[SymbolOverviewElement]]:
+        path_to_symbol_infos = self._lang_server.request_overview(relative_path)
+        result = {}
+        for file_path, symbols in path_to_symbol_infos.items():
+            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
+            #  The language server methods would need to be adjusted for this.
+            result[file_path] = [self.SymbolOverviewElement(name_path=symbol[0], kind=int(symbol[1])) for symbol in symbols]
+        return result
+
+
+class JetBrainsSymbol(Symbol):
+    def __init__(self, symbol_dict: dict, project: Project) -> None:
         """
-        Context manager for locating and editing a symbol in a file.
+        :param symbol_dict: dictionary as returned by the JetBrains plugin client.
         """
-        symbol = self.find_by_location(location)
-        if symbol is None:
-            raise ValueError("Symbol not found/has no defined location within a file")
-        assert location.relative_path is not None
-        with self._edited_file(location.relative_path):
-            yield symbol
+        self._project = project
+        self._dict = symbol_dict
+        self._cached_file_content: str | None = None
+        self._cached_body_start_position: PositionInFile | None = None
+        self._cached_body_end_position: PositionInFile | None = None
 
-    def _get_code_file_content(self, relative_path: str) -> str:
-        """Get the content of a file using the language server."""
-        return self._lang_server.language_server.retrieve_full_file_content(relative_path)
+    def get_relative_path(self) -> str:
+        return self._dict["relative_path"]
 
-    def replace_body(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
-        """
-        Replace the body of the symbol with the given name_path in the given file.
+    def get_file_content(self) -> str:
+        if self._cached_file_content is None:
+            path = os.path.join(self._project.project_root, self.get_relative_path())
+            with open(path, encoding=self._project.project_config.encoding) as f:
+                self._cached_file_content = f.read()
+        return self._cached_file_content
 
-        :param name_path: the name path of the symbol to replace.
-        :param relative_file_path: the relative path of the file in which the symbol is defined.
-        :param body: the new body
-        :param use_same_indentation: whether to use the same indentation as the original body. This means that
-            the user doesn't have to provide the correct indentation, but can just write the body.
-        """
-        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
-        if len(symbol_candidates) > 1:
-            raise ValueError(
-                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
-                "Will not replace the body of any of them, but you can use `replace_body_at_location`, the replace lines tool or other editing "
-                "tools to perform your edits. Their locations are: \n "
-                + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
-            )
-        symbol = symbol_candidates[0]
-        return self.replace_body_at_location(symbol.location, body, use_same_indentation=use_same_indentation)
+    def is_position_in_file_available(self) -> bool:
+        return "text_range" in self._dict
 
-    def replace_body_at_location(self, location: SymbolLocation, body: str, *, use_same_indentation: bool = True) -> None:
-        """
-        Replace the body of the symbol at the given location with the given body
+    def get_body_start_position(self) -> PositionInFile | None:
+        if not self.is_position_in_file_available():
+            return None
+        if self._cached_body_start_position is None:
+            pos = self._dict["text_range"]["start_pos"]
+            line, col = pos["line"], pos["col"]
+            self._cached_body_start_position = PositionInFile(line=line, col=col)
+        return self._cached_body_start_position
 
-        :param location: the location of the symbol to replace.
-        :param body: the new body
-        :param use_same_indentation: whether to use the same indentation as the original body. This means that
-            the user doesn't have to provide the correct indentation, but can just write the body.
-        """
-        with self._edited_symbol_location(location) as symbol:
-            assert location.relative_path is not None
-            start_pos = symbol.body_start_position
-            end_pos = symbol.body_end_position
-            if start_pos is None or end_pos is None:
-                raise ValueError(f"Symbol at {location} does not have a defined body range.")
-            start_line, start_col = start_pos["line"], start_pos["character"]
+    def get_body_end_position(self) -> PositionInFile | None:
+        if not self.is_position_in_file_available():
+            return None
+        if self._cached_body_end_position is None:
+            pos = self._dict["text_range"]["end_pos"]
+            line, col = pos["line"], pos["col"]
+            self._cached_body_end_position = PositionInFile(line=line, col=col)
+        return self._cached_body_end_position
 
-            if use_same_indentation:
-                indent = " " * start_col
-                body_lines = body.splitlines()
-                body = body_lines[0] + "\n" + "\n".join(indent + line for line in body_lines[1:])
-
-            # make sure the replacement adds no additional newlines (before or after) - all newlines
-            # and whitespace before/after should remain the same, so we strip it entirely
-            body = body.strip()
-
-            self._lang_server.delete_text_between_positions(location.relative_path, start_pos, end_pos)
-            self._lang_server.insert_text_at_position(location.relative_path, start_line, start_col, body)
-
-    @staticmethod
-    def _count_leading_newlines(text: Iterable) -> int:
-        cnt = 0
-        for c in text:
-            if c == "\n":
-                cnt += 1
-            elif c == "\r":
-                continue
-            else:
-                break
-        return cnt
-
-    @classmethod
-    def _count_trailing_newlines(cls, text: Reversible) -> int:
-        return cls._count_leading_newlines(reversed(text))
-
-    def insert_after_symbol(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
-        """
-        Inserts content after the symbol with the given name in the given file.
-        """
-        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
-        if len(symbol_candidates) > 1:
-            raise ValueError(
-                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
-                f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the last one. "
-                f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
-            )
-        symbol = symbol_candidates[-1]
-        return self.insert_after_symbol_at_location(symbol.location, body, use_same_indentation=use_same_indentation)
-
-    def insert_after_symbol_at_location(self, location: SymbolLocation, body: str, *, use_same_indentation: bool = True) -> None:
-        """
-        Appends content after the given symbol
-
-        :param location: the location of the symbol after which to add new lines
-        :param body: the body of the entity to append
-        """
-        # make sure body always ends with at least one newline
-        if not body.endswith("\n"):
-            body += "\n"
-
-        assert location.relative_path is not None
-
-        # Find the symbol to get its end position
-        symbol = self.find_by_location(location)
-        if symbol is None:
-            raise ValueError("Symbol not found/has no defined location within a file")
-
-        pos = symbol.body_end_position
-        if pos is None:
-            raise ValueError(f"Symbol at {location} does not have a defined end position.")
-
-        # start at the beginning of the next line
-        col = 0
-        line = pos["line"] + 1
-        # make sure a suitable number of leading empty lines is used (at least 0/1 depending on the symbol type,
-        # otherwise as many as the caller wanted to insert)
-        original_leading_newlines = self._count_leading_newlines(body)
-        body = body.lstrip("\r\n")
-        min_empty_lines = 0
-        if symbol.is_neighbouring_definition_separated_by_empty_line():
-            min_empty_lines = 1
-        num_leading_empty_lines = max(min_empty_lines, original_leading_newlines)
-        if num_leading_empty_lines:
-            body = ("\n" * num_leading_empty_lines) + body
-        # make sure the one line break succeeding the original symbol, which we repurposed as prefix via
-        # `line += 1`, is replaced
-        body = body.rstrip("\r\n") + "\n"
-
-        if use_same_indentation:
-            symbol_start_pos = symbol.body_start_position
-            assert symbol_start_pos is not None, f"Symbol at {location=} does not have a defined start position."
-            symbol_identifier_col = symbol_start_pos["character"]
-            indent = " " * (symbol_identifier_col)
-            body = "\n".join(indent + line for line in body.splitlines())
-            # IMPORTANT: without this, the insertion does the wrong thing. See implementation of insert_text_at_position in TextUtils,
-            # it is somewhat counterintuitive (never inserts whitespace)
-            # I am not 100% sure whether col=0 is always the best choice here.
-            #
-            # Without col=0, inserting after dataclass_instance in variables.py:
-            # > dataclass_instance = VariableDataclass(id=1, name="Test")
-            # > test test
-            # > dataclass_instancetest test
-            # > second line
-            # > .status = "active"  # Reassign dataclass field
-            #
-            # With col=0:
-            # > dataclass_instance = VariableDataclass(id=1, name="Test")
-            # > test test
-            # > second line
-            # > dataclass_instance.status = "active"  # Reassign dataclass field
-
-        with self._edited_symbol_location(location):
-            self._lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
-
-    def insert_before_symbol(self, name_path: str, relative_file_path: str, body: str, *, use_same_indentation: bool = True) -> None:
-        """
-        Inserts content before the symbol with the given name in the given file.
-        """
-        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
-        if len(symbol_candidates) > 1:
-            raise ValueError(
-                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
-                f"May be an overwritten variable, in which case you can ignore this error. Proceeding with the first one. "
-                f"Found symbols at locations: \n" + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
-            )
-        symbol = symbol_candidates[0]
-        self.insert_before_symbol_at_location(symbol.location, body, use_same_indentation=use_same_indentation)
-
-    def insert_before_symbol_at_location(self, location: SymbolLocation, body: str, *, use_same_indentation: bool = True) -> None:
-        """
-        Inserts content before the given symbol
-
-        :param location: the location of the symbol before which to add new lines
-        :param body: the body of the entity to insert
-        """
-        with self._edited_symbol_location(location) as symbol:
-            symbol_start_pos = symbol.body_start_position
-            if symbol_start_pos is None:
-                raise ValueError(f"Symbol at {location} does not have a defined start position.")
-
-            if use_same_indentation:
-                indent = " " * (symbol_start_pos["character"])
-                body = "\n".join(indent + line for line in body.splitlines())
-
-            # insert position is the start of line where the symbol is defined
-            line = symbol_start_pos["line"]
-            col = 0
-
-            original_trailing_empty_lines = self._count_trailing_newlines(body) - 1
-
-            # ensure eol is present at end
-            body = body.rstrip() + "\n"
-
-            # add suitable number of trailing empty lines after the body (at least 0/1 depending on the symbol type,
-            # otherwise as many as the caller wanted to insert)
-            min_trailing_empty_lines = 0
-            if symbol.is_neighbouring_definition_separated_by_empty_line():
-                min_trailing_empty_lines = 1
-            num_trailing_newlines = max(min_trailing_empty_lines, original_trailing_empty_lines)
-            body += "\n" * num_trailing_newlines
-
-            assert location.relative_path is not None
-
-            self._lang_server.insert_text_at_position(location.relative_path, line=line, column=col, text_to_be_inserted=body)
-
-    def insert_at_line(self, relative_path: str, line: int, content: str) -> None:
-        """
-        Inserts content at the given line in the given file.
-
-        :param line: the 0-based index of the line to insert content at
-        :param content: the content to insert
-        """
-        with self._edited_file(relative_path):
-            self._lang_server.insert_text_at_position(relative_path, line, 0, content)
-
-    def delete_lines(self, relative_path: str, start_line: int, end_line: int) -> None:
-        """
-        Deletes lines in the given file.
-
-        :param start_line: the 0-based index of the first line to delete (inclusive)
-        :param end_line: the 0-based index of the last line to delete (inclusive)
-        """
-        start_col = 0
-        end_line_for_delete = end_line + 1
-        end_col = 0
-        with self._edited_file(relative_path):
-            start_pos = Position(line=start_line, character=start_col)
-            end_pos = Position(line=end_line_for_delete, character=end_col)
-            self._lang_server.delete_text_between_positions(relative_path, start_pos, end_pos)
-
-    def delete_symbol_at_location(self, location: SymbolLocation) -> None:
-        """
-        Deletes the symbol at the given location.
-        """
-        with self._edited_symbol_location(location) as symbol:
-            assert location.relative_path is not None
-            assert symbol.body_start_position is not None
-            assert symbol.body_end_position is not None
-            self._lang_server.delete_text_between_positions(location.relative_path, symbol.body_start_position, symbol.body_end_position)
-
-    def delete_symbol(self, name_path: str, relative_file_path: str) -> None:
-        """
-        Deletes the symbol with the given name in the given file.
-        """
-        symbol_candidates = self.find_by_name(name_path, within_relative_path=relative_file_path)
-        if len(symbol_candidates) == 0:
-            raise ValueError(f"No symbol with name {name_path} found in file {relative_file_path}")
-        if len(symbol_candidates) > 1:
-            raise ValueError(
-                f"Found multiple {len(symbol_candidates)} symbols with name {name_path} in file {relative_file_path}. "
-                "Will not delete any of them, but you can use `delete_symbol_at_location` or a corresponding tool to perform your edits. "
-                "Their locations are: \n " + json.dumps([s.location.to_dict() for s in symbol_candidates], indent=2)
-            )
-        symbol = symbol_candidates[0]
-        self.delete_symbol_at_location(symbol.location)
+    def is_neighbouring_definition_separated_by_empty_line(self) -> bool:
+        # NOTE: Symbol types cannot really be differentiated, because types are not handled in a language-agnostic way.
+        return False

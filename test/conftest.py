@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from sensai.util.logging import configure
 
+from serena.project import Project
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
@@ -50,6 +51,11 @@ def create_default_ls(language: Language) -> SolidLanguageServer:
     return create_ls(language, repo_path)
 
 
+def create_default_project(language: Language) -> Project:
+    repo_path = str(get_repo_path(language))
+    return Project.load(repo_path)
+
+
 @pytest.fixture(scope="session")
 def repo_path(request: LanguageParamRequest) -> Path:
     """Get the repository path for a specific language.
@@ -73,7 +79,7 @@ def repo_path(request: LanguageParamRequest) -> Path:
 
 @pytest.fixture(scope="session")
 def language_server(request: LanguageParamRequest):
-    """Create a SyncLanguageServer instance configured for the specified language.
+    """Create a language server instance configured for the specified language.
 
     This fixture requires a language parameter via pytest.mark.parametrize:
 
@@ -104,3 +110,33 @@ def language_server(request: LanguageParamRequest):
         yield server
     finally:
         server.stop()
+
+
+@pytest.fixture(scope="session")
+def project(request: LanguageParamRequest):
+    """Create a Project for the specified language.
+
+    This fixture requires a language parameter via pytest.mark.parametrize:
+
+    Example:
+    ```
+    @pytest.mark.parametrize("project", [Language.PYTHON], indirect=True)
+    def test_python_project(project: Project) -> None:
+        # Use the Python project to test something
+        pass
+    ```
+
+    You can also test multiple languages in a single test:
+    ```
+    @pytest.mark.parametrize("project", [Language.PYTHON, Language.TYPESCRIPT], indirect=True)
+    def test_multiple_languages(project: SyncLanguageServer) -> None:
+        # This test will run once for each language
+        pass
+    ```
+
+    """
+    if not hasattr(request, "param"):
+        raise ValueError("Language parameter must be provided via pytest.mark.parametrize")
+
+    language = request.param
+    yield create_default_project(language)

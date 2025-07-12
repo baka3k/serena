@@ -2,6 +2,7 @@
 Language server-related tools
 """
 
+import dataclasses
 import json
 from collections.abc import Sequence
 from copy import copy
@@ -60,14 +61,9 @@ class GetSymbolsOverviewTool(Tool):
             (e.g. a subdirectory).
         :return: a JSON object mapping relative paths of all contained files to info about top-level symbols in the file (name_path, kind).
         """
-        path_to_symbol_infos = self.language_server.request_overview(relative_path)
-        result = {}
-        for file_path, symbols in path_to_symbol_infos.items():
-            # TODO: maybe include not just top-level symbols? We could filter by kind to exclude variables
-            #  The language server methods would need to be adjusted for this.
-            result[file_path] = [{"name_path": symbol[0], "kind": int(symbol[1])} for symbol in symbols]
-
-        result_json_str = json.dumps(result)
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        result = symbol_retriever.get_symbol_overview(relative_path)
+        result_json_str = json.dumps({k: [dataclasses.asdict(i) for i in l] for k, l in result.items()})
         return self._limit_length(result_json_str, max_answer_chars)
 
 
@@ -137,7 +133,8 @@ class FindSymbolTool(Tool):
         """
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbols = self.symbol_manager.find_by_name(
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        symbols = symbol_retriever.find_by_name(
             name_path,
             include_body=include_body,
             include_kinds=parsed_include_kinds,
@@ -180,7 +177,8 @@ class FindReferencingSymbolsTool(Tool):
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        references_in_symbols = self.symbol_manager.find_referencing_symbols(
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
             include_body=include_body,
@@ -194,7 +192,7 @@ class FindReferencingSymbolsTool(Tool):
             if not include_body:
                 ref_relative_path = ref.symbol.location.relative_path
                 assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
-                content_around_ref = self.language_server.retrieve_content_around_line(
+                content_around_ref = self.project.retrieve_content_around_line(
                     relative_file_path=ref_relative_path, line=ref.line, context_lines_before=1, context_lines_after=1
                 )
                 ref_dict["content_around_reference"] = content_around_ref.to_display_string()
@@ -222,11 +220,11 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerCanEdit):
         :param body: the new symbol body. Important: Begin directly with the symbol definition and provide no
             leading indentation for the first line (but do indent the rest of the body according to the context).
         """
-        self.symbol_manager.replace_body(
+        code_editor = self.create_code_editor()
+        code_editor.replace_body(
             name_path,
             relative_file_path=relative_path,
             body=body,
-            use_same_indentation=False,
         )
         return SUCCESS_RESULT
 
@@ -251,7 +249,8 @@ class InsertAfterSymbolTool(Tool, ToolMarkerCanEdit):
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
         """
-        self.symbol_manager.insert_after_symbol(name_path, relative_file_path=relative_path, body=body, use_same_indentation=False)
+        code_editor = self.create_code_editor()
+        code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
 
@@ -275,5 +274,6 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerCanEdit):
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        self.symbol_manager.insert_before_symbol(name_path, relative_file_path=relative_path, body=body, use_same_indentation=False)
+        code_editor = self.create_code_editor()
+        code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT

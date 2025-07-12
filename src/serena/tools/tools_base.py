@@ -1,23 +1,25 @@
 import inspect
 import os
 import traceback
-from abc import ABC, abstractmethod
-from collections.abc import Generator, Iterable
-from copy import copy
+from abc import ABC
+from collections.abc import Iterable
+from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
+from typing import Any, Protocol, Self, TYPE_CHECKING, TypeVar
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
 from sensai.util.string import dict_string
+from serena.project import Project
 
 from serena.prompt_factory import PromptFactory
-from serena.symbol import SymbolManager
+from serena.symbol import LanguageServerSymbolRetriever
+from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
-from solidlsp import SolidLanguageServer
 
 if TYPE_CHECKING:
     from serena.agent import LinesRead, MemoriesManager, SerenaAgent
+    from serena.code_editor import CodeEditor
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -27,11 +29,6 @@ SUCCESS_RESULT = "OK"
 class Component(ABC):
     def __init__(self, agent: "SerenaAgent"):
         self.agent = agent
-
-    @property
-    def language_server(self) -> SolidLanguageServer:
-        assert self.agent.language_server is not None
-        return self.agent.language_server
 
     def get_project_root(self) -> str:
         """
@@ -48,10 +45,24 @@ class Component(ABC):
         assert self.agent.memories_manager is not None
         return self.agent.memories_manager
 
+    def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
+        if not self.agent.is_using_language_server():
+            raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
+        language_server = self.agent.language_server
+        assert language_server is not None
+        return LanguageServerSymbolRetriever(language_server, agent=self.agent)
+
     @property
-    def symbol_manager(self) -> SymbolManager:
-        assert self.agent.symbol_manager is not None
-        return self.agent.symbol_manager
+    def project(self) -> Project:
+        return self.agent.get_active_project_or_raise()
+
+    def create_code_editor(self) -> "CodeEditor":
+        from ..code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
+
+        if self.agent.is_using_language_server():
+            return LanguageServerCodeEditor(self.create_language_server_symbol_retriever(), agent=self.agent)
+        else:
+            return JetBrainsCodeEditor(project=self.project, agent=self.agent)
 
     @property
     def lines_read(self) -> "LinesRead":
@@ -72,28 +83,10 @@ class ToolMarkerDoesNotRequireActiveProject:
     pass
 
 
-class ToolInterface(ABC):
-    """Protocol defining the complete interface that make_tool() expects from a tool."""
-
-    @abstractmethod
-    def get_name(self) -> str:
-        """Get the tool name."""
-        ...
-
-    @abstractmethod
-    def get_apply_docstring(self) -> str:
-        """Get the docstring for the tool application, used by the MCP server."""
-        ...
-
-    @abstractmethod
-    def get_apply_fn_metadata(self) -> FuncMetadata:
-        """Get the metadata for the tool application function, used by the MCP server."""
-        ...
-
-    @abstractmethod
-    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs: Any) -> str:
-        """Apply the tool with logging and exception handling."""
-        ...
+class ToolMarkerOptional:
+    """
+    Marker class for optional tools that are disabled by default.
+    """
 
 
 class ApplyMethodProtocol(Protocol):
@@ -102,7 +95,7 @@ class ApplyMethodProtocol(Protocol):
     def __call__(self, *args: Any, **kwargs: Any) -> str: pass
 
 
-class Tool(Component, ToolInterface):
+class Tool(Component):
     # NOTE: each tool should implement the apply method, which is then used in
     # the central method of the Tool class `apply_ex`.
     # Failure to do so will result in a RuntimeError at tool execution time.
@@ -167,11 +160,11 @@ class Tool(Component, ToolInterface):
         return docstring.strip()
 
     def get_apply_docstring(self) -> str:
-        """Get the docstring for the apply method (instance method implementing ToolProtocol)."""
+        """Gets the docstring for the tool application, used by the MCP server."""
         return self.get_apply_docstring_from_cls()
 
     def get_apply_fn_metadata(self) -> FuncMetadata:
-        """Get the metadata for the apply method (instance method implementing ToolProtocol)."""
+        """Gets the metadata for the tool application function, used by the MCP server."""
         return self.get_apply_fn_metadata_from_cls()
 
     @classmethod
@@ -216,7 +209,7 @@ class Tool(Component, ToolInterface):
 
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:  # type: ignore
         """
-        Applies the tool with the given arguments
+        Applies the tool with logging and exception handling, using the given keyword arguments
         """
 
         def task() -> str:
@@ -238,7 +231,7 @@ class Tool(Component, ToolInterface):
                             "Error: No active project. Ask to user to select a project from this list: "
                             + f"{self.agent.serena_config.project_names}"
                         )
-                    if not self.agent.is_language_server_running():
+                    if self.agent.is_using_language_server() and not self.agent.is_language_server_running():
                         log.info("Language server is not running. Starting it ...")
                         self.agent.reset_language_server()
 
@@ -260,7 +253,8 @@ class Tool(Component, ToolInterface):
                 log.info(f"Result: {result}")
 
             try:
-                self.language_server.save_cache()
+                if self.agent.language_server is not None:
+                    self.agent.language_server.save_cache()
             except Exception as e:
                 log.error(f"Error saving language server cache: {e}")
 
@@ -317,58 +311,44 @@ class EditedFileContext:
             # If they do not, we may have to add a call to notify it.
 
 
+@dataclass(kw_only=True)
+class RegisteredTool:
+    tool_class: type[Tool]
+    is_optional: bool
+    tool_name: str
+
+
+@singleton
 class ToolRegistry:
-    _tool_dict: dict[str, type[Tool]] | None = None
-    """maps tool name to the corresponding tool class"""
-
-    @staticmethod
-    def _iter_tool_classes() -> Generator[type[Tool], None, None]:
-        """
-        Iterate over Tool subclasses.
-        """
+    def __init__(self) -> None:
+        self._tool_dict: dict[str, RegisteredTool] = {}
         for cls in iter_subclasses(Tool):
-            if cls.__module__.startswith("serena.tools"):
-                yield cls
+            if not cls.__module__.startswith("serena.tools"):
+                continue
+            is_optional = issubclass(cls, ToolMarkerOptional)
+            name = cls.get_name_from_cls()
+            if name in self._tool_dict:
+                raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
+            self._tool_dict[name] = RegisteredTool(tool_class=cls, is_optional=is_optional, tool_name=name)
 
-    @classmethod
-    def _get_tool_dict(cls) -> dict[str, type[Tool]]:
-        if cls._tool_dict is None:
-            cls._tool_dict = {}
-            for tool_class in cls._iter_tool_classes():
-                name = tool_class.get_name_from_cls()
-                if name in cls._tool_dict:
-                    raise ValueError(f"Duplicate tool name found: {name}. Tool classes must have unique names.")
-                cls._tool_dict[name] = tool_class
-        return cls._tool_dict
+    def get_tool_class_by_name(self, tool_name: str) -> type[Tool]:
+        return self._tool_dict[tool_name].tool_class
 
-    @classmethod
-    def get_tool_class_by_name(cls, tool_name: str) -> type[Tool]:
-        try:
-            return cls._get_tool_dict()[tool_name]
-        except KeyError as e:
-            available_tools = "\n".join(ToolRegistry.get_tool_names())
-            raise ValueError(f"Tool with name {tool_name} not found. Available tools:\n{available_tools}") from e
+    def get_all_tool_classes(self) -> list[type[Tool]]:
+        return list(t.tool_class for t in self._tool_dict.values())
 
-    @classmethod
-    def get_all_tool_classes(cls) -> list[type[Tool]]:
-        return list(cls._get_tool_dict().values())
+    def get_tool_names_default_enabled(self) -> list[str]:
+        """
+        :return: the list of tool names that are enabled by default (i.e. non-optional tools).
+        """
+        return [t.tool_name for t in self._tool_dict.values() if not t.is_optional]
 
-    @classmethod
-    def get_tool_names(cls) -> list[str]:
-        return list(cls._get_tool_dict().keys())
-
-    @classmethod
-    def tool_dict(cls) -> dict[str, type[Tool]]:
-        """Maps tool name to the corresponding tool class"""
-        return copy(cls._get_tool_dict())
-
-    @classmethod
-    def print_tool_overview(cls, tools: Iterable[type[Tool] | Tool] | None = None) -> None:
+    def print_tool_overview(self, tools: Iterable[type[Tool] | Tool] | None = None) -> None:
         """
         Print a summary of the tools. If no tools are passed, a summary of all tools is printed.
         """
         if tools is None:
-            tools = cls._get_tool_dict().values()
+            tools = [tool.tool_class for tool in self._tool_dict.values() if not tool.is_optional]
 
         tool_dict: dict[str, type[Tool] | Tool] = {}
         for tool_class in tools:
@@ -376,3 +356,6 @@ class ToolRegistry:
         for tool_name in sorted(tool_dict.keys()):
             tool_class = tool_dict[tool_name]
             print(f" * `{tool_name}`: {tool_class.get_tool_description().strip()}")
+
+    def is_valid_tool_name(self, tool_name: str) -> bool:
+        return tool_name in self._tool_dict

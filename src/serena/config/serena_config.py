@@ -4,11 +4,12 @@ The Serena Model Context Protocol (MCP) Server
 
 import os
 import shutil
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
 
 import yaml
 from ruamel.yaml.comments import CommentedMap
@@ -22,17 +23,88 @@ from serena.constants import (
     SELENA_CONFIG_TEMPLATE_FILE,
     SERENA_MANAGED_DIR_NAME,
 )
-from serena.tools import Tool, ToolRegistry
 from serena.util.general import load_yaml, save_yaml
 from serena.util.inspection import determine_programming_language_composition
 from solidlsp.ls_config import Language
 
 if TYPE_CHECKING:
-    pass
+    from ..project import Project
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 DEFAULT_TOOL_TIMEOUT: float = 240
+
+
+class ToolSet:
+    def __init__(self, tool_names: set[str]) -> None:
+        self._tool_names = tool_names
+
+    @classmethod
+    def default(cls) -> "ToolSet":
+        """
+        :return: the default tool set, which contains all tools that are enabled by default
+        """
+        from serena.tools import ToolRegistry
+
+        return cls(set(ToolRegistry().get_tool_names_default_enabled()))
+
+    def apply(self, *tool_inclusion_definitions: "ToolInclusionDefinition") -> "ToolSet":
+        """
+        :param tool_inclusion_definitions: the definitions to apply
+        :return: a new tool set with the definitions applied
+        """
+        from serena.tools import ToolRegistry
+
+        registry = ToolRegistry()
+        tool_names = set(self._tool_names)
+        for definition in tool_inclusion_definitions:
+            included_tools = []
+            excluded_tools = []
+            for included_tool in definition.included_optional_tools:
+                if not registry.is_valid_tool_name(included_tool):
+                    raise ValueError(f"Invalid tool name '{included_tool}' provided for inclusion")
+                if included_tool not in tool_names:
+                    tool_names.add(included_tool)
+                    included_tools.append(included_tool)
+            for excluded_tool in definition.excluded_tools:
+                if not registry.is_valid_tool_name(excluded_tool):
+                    raise ValueError(f"Invalid tool name '{excluded_tool}' provided for exclusion")
+                if excluded_tool in self._tool_names:
+                    tool_names.remove(excluded_tool)
+                    excluded_tools.append(excluded_tool)
+            if included_tools:
+                log.info(f"{definition} included {len(included_tools)} tools: {', '.join(included_tools)}")
+            if excluded_tools:
+                log.info(f"{definition} excluded {len(excluded_tools)} tools: {', '.join(excluded_tools)}")
+        return ToolSet(tool_names)
+
+    def without_editing_tools(self) -> "ToolSet":
+        """
+        :return: a new tool set that excludes all tools that can edit
+        """
+        from serena.tools import ToolRegistry
+
+        registry = ToolRegistry()
+        tool_names = set(self._tool_names)
+        for tool_name in self._tool_names:
+            if registry.get_tool_class_by_name(tool_name).can_edit():
+                tool_names.remove(tool_name)
+        return ToolSet(tool_names)
+
+    def get_tool_names(self) -> set[str]:
+        """
+        Returns the names of the tools that are currently included in the tool set.
+        """
+        return self._tool_names
+
+    def includes_name(self, tool_name: str) -> bool:
+        return tool_name in self._tool_names
+
+
+@dataclass
+class ToolInclusionDefinition:
+    excluded_tools: Iterable[str] = ()
+    included_optional_tools: Iterable[str] = ()
 
 
 class SerenaConfigError(Exception):
@@ -56,18 +128,20 @@ def is_running_in_docker() -> bool:
         return False
 
 
-@dataclass
-class ProjectConfig(ToStringMixin):
+@dataclass(kw_only=True)
+class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     project_name: str
     language: Language
     ignored_paths: list[str] = field(default_factory=list)
-    excluded_tools: set[str] = field(default_factory=set)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_ENCODING
 
     SERENA_DEFAULT_PROJECT_FILE = "project.yml"
+
+    def _tostring_includes(self) -> list[str]:
+        return ["project_name"]
 
     @classmethod
     def autogenerate(cls, project_root: str | Path, project_name: str | None = None, save_to_disk: bool = True) -> Self:
@@ -128,7 +202,8 @@ class ProjectConfig(ToStringMixin):
             project_name=project_name,
             language=language,
             ignored_paths=data.get("ignored_paths", []),
-            excluded_tools=set(data.get("excluded_tools", [])),
+            excluded_tools=data.get("excluded_tools", []),
+            included_optional_tools=data.get("included_optional_tools", []),
             read_only=data.get("read_only", False),
             ignore_all_files_in_gitignore=data.get("ignore_all_files_in_gitignore", True),
             initial_prompt=data.get("initial_prompt", ""),
@@ -153,44 +228,16 @@ class ProjectConfig(ToStringMixin):
             yaml_data["project_name"] = project_root.name
         return cls._from_dict(yaml_data)
 
-    def get_excluded_tool_classes(self) -> set[type["Tool"]]:
-        return set(ToolRegistry.get_tool_class_by_name(tool_name) for tool_name in self.excluded_tools)
-
-
-@dataclass
-class Project:
-    project_root: str
-    project_config: ProjectConfig
-
-    @property
-    def project_name(self) -> str:
-        return self.project_config.project_name
-
-    @property
-    def language(self) -> Language:
-        return self.project_config.language
-
-    @classmethod
-    def load(cls, project_root: str | Path, autogenerate: bool = True) -> Self:
-        project_root = Path(project_root).resolve()
-        if not project_root.exists():
-            raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
-        return cls(project_root=str(project_root), project_config=project_config)
-
-    def path_to_project_yml(self) -> str:
-        return os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
-
 
 @dataclass(kw_only=True)
-class SerenaConfig:
+class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
     (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
     For testing purposes, it can also be instantiated directly with the desired parameters.
     """
 
-    projects: list[Project] = field(default_factory=list)
+    projects: list["Project"] = field(default_factory=list)
     gui_log_window_enabled: bool = False
     log_level: int = logging.INFO
     trace_lsp_communication: bool = False
@@ -203,9 +250,16 @@ class SerenaConfig:
     the path to the configuration file to which updates of the configuration shall be saved;
     if None, the configuration is not saved to disk
     """
+    jetbrains: bool = False
+    """
+    whether to apply JetBrains mode
+    """
 
     CONFIG_FILE = "serena_config.yml"
     CONFIG_FILE_DOCKER = "serena_config.docker.yml"  # Docker-specific config file; auto-generated if missing, mounted via docker-compose for user customization
+
+    def _tostring_includes(self) -> list[str]:
+        return ["config_file_path"]
 
     @classmethod
     def _generate_config_file(cls, config_file_path: str) -> None:
@@ -243,6 +297,8 @@ class SerenaConfig:
         """
         Static constructor to create SerenaConfig from the configuration file
         """
+        from ..project import Project
+
         config_file_path = cls._determine_config_file_path()
 
         # create the configuration file from the template if necessary
@@ -292,6 +348,9 @@ class SerenaConfig:
         instance.web_dashboard_open_on_launch = loaded_commented_yaml.get("web_dashboard_open_on_launch", True)
         instance.tool_timeout = loaded_commented_yaml.get("tool_timeout", DEFAULT_TOOL_TIMEOUT)
         instance.trace_lsp_communication = loaded_commented_yaml.get("trace_lsp_communication", False)
+        instance.excluded_tools = loaded_commented_yaml.get("excluded_tools", [])
+        instance.included_optional_tools = loaded_commented_yaml.get("included_optional_tools", [])
+        instance.jetbrains = loaded_commented_yaml.get("jetbrains", False)
 
         # re-save the configuration file if any migrations were performed
         if num_project_migrations > 0:
@@ -334,7 +393,7 @@ class SerenaConfig:
     def project_names(self) -> list[str]:
         return sorted(project.project_config.project_name for project in self.projects)
 
-    def get_project(self, project_root_or_name: str) -> Project | None:
+    def get_project(self, project_root_or_name: str) -> Optional["Project"]:
         for project in self.projects:
             if project.project_config.project_name == project_root_or_name:
                 return project
@@ -345,7 +404,7 @@ class SerenaConfig:
                     return project
         return None
 
-    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple[Project, bool]:
+    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple["Project", bool]:
         """
         Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
         name or path is already registered.
@@ -357,6 +416,8 @@ class SerenaConfig:
             saved to disk. It may be that no new project configuration was generated if the project configuration already
             exists on disk but the project itself was not added yet to the Serena configuration.
         """
+        from ..project import Project
+
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Error: Path does not exist: {project_root}")

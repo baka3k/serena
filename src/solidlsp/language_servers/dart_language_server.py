@@ -78,8 +78,7 @@ class DartLanguageServer(SolidLanguageServer):
         dart_ls_dir = cls.ls_resources_dir()
         dart_executable_path = deps.binary_path(dart_ls_dir)
 
-        if not os.path.exists(dart_ls_dir):
-            os.makedirs(dart_ls_dir)
+        if not os.path.exists(dart_executable_path):
             deps.install(logger, dart_ls_dir)
 
         assert os.path.exists(dart_executable_path)

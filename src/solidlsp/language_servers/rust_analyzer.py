@@ -70,6 +70,14 @@ class RustAnalyzer(SolidLanguageServer):
                 ),
                 RuntimeDependency(
                     id="RustAnalyzer",
+                    description="RustAnalyzer for Linux (arm64)",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-aarch64-unknown-linux-gnu.gz",
+                    platform_id="linux-arm64",
+                    archive_type="gz",
+                    binary_name="rust_analyzer",
+                ),
+                RuntimeDependency(
+                    id="RustAnalyzer",
                     description="RustAnalyzer for Windows (x64)",
                     url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-pc-windows-msvc.zip",
                     platform_id="win-x64",

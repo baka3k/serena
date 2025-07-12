@@ -16,9 +16,8 @@ from pathlib import Path, PurePath
 from typing import Self, Union, cast
 
 import pathspec
-import tqdm
 
-from serena.text_utils import MatchedConsecutiveLines, search_files
+from serena.text_utils import MatchedConsecutiveLines
 from serena.util.file_system import match_path
 from solidlsp import ls_types
 from solidlsp.ls_config import Language, LanguageServerConfig
@@ -715,26 +714,6 @@ class SolidLanguageServer(ABC):
 
         return ret
 
-    def request_references_with_content(
-        self, relative_file_path: str, line: int, column: int, context_lines_before: int = 0, context_lines_after: int = 0
-    ) -> list[MatchedConsecutiveLines]:
-        """
-        Like request_references, but returns the content of the lines containing the references, not just the locations.
-
-        :param relative_file_path: The relative path of the file that has the symbol for which references should be looked up
-        :param line: The line number of the symbol
-        :param column: The column number of the symbol
-        :param context_lines_before: The number of lines to include in the context before the line containing the reference
-        :param context_lines_after: The number of lines to include in the context after the line containing the reference
-
-        :return: A list of MatchedConsecutiveLines objects, one for each reference.
-        """
-        references = self.request_references(relative_file_path, line, column)
-        return [
-            self.retrieve_content_around_line(ref["relativePath"], ref["range"]["start"]["line"], context_lines_before, context_lines_after)
-            for ref in references
-        ]
-
     def retrieve_full_file_content(self, file_path: str) -> str:
         """
         Retrieve the full content of the given file.
@@ -1228,70 +1207,6 @@ class SolidLanguageServer(ABC):
         symbol_body = symbol_body[symbol_start_column:]
         return symbol_body
 
-    def request_parsed_files(self, relative_path: str = "") -> list[str]:
-        """Retrieves relative paths of all files analyzed by the Language Server.
-
-        :param relative_path: will only retrieve files that are subpaths of this.
-        """
-        if not self.server_started:
-            self.logger.log(
-                "request_parsed_files called before Language Server started",
-                logging.ERROR,
-            )
-            raise LanguageServerException("Language Server not started")
-        rel_file_paths = []
-        start_path = os.path.join(self.repository_root_path, relative_path)
-        if not os.path.exists(start_path):
-            raise FileNotFoundError(f"Relative path {start_path} not found.")
-        if os.path.isfile(start_path):
-            return [relative_path]
-        else:
-            for root, dirs, files in os.walk(start_path, followlinks=True):
-                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
-                for file in files:
-                    rel_file_path = os.path.relpath(os.path.join(root, file), start=self.repository_root_path)
-                    try:
-                        if not self.is_ignored_path(rel_file_path):
-                            rel_file_paths.append(rel_file_path)
-                    except FileNotFoundError:
-                        self.logger.log(
-                            f"File {rel_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
-                            logging.WARNING,
-                        )
-            return rel_file_paths
-
-    def search_files_for_pattern(
-        self,
-        pattern: str,
-        relative_path: str = "",
-        context_lines_before: int = 0,
-        context_lines_after: int = 0,
-        paths_include_glob: str | None = None,
-        paths_exclude_glob: str | None = None,
-    ) -> list[MatchedConsecutiveLines]:
-        """
-        Search for a pattern across all files analyzed by the Language Server.
-
-        :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
-        :param relative_path:
-        :param context_lines_before: Number of lines of context to include before each match
-        :param context_lines_after: Number of lines of context to include after each match
-        :param paths_include_glob: Glob pattern to filter which files to include in the search
-        :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
-        :return: List of matched consecutive lines with context
-        """
-        relative_file_paths = self.request_parsed_files(relative_path=relative_path)
-        return search_files(
-            relative_file_paths,
-            pattern,
-            file_reader=self.retrieve_full_file_content,
-            root_path=self.repository_root_path,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-            paths_include_glob=paths_include_glob,
-            paths_exclude_glob=paths_exclude_glob,
-        )
-
     def request_referencing_symbols(
         self,
         relative_file_path: str,
@@ -1621,24 +1536,6 @@ class SolidLanguageServer(ABC):
         The path to the cache file for the document symbols.
         """
         return Path(self.repository_root_path) / ".serena" / "cache" / self.language_id / "document_symbols_cache_v23-06-25.pkl"
-
-    def index_repository(self, progress_bar: bool = True, save_after_n_files: int = 10) -> None:
-        """Will go through the entire repository and "index" all files, meaning save their symbols to the cache.
-
-        :param progress_bar: Whether to show a progress bar while indexing the repository.
-        :param save_after_n_files: How many files to process before saving a checkpoint of the cache.
-        """
-        parsed_files = self.request_parsed_files()
-        files_processed = 0
-        pbar = tqdm.tqdm(parsed_files, disable=not progress_bar)
-        for relative_file_path in pbar:
-            pbar.set_description(f"Indexing ({os.path.basename(relative_file_path)})")
-            self.request_document_symbols(relative_file_path, include_body=False)
-            self.request_document_symbols(relative_file_path, include_body=True)
-            files_processed += 1
-            if files_processed % save_after_n_files == 0:
-                self.save_cache()
-        self.save_cache()
 
     def save_cache(self):
         with self._cache_lock:

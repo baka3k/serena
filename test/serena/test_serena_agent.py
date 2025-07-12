@@ -6,7 +6,8 @@ import pytest
 
 import test.solidlsp.clojure as clj
 from serena.agent import SerenaAgent
-from serena.config.serena_config import Project, ProjectConfig, SerenaConfig
+from serena.config.serena_config import ProjectConfig, SerenaConfig
+from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool
 from solidlsp.ls_config import Language
 from test.conftest import get_repo_path

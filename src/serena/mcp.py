@@ -25,7 +25,7 @@ from serena.agent import (
 )
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
-from serena.tools import ToolInterface
+from serena.tools import Tool
 from serena.util.exception import show_fatal_exception_safe
 
 log = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class SerenaMCPFactory:
         self.project = project
 
     @staticmethod
-    def make_mcp_tool(tool: ToolInterface) -> MCPTool:
+    def make_mcp_tool(tool: Tool) -> MCPTool:
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
         func_arg_metadata = tool.get_apply_fn_metadata()
@@ -106,7 +106,7 @@ class SerenaMCPFactory:
         )
 
     @abstractmethod
-    def _iter_tools(self) -> Iterator[ToolInterface]:
+    def _iter_tools(self) -> Iterator[Tool]:
         pass
 
     # noinspection PyProtectedMember
@@ -204,7 +204,7 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
         self.agent = SerenaAgent(project=self.project, serena_config=serena_config, context=self.context, modes=modes)
 
-    def _iter_tools(self) -> Iterator[ToolInterface]:
+    def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
 
