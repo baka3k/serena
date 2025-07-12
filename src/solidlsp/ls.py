@@ -166,6 +166,11 @@ class SolidLanguageServer(ABC):
 
             ls = TypeScriptLanguageServer(config, logger, repository_root_path)
 
+            # VTS based Language Server implementation, need to experiment to see if it improves performance
+            # from solidlsp.language_servers.vts_language_server import VtsLanguageServer
+            #
+            # ls = VtsLanguageServer(config, logger, repository_root_path)
+
         elif config.code_language == Language.GO:
             from solidlsp.language_servers.gopls import Gopls
 
