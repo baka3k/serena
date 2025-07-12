@@ -5,13 +5,13 @@ from abc import ABC
 from collections.abc import Iterable
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Any, Protocol, Self, TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar
 
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
 from sensai.util.string import dict_string
-from serena.project import Project
 
+from serena.project import Project
 from serena.prompt_factory import PromptFactory
 from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
@@ -92,7 +92,8 @@ class ToolMarkerOptional:
 class ApplyMethodProtocol(Protocol):
     """Callable protocol for the apply method of a tool."""
 
-    def __call__(self, *args: Any, **kwargs: Any) -> str: pass
+    def __call__(self, *args: Any, **kwargs: Any) -> str:
+        pass
 
 
 class Tool(Component):
@@ -237,6 +238,7 @@ class Tool(Component):
 
                 # apply the actual tool
                 result = apply_fn(**kwargs)
+                self.agent.record_tool_usage_if_enabled(kwargs, result, self)
 
             except Exception as e:
                 if not catch_exceptions:

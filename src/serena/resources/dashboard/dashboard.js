@@ -226,9 +226,9 @@ class Dashboard {
 
     displayStats(stats) {
         const names = Object.keys(stats);
-        const counts = names.map(n => stats[n].count);
-        const inputChars = names.map(n => stats[n].input_chars);
-        const outputChars = names.map(n => stats[n].output_chars);
+        const counts = names.map(n => stats[n].num_times_called);
+        const inputTokens = names.map(n => stats[n].input_tokens);
+        const outputTokens = names.map(n => stats[n].output_tokens);
 
         const countCtx = document.getElementById('count-chart');
         const inputCtx = document.getElementById('input-chart');
@@ -255,13 +255,13 @@ class Dashboard {
 
         this.inputChart = new Chart(inputCtx, {
             type: 'bar',
-            data: { labels: names, datasets: [{ label: 'Input Chars', data: inputChars }] },
+            data: { labels: names, datasets: [{ label: 'Input Tokens', data: inputTokens }] },
             options: { scales: { y: { beginAtZero: true } } }
         });
 
         this.outputChart = new Chart(outputCtx, {
             type: 'bar',
-            data: { labels: names, datasets: [{ label: 'Output Chars', data: outputChars }] },
+            data: { labels: names, datasets: [{ label: 'Output Tokens', data: outputTokens }] },
             options: { scales: { y: { beginAtZero: true } } }
         });
     }

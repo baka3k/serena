@@ -9,7 +9,7 @@ from flask import Flask, Response, request, send_from_directory
 from pydantic import BaseModel
 from sensai.util import logging
 
-from serena.analytics import clear_tool_stats, get_tool_stats
+from serena.analytics import ToolUsageStats
 from serena.constants import SERENA_DASHBOARD_DIR, SERENA_LOG_FORMAT
 
 log = logging.getLogger(__name__)
@@ -76,12 +76,17 @@ class SerenaDashboardAPI:
     log = logging.getLogger(__qualname__)
 
     def __init__(
-        self, memory_log_handler: MemoryLogHandler, tool_names: list[str], shutdown_callback: Callable[[], None] | None = None
+        self,
+        memory_log_handler: MemoryLogHandler,
+        tool_names: list[str],
+        shutdown_callback: Callable[[], None] | None = None,
+        tool_usage_stats: ToolUsageStats | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._shutdown_callback = shutdown_callback
         self._app = Flask(__name__)
+        self._tool_usage_stats = tool_usage_stats
         self._setup_routes()
 
     @property
@@ -139,11 +144,13 @@ class SerenaDashboardAPI:
         return ResponseToolNames(tool_names=self._tool_names)
 
     def _get_tool_stats(self) -> ResponseToolStats:
-        return ResponseToolStats(stats=get_tool_stats())
+        if self._tool_usage_stats is not None:
+            return ResponseToolStats(stats=self._tool_usage_stats.get_tool_stats_dict())
+        else:
+            return ResponseToolStats(stats={})
 
-    @staticmethod
-    def _clear_tool_stats() -> None:
-        clear_tool_stats()
+    def _clear_tool_stats(self) -> None:
+        self._tool_usage_stats.clear()
 
     def _shutdown(self) -> None:
         log.info("Shutting down Serena")
