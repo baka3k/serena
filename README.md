@@ -706,10 +706,11 @@ Serena provides two convenient ways of accessing the logs of the current session
 
     This is mainly supported on Windows, but it may also work on Linux; macOS is unsupported.
 
-Both can be enabled or disabled in Serena's configuration file (`serena_config.yml`, see above).
+Both can be enabled, configured or disabled in Serena's configuration file (`serena_config.yml`, see above).
 If enabled, they will automatically be opened as soon as the Serena agent/MCP server is started.
+The web dashboard will display usage statistics of Serena's tools if you set  `record_tool_usage_stats: True` in your config.
 
-In addition to viewing logs, both tools allow to shut down the Serena agent.
+In addition to viewing logs, both tools allow to shut down the Serena agent. 
 This function is provided, because clients like Claude Desktop may fail to terminate the MCP server subprocess 
 when they themselves are closed.
 

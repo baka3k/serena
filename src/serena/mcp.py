@@ -103,6 +103,7 @@ class SerenaMCPFactory:
             is_async=is_async,
             context_kwarg=None,
             annotations=None,
+            title=None,
         )
 
     @abstractmethod
