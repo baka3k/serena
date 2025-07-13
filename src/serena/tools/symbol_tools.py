@@ -53,6 +53,9 @@ class GetSymbolsOverviewTool(Tool):
         For each analyzed file, we list the top-level symbols in the file (name_path, kind).
         Use this tool to get a high-level understanding of the code symbols.
         Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
+        Before requesting a symbol overview, it is usually a good idea to narrow down the scope of the overview
+        by first understanding the basic directory structure of the repository that you can get from memories
+        or by using the `list_dir` and `find_file` tools (or similar).
 
         :param relative_path: the relative path to the file or directory to get the overview of
         :param max_answer_chars: if the overview is longer than this number of characters,

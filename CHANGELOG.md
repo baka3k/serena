@@ -22,6 +22,9 @@ Status of the `main` branch. Changes prior to the next official version change w
    * **Add support for Clojure**
 * Configuration:
    * Add option `web_dashboard_open_on_launch` (allowing the dashboard to be enabled without opening a browser window) 
+   * Add options `record_tool_usage_stats` and `token_count_estimator`
+* Dashboard:
+  * Displaying tool usage statistics if enabled in the config
 
 Fixes:
 * Fix `ExecuteShellCommandTool` and `GetCurrentConfigTool` hanging on Windows

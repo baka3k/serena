@@ -113,6 +113,9 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerOptional):
         """
         Gets an overview of the top-level symbols in the given file.
         Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
+        Before requesting a symbol overview, it is usually a good idea to narrow down the scope of the overview
+        by first understanding the basic directory structure of the repository that you can get from memories
+        or by using the `list_dir` and `find_file` tools (or similar).
 
         :param relative_path: the relative path to the file to get the overview of
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
