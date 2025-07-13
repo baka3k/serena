@@ -130,6 +130,11 @@ class SerenaDashboardAPI:
             self._clear_tool_stats()
             return {"status": "cleared"}
 
+        @self._app.route("/get_token_count_estimator_name", methods=["GET"])
+        def get_token_count_estimator_name() -> dict[str, str]:
+            estimator_name = self._tool_usage_stats.token_estimator_name if self._tool_usage_stats else "unknown"
+            return {"token_count_estimator_name": estimator_name}
+
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
             self._shutdown()
@@ -150,7 +155,8 @@ class SerenaDashboardAPI:
             return ResponseToolStats(stats={})
 
     def _clear_tool_stats(self) -> None:
-        self._tool_usage_stats.clear()
+        if self._tool_usage_stats is not None:
+            self._tool_usage_stats.clear()
 
     def _shutdown(self) -> None:
         log.info("Shutting down Serena")

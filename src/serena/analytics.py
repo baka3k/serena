@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from copy import copy
 from dataclasses import asdict, dataclass
@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 
 class TokenCountEstimator(ABC):
+    @abstractmethod
     def estimate_token_count(self, text: str) -> int:
         """
         Estimate the number of tokens in the given text.
@@ -84,9 +85,9 @@ class RegisteredTokenCountEstimator(Enum):
 
     def _create_estimator(self) -> TokenCountEstimator:
         match self:
-            case self.TIKTOKEN_GPT4O:
+            case RegisteredTokenCountEstimator.TIKTOKEN_GPT4O:
                 return TiktokenCountEstimator(model_name="gpt-4o")
-            case self.ANTHROPIC_CLAUDE_SONNET_4:
+            case RegisteredTokenCountEstimator.ANTHROPIC_CLAUDE_SONNET_4:
                 return AnthropicTokenCount(model_name="claude-sonnet-4-20250514")
             case _:
                 raise ValueError(f"Unknown token count estimator: {self.value}")
@@ -109,6 +110,13 @@ class ToolUsageStats:
         self._token_estimator_name = token_count_estimator.value
         self._tool_stats: dict[str, ToolUsageStats.Entry] = defaultdict(ToolUsageStats.Entry)
         self._tool_stats_lock = threading.Lock()
+
+    @property
+    def token_estimator_name(self) -> str:
+        """
+        Get the name of the registered token count estimator used.
+        """
+        return self._token_estimator_name
 
     @dataclass(kw_only=True)
     class Entry:

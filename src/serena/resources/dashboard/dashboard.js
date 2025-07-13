@@ -201,17 +201,18 @@ class Dashboard {
 
     loadStats() {
         let self = this;
-        $.ajax({
-            url: '/get_tool_stats',
-            type: 'GET',
-            success: function(response) {
-                self.displayStats(response.stats || {});
-            },
-            error: function(xhr, status, error) {
-                console.error('Error loading stats:', error);
-            }
+        $.when(
+            $.ajax({ url: '/get_tool_stats', type: 'GET' }),
+            $.ajax({ url: '/get_token_count_estimator_name', type: 'GET' })
+        ).done(function(statsResp, estimatorResp) {
+            const stats = statsResp[0].stats;
+            const tokenCountEstimatorName = estimatorResp[0].token_count_estimator_name;
+            self.displayStats(stats, tokenCountEstimatorName);
+        }).fail(function() {
+            console.error('Error loading stats or estimator name');
         });
     }
+
 
     clearStats() {
         let self = this;
@@ -227,8 +228,27 @@ class Dashboard {
         });
     }
 
-    displayStats(stats) {
+    displayStats(stats, tokenCountEstimatorName) {
         const names = Object.keys(stats);
+      // If no stats collected
+        if (names.length === 0) {
+            // hide summary, charts, estimator name
+            $('#stats-summary').hide();
+            $('#estimator-name').hide();
+            $('.charts-container').hide();
+            // show no-stats message
+            $('#no-stats-message').show();
+            return;
+        } else {
+            // Ensure everything is visible
+            $('#estimator-name').show();
+            $('#stats-summary').show();
+            $('.charts-container').show();
+            $('#no-stats-message').hide();
+        }
+
+        $('#estimator-name').html(`<strong>Token count estimator:</strong> ${tokenCountEstimatorName}`);
+
         const counts = names.map(n => stats[n].num_times_called);
         const inputTokens = names.map(n => stats[n].input_tokens);
         const outputTokens = names.map(n => stats[n].output_tokens);
@@ -251,18 +271,6 @@ class Dashboard {
         if (this.tokensChart) this.tokensChart.destroy();
         if (this.inputChart) this.inputChart.destroy();
         if (this.outputChart) this.outputChart.destroy();
-
-        if (names.length === 0) {
-            this.countChart = null;
-            this.tokensChart = null;
-            this.inputChart = null;
-            this.outputChart = null;
-            countCtx.getContext('2d').clearRect(0,0,countCtx.width,countCtx.height);
-            tokensCtx.getContext('2d').clearRect(0,0,tokensCtx.width,tokensCtx.height);
-            inputCtx.getContext('2d').clearRect(0,0,inputCtx.width,inputCtx.height);
-            outputCtx.getContext('2d').clearRect(0,0,outputCtx.width,outputCtx.height);
-            return;
-        }
 
         // Update summary table
         this.updateSummaryTable(totalCalls, totalInputTokens, totalOutputTokens);
