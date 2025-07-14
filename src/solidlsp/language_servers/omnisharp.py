@@ -228,11 +228,8 @@ class OmniSharp(SolidLanguageServer):
             return
 
         def check_experimental_status(params):
-            if params["quiescent"] == True:
+            if params["quiescent"] is True:
                 self.server_ready.set()
-
-        def window_log_message(msg):
-            self.logger.log(f"LSP: window/logMessage: {msg}", logging.INFO)
 
         def workspace_configuration_handler(params):
             # TODO: We do not know the appropriate way to handle this request. Should ideally contact the OmniSharp dev team
@@ -348,7 +345,6 @@ class OmniSharp(SolidLanguageServer):
 
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("language/status", lang_status_handler)
-        self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
