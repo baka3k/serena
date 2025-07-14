@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import time
 
@@ -46,7 +47,7 @@ def serena_config():
             )
             test_projects.append(project)
 
-    config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False)
+    config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False, log_level=logging.ERROR)
     config.projects = test_projects
     return config
 

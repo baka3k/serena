@@ -10,7 +10,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 
-configure(level=logging.DEBUG)
+configure(level=logging.ERROR)
 
 
 @pytest.fixture(scope="session")
@@ -33,7 +33,7 @@ def create_ls(
     repo_path: str | None = None,
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
-    log_level: int = logging.INFO,
+    log_level: int = logging.ERROR,
 ) -> SolidLanguageServer:
     ignored_paths = ignored_paths or []
     if repo_path is None:
