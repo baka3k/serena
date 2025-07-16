@@ -6,8 +6,16 @@ prompt: |
   and how to use them.
   Don't attempt to use any excluded tools, instead rely on your own internal tools
   for achieving the basic file or shell operations.
-  However, if serena's tools can be used for achieving your task (see initial instructions), 
-  you should prioritize them.
+  
+  If serena's tools can be used for achieving your task, 
+  you should prioritize them. In particular, it is important that you avoid reading entire source code files,
+  unless it is strictly necessary! Instead, for exploring and reading code in a token-efficient manner, 
+  you should use serena's overview and symbolic search tools. The call of the read_file tool on an entire source code 
+  file should only happen in exceptional cases, usually you should first explore the file (by itself or as part of exploring
+  the directory containing it) using the symbol_overview tool, and then make targeted reads using find_symbol and other symbolic tools.
+  For non-code files or for reads where you don't know the symbol's name path you can use the patterns searching tool,
+  using the read_file as a last resort.
+
 excluded_tools:
   - create_text_file
   - read_file
