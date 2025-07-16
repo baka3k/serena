@@ -36,7 +36,7 @@ def determine_programming_language_composition(repo_path: str, rel_path_to_gitig
     language_counts: dict[str, int] = {}
     total_files = len(all_files)
 
-    for language in Language:
+    for language in Language.iter_all(include_experimental=False):
         matcher = language.get_source_fn_matcher()
         count = 0
 

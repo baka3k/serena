@@ -118,16 +118,15 @@ class SolidLanguageServer(ABC):
         ls: SolidLanguageServer
 
         if config.code_language == Language.PYTHON:
-            # We can also use jedi
-            # from solidlsp.language_servers.jedi_server import JediServer
-            #
-            # ls = JediServer(config, logger, repository_root_path)
             from solidlsp.language_servers.pyright_server import (
                 PyrightServer,
             )
 
             ls = PyrightServer(config, logger, repository_root_path)
+        elif config.code_language == Language.PYTHON_JEDI:
+            from solidlsp.language_servers.jedi_server import JediServer
 
+            ls = JediServer(config, logger, repository_root_path)
         elif config.code_language == Language.JAVA:
             from solidlsp.language_servers.eclipse_jdtls import (
                 EclipseJDTLS,
@@ -150,27 +149,24 @@ class SolidLanguageServer(ABC):
             ls = RustAnalyzer(config, logger, repository_root_path)
 
         elif config.code_language == Language.CSHARP:
-            # You can also switch to OmniSharp if you prefer that
-            # But OmniSharp seems to crash and has some issues with newer C# versions
-            # from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
-            # ls = OmniSharp(config, logger, repository_root_path)
-
             from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
 
             ls = CSharpLanguageServer(config, logger, repository_root_path)
+        elif config.code_language == Language.CSHARP_OMNISHARP:
+            from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
 
+            ls = OmniSharp(config, logger, repository_root_path)
         elif config.code_language == Language.TYPESCRIPT:
             from solidlsp.language_servers.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
 
             ls = TypeScriptLanguageServer(config, logger, repository_root_path)
-
+        elif config.code_language == Language.TYPESCRIPT_VTS:
             # VTS based Language Server implementation, need to experiment to see if it improves performance
-            # from solidlsp.language_servers.vts_language_server import VtsLanguageServer
-            #
-            # ls = VtsLanguageServer(config, logger, repository_root_path)
+            from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
+            ls = VtsLanguageServer(config, logger, repository_root_path)
         elif config.code_language == Language.GO:
             from solidlsp.language_servers.gopls import Gopls
 
