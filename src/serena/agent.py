@@ -15,10 +15,8 @@ from logging import Logger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar, Union
 
-import click
 from sensai.util import logging
 from sensai.util.logging import LogTime
-from tqdm import tqdm
 
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
@@ -93,68 +91,6 @@ class MemoriesManager:
         memory_file_path = self._get_memory_file_path(name)
         memory_file_path.unlink()
         return f"Memory {name} deleted."
-
-
-@click.command()
-@click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
-@click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-def index_project(project: str, log_level: str = "INFO") -> None:
-    """
-    Index a project by saving the symbols of files to Serena's language server cache.
-
-    :param project: the project to index. By default, the current working directory is used.
-    """
-    log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
-    project_instance = Project.load(os.path.abspath(project))
-    print(f"Indexing symbols in project {project}")
-    ls = project_instance.create_language_server(log_level=log_level_int)
-    save_after_n_files = 10
-    with ls.start_server():
-        parsed_files = project_instance.gather_source_files()
-        files_processed = 0
-        pbar = tqdm(parsed_files, disable=False)
-        for relative_file_path in pbar:
-            pbar.set_description(f"Indexing ({os.path.basename(relative_file_path)})")
-            ls.request_document_symbols(relative_file_path, include_body=False)
-            ls.request_document_symbols(relative_file_path, include_body=True)
-            files_processed += 1
-            if files_processed % save_after_n_files == 0:
-                ls.save_cache()
-        ls.save_cache()
-    print(f"Symbols saved to {ls.cache_path}")
-
-
-@click.command()
-@click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
-@click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-@click.option(
-    "--only-instructions",
-    is_flag=True,
-    help="If set, only print the initial instructions prompt (without prefix or postfix). The prefix and postfix are small additions that are used to"
-    "make the initial instructions more digestible for an LLM in the context of a system prompt, as opposed to their normal usage within a conversation.",
-)
-def print_system_prompt(project: str, log_level: str = "WARNING", only_instructions: bool = False) -> None:
-    """
-    Print the system prompt (initial instructions with a potential pre/post-fix) for a project.
-    """
-    prefix_to_instructions_prompt = (
-        "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
-    )
-    postfix_to_instructions_prompt = "You begin the conversation by acknowledging that you understood the above instructions on the symbolic tools and are ready to receive a task. You will not need to call the tool on getting initial instructions."
-
-    from serena.tools.workflow_tools import InitialInstructionsTool
-
-    log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
-    logging.configure(level=log_level_int)
-
-    agent = SerenaAgent(project=os.path.abspath(project), serena_config=SerenaConfig(web_dashboard=False, log_level=log_level_int))
-    initial_instructions_tool = agent.get_tool(InitialInstructionsTool)
-    initial_instructions = initial_instructions_tool.apply()
-    if only_instructions:
-        print(initial_instructions)
-    else:
-        system_prompt = f"{prefix_to_instructions_prompt}\n{initial_instructions}\n{postfix_to_instructions_prompt}"
-        print(system_prompt)
 
 
 class SerenaAgent:
