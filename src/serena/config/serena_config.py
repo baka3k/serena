@@ -21,6 +21,7 @@ from serena.constants import (
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
     SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_MANAGED_DIR_IN_HOME,
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.general import load_yaml, save_yaml
@@ -113,7 +114,7 @@ class SerenaConfigError(Exception):
     pass
 
 
-def get_serena_managed_dir(project_root: str | Path) -> str:
+def get_serena_managed_in_project_dir(project_root: str | Path) -> str:
     return os.path.join(project_root, SERENA_MANAGED_DIR_NAME)
 
 
@@ -293,7 +294,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         if is_running_in_docker():
             return os.path.join(REPO_ROOT, cls.CONFIG_FILE_DOCKER)
         else:
-            config_path = str(Path.home() / SERENA_MANAGED_DIR_NAME / cls.CONFIG_FILE)
+            config_path = os.path.join(SERENA_MANAGED_DIR_IN_HOME, cls.CONFIG_FILE)
 
             # if the config file does not exist, check if we can migrate it from the old location
             if not os.path.exists(config_path):

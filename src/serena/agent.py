@@ -21,7 +21,7 @@ from sensai.util.logging import LogTime
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import SerenaConfig, ToolSet, get_serena_managed_dir
+from serena.config.serena_config import SerenaConfig, ToolSet, get_serena_managed_in_project_dir
 from serena.constants import (
     SERENA_LOG_FORMAT,
 )
@@ -62,7 +62,7 @@ class LinesRead:
 
 class MemoriesManager:
     def __init__(self, project_root: str):
-        self._memory_dir = Path(get_serena_managed_dir(project_root)) / "memories"
+        self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_memory_file_path(self, name: str) -> Path:

@@ -14,7 +14,15 @@ from sensai.util import logging
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import ToolInclusionDefinition
-from serena.constants import CONTEXT_YAMLS_DIR, DEFAULT_CONTEXT, DEFAULT_MODES, INTERNAL_MODE_YAMLS_DIR, MODE_YAMLS_DIR
+from serena.constants import (
+    DEFAULT_CONTEXT,
+    DEFAULT_MODES,
+    INTERNAL_MODE_YAMLS_DIR,
+    SERENAS_OWN_CONTEXT_YAMLS_DIR,
+    SERENAS_OWN_MODE_YAMLS_DIR,
+    USER_CONTEXT_YAMLS_DIR,
+    USER_MODE_YAMLS_DIR,
+)
 
 if TYPE_CHECKING:
     pass
@@ -64,13 +72,19 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_name(cls, name: str) -> Self:
         """Load a registered Serena mode."""
-        yaml_path = os.path.join(MODE_YAMLS_DIR, f"{name}.yml")
-        if not os.path.exists(yaml_path):
+        fname = f"{name}.yml"
+        custom_mode_path = os.path.join(USER_MODE_YAMLS_DIR, fname)
+        if os.path.exists(custom_mode_path):
+            log.info(f"Loading custom mode {name} from {custom_mode_path}")
+            return cls.from_yaml(custom_mode_path)
+
+        own_yaml_path = os.path.join(SERENAS_OWN_MODE_YAMLS_DIR, fname)
+        if not os.path.exists(own_yaml_path):
             raise FileNotFoundError(
-                f"Mode {name} not found in {MODE_YAMLS_DIR}. You can load custom modes by using from_yaml() instead. "
+                f"Mode {name} not found in {USER_MODE_YAMLS_DIR} or in {SERENAS_OWN_MODE_YAMLS_DIR}. You can load custom modes by using from_yaml() instead. "
                 f"Available modes: {cls.list_registered_mode_names()}"
             )
-        return cls.from_yaml(yaml_path)
+        return cls.from_yaml(own_yaml_path)
 
     @classmethod
     def from_name_internal(cls, name: str) -> Self:
@@ -81,9 +95,12 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
         return cls.from_yaml(yaml_path)
 
     @classmethod
-    def list_registered_mode_names(cls) -> list[str]:
+    def list_registered_mode_names(cls, include_user_modes: bool = True) -> list[str]:
         """Names of all registered modes (from the corresponding YAML files in the serena repo)."""
-        return sorted([f.stem for f in Path(MODE_YAMLS_DIR).glob("*.yml")])
+        modes = [f.stem for f in Path(SERENAS_OWN_MODE_YAMLS_DIR).glob("*.yml")]
+        if include_user_modes:
+            modes += [f.stem for f in Path(USER_MODE_YAMLS_DIR).glob("*.yml")]
+        return sorted(set(modes))
 
     @classmethod
     def load_default_modes(cls) -> list[Self]:
@@ -134,13 +151,20 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def from_name(cls, name: str) -> Self:
         """Load a registered Serena context."""
-        yaml_path = os.path.join(CONTEXT_YAMLS_DIR, f"{name}.yml")
-        if not os.path.exists(yaml_path):
+        fname = f"{name}.yml"
+        custom_context_path = os.path.join(USER_CONTEXT_YAMLS_DIR, fname)
+        if os.path.exists(custom_context_path):
+            log.info(f"Loading custom context {name} from {custom_context_path}")
+            return cls.from_yaml(custom_context_path)
+
+        own_yaml_path = os.path.join(SERENAS_OWN_CONTEXT_YAMLS_DIR, fname)
+        if not os.path.exists(own_yaml_path):
             raise FileNotFoundError(
-                f"Context {Path(yaml_path).stem} not found in {CONTEXT_YAMLS_DIR}. You can load a custom context by using from_yaml() instead.\n"
+                f"Context {Path(own_yaml_path).stem} not found in {USER_CONTEXT_YAMLS_DIR} or in {SERENAS_OWN_CONTEXT_YAMLS_DIR}. "
+                f"You can load a custom context by using from_yaml() instead.\n"
                 f"Available contexts:\n{cls.list_registered_context_names()}"
             )
-        return cls.from_yaml(yaml_path)
+        return cls.from_yaml(own_yaml_path)
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
@@ -151,14 +175,17 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
                 return cls.from_yaml(name_or_path)
             except FileNotFoundError as e:
                 raise FileNotFoundError(
-                    f"Context {name_or_path} not found in {CONTEXT_YAMLS_DIR}. You can load a custom context by using from_yaml() instead.\n"
+                    f"Context {name_or_path} not found in {SERENAS_OWN_CONTEXT_YAMLS_DIR}. You can load a custom context by using from_yaml() instead.\n"
                     f"Available contexts:\n{cls.list_registered_context_names()}"
                 ) from e
 
     @classmethod
-    def list_registered_context_names(cls) -> list[str]:
+    def list_registered_context_names(cls, include_user_contexts: bool = True) -> list[str]:
         """Names of all registered contexts (from the corresponding YAML files in the serena repo)."""
-        return sorted([f.stem for f in Path(CONTEXT_YAMLS_DIR).glob("*.yml")])
+        contexts = [f.stem for f in Path(SERENAS_OWN_CONTEXT_YAMLS_DIR).glob("*.yml")]
+        if include_user_contexts:
+            contexts += [f.stem for f in Path(USER_CONTEXT_YAMLS_DIR).glob("*.yml")]
+        return sorted(set(contexts))
 
     @classmethod
     def load_default(cls) -> Self:
