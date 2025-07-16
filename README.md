@@ -354,8 +354,12 @@ For example, when using `uvx`, you would run
 claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-mcp-server --context ide-assistant --project $(pwd)
 ```
 
-ℹ️ Once in Claude Code, run `/mcp__serena__initial_instructions` to load instructions for using Serena's tools. Run this command 
-whenever you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
+ℹ️ Serena comes with instructions on how to use tools, and Claude needs to read them to properly use serena's tools. 
+  Once in Claude Code, you can ask to "read Serena's initial instructions" or to run `/mcp__serena__initial_instructions` to load instructions for using Serena's tools. 
+  Do this whenever you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
+
+ℹ️ **NEW**: an alternative to the above is adding the instructions as part of the system prompt, then you will not need to run the command above or to remember re-running it after compacting.
+  This can be achieved throug starting claude code with `cclaude --append-system-prompt $(uvx --from git+https://github.com/oraios/serena print-system-prompt)`. This is **experimental**, Claude may not understand the instructions correctly in this way. Please report any issues you encounter.
 
 
 ### Claude Desktop

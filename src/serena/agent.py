@@ -127,28 +127,34 @@ def index_project(project: str, log_level: str = "INFO") -> None:
 @click.command()
 @click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
 @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-def print_system_prompt(project: str, log_level: str = "WARNING") -> None:
+@click.option(
+    "--only-instructions",
+    is_flag=True,
+    help="If set, only print the initial instructions prompt (without prefix or postfix). The prefix and postfix are small additions that are used to"
+    "make the initial instructions more digestible for an LLM in the context of a system prompt, as opposed to their normal usage within a conversation.",
+)
+def print_system_prompt(project: str, log_level: str = "WARNING", only_instructions: bool = False) -> None:
     """
-    Print the system prompt (initial instructions) for a project.
+    Print the system prompt (initial instructions with a potential pre/post-fix) for a project.
+    """
+    prefix_to_instructions_prompt = (
+        "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
+    )
+    postfix_to_instructions_prompt = "You begin the conversation by acknowledging that you understood the above instructions on the symbolic tools and are ready to receive a task. You will not need to call the tool on getting initial instructions."
 
-    :param project: the project to get the system prompt for. By default, the current working directory is used.
-    """
+    from serena.tools.workflow_tools import InitialInstructionsTool
+
     log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
     logging.configure(level=log_level_int)
 
-    # Create a SerenaAgent instance
-    agent = SerenaAgent(project=os.path.abspath(project))
-
-    # Get the InitialInstructionsTool instance
-    from serena.tools.workflow_tools import InitialInstructionsTool
-
+    agent = SerenaAgent(project=os.path.abspath(project), serena_config=SerenaConfig(web_dashboard=False, log_level=log_level_int))
     initial_instructions_tool = agent.get_tool(InitialInstructionsTool)
-
-    # Apply the tool to get the system prompt
-    system_prompt = initial_instructions_tool.apply()
-
-    # Print the system prompt
-    print(system_prompt)
+    initial_instructions = initial_instructions_tool.apply()
+    if only_instructions:
+        print(initial_instructions)
+    else:
+        system_prompt = f"{prefix_to_instructions_prompt}\n{initial_instructions}\n{postfix_to_instructions_prompt}"
+        print(system_prompt)
 
 
 class SerenaAgent:

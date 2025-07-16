@@ -132,8 +132,8 @@ class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     def apply(self) -> str:
         """
         Get the initial instructions for the current coding project.
-        You should always call this tool before starting to work (including using any other tool) on any programming task!
-        The only exception is when a user asks you to activate a project, in which case you should call the `activate_project` first
-        instead and then call this tool.
+        If you haven't received instructions on how to use Serena's tools in the system prompt,
+        you should always call this tool before starting to work (including using any other tool) on any programming task,
+        the only exception being when you are asked to call `activate_project`, which you should then call before.
         """
         return self.agent.create_system_prompt()
