@@ -446,6 +446,8 @@ print_system_prompt = top_level.print_system_prompt
 # needed for the help script to work - register all subcommands to the top-level group
 for subgroup in (mode, context, project, config):
     top_level.add_command(subgroup)
+
+
 def get_help() -> str:
     """Retrieve the help text for the top-level Serena CLI."""
     return top_level.get_help(click.Context(top_level, info_name="serena"))

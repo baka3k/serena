@@ -43,6 +43,7 @@ print-system-prompt = "serena.cli:print_system_prompt"
 mode = "serena.cli:mode"
 context = "serena.cli:context"
 project = "serena.cli:project"
+config = "serena.cli:config"
 help = "serena.cli:get_help"
 
 [project.license]
