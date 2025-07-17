@@ -97,7 +97,7 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     @classmethod
     def list_registered_mode_names(cls, include_user_modes: bool = True) -> list[str]:
         """Names of all registered modes (from the corresponding YAML files in the serena repo)."""
-        modes = [f.stem for f in Path(SERENAS_OWN_MODE_YAMLS_DIR).glob("*.yml")]
+        modes = [f.stem for f in Path(SERENAS_OWN_MODE_YAMLS_DIR).glob("*.yml") if f != "mode.template.yml"]
         if include_user_modes:
             modes += [f.stem for f in Path(USER_MODE_YAMLS_DIR).glob("*.yml")]
         return sorted(set(modes))

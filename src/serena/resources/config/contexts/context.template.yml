@@ -1,0 +1,4 @@
+# See Serena's documentation for more details on concept of contexts.
+description: Description of the context, not used in the code.
+prompt: Prompt that will form part of the system prompt/initial instructions for agents started in this context.
+excluded_tools: []
