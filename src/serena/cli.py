@@ -37,7 +37,10 @@ def _open_in_editor(path: str) -> None:
         if editor:
             subprocess.run([editor, path], check=False)
         elif sys.platform.startswith("win"):
-            os.startfile(path)
+            try:
+                os.startfile(path)
+            except OSError:
+                subprocess.run(["notepad.exe", path], check=False)
         elif sys.platform == "darwin":
             subprocess.run(["open", path], check=False)
         else:
