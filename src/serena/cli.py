@@ -86,7 +86,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     """Root CLI group containing the core Serena commands."""
 
     def __init__(self):
-        super().__init__(name="serena", help="Serena CLI commands. You can run `subcommand --help` for more info on each command.")
+        super().__init__(name="serena", help="Serena CLI commands. You can run `<command> --help` for more info on each command.")
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.")
@@ -209,7 +209,7 @@ class ModeCommands(AutoRegisteringGroup):
     """Group for 'mode' subcommands."""
 
     def __init__(self):
-        super().__init__(name="mode", help="Manage Serena modes.")
+        super().__init__(name="mode", help="Manage Serena modes. You can run `mode <command> --help` for more info on each command.")
 
     @staticmethod
     @click.command("list", help="List available modes.")
@@ -283,7 +283,9 @@ class ContextCommands(AutoRegisteringGroup):
     """Group for 'context' subcommands."""
 
     def __init__(self):
-        super().__init__(name="context", help="Manage Serena contexts.")
+        super().__init__(
+            name="context", help="Manage Serena contexts. You can run `context <command> --help` for more info on each command."
+        )
 
     @staticmethod
     @click.command("list", help="List available contexts.")
@@ -374,7 +376,9 @@ class ProjectCommands(AutoRegisteringGroup):
     """Group for 'project' subcommands."""
 
     def __init__(self):
-        super().__init__(name="project", help="Manage Serena projects.")
+        super().__init__(
+            name="project", help="Manage Serena projects. You can run `project <command> --help` for more info on each command."
+        )
 
     @staticmethod
     @click.command("generate-yml", help="Generate a project.yml file.")
