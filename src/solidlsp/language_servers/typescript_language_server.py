@@ -99,8 +99,12 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 ),
             ]
         )
-        tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "typescript-language-server")
+
+        # Verify both node and npm are installed
+        is_node_installed = shutil.which("node") is not None
+        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+        is_npm_installed = shutil.which("npm") is not None
+        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Verify both node and npm are installed
         is_node_installed = shutil.which("node") is not None
@@ -109,15 +113,16 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Install typescript and typescript-language-server if not already installed
-        if not os.path.exists(tsserver_ls_dir):
-            os.makedirs(tsserver_ls_dir, exist_ok=True)
+        tsserver_ls_dir = os.path.join(cls.ls_resources_dir(), "ts-lsp")
+        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
+        if not os.path.exists(tsserver_executable_path):
+            logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
             deps.install(logger, tsserver_ls_dir)
 
-        tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
-
-        assert os.path.exists(
-            tsserver_executable_path
-        ), "typescript-language-server executable not found. Please install typescript-language-server and try again."
+        if not os.path.exists(tsserver_executable_path):
+            raise FileNotFoundError(
+                f"typescript-language-server executable not found at {tsserver_executable_path}, something went wrong with the installation."
+            )
         return f"{tsserver_executable_path} --stdio"
 
     @staticmethod
