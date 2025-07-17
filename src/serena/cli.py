@@ -1,237 +1,451 @@
 import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import click
 from sensai.util import logging
 from tqdm import tqdm
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import SerenaConfig
-from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
+from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
+from serena.config.serena_config import ProjectConfig, SerenaConfig
+from serena.constants import (
+    DEFAULT_CONTEXT,
+    DEFAULT_MODES,
+    SERENA_MANAGED_DIR_IN_HOME,
+    SERENAS_OWN_CONTEXT_YAMLS_DIR,
+    SERENAS_OWN_MODE_YAMLS_DIR,
+    USER_CONTEXT_YAMLS_DIR,
+    USER_MODE_YAMLS_DIR,
+)
 from serena.mcp import SerenaMCPFactorySingleProcess
 from serena.project import Project
+from solidlsp.ls_config import Language
 
 log = logging.getLogger(__name__)
 
+# --------------------- Utilities -------------------------------------
+
+
+def _open_in_editor(path: str) -> None:
+    """Open the given file in the system's default editor or viewer."""
+    editor = os.environ.get("EDITOR")
+    try:
+        if editor:
+            subprocess.run([editor, path], check=False)
+        elif sys.platform.startswith("win"):
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", path], check=False)
+        else:
+            subprocess.run(["xdg-open", path], check=False)
+    except Exception as e:
+        print(f"Failed to open {path}: {e}")
+
 
 class ProjectType(click.ParamType):
+    """ParamType allowing either a project name or a path to a project directory."""
+
     name = "[PROJECT_NAME|PROJECT_PATH]"
 
-    def convert(self, value: str, param: click.Parameter | None, ctx: click.Context | None) -> str:
+    def convert(self, value: str, param, ctx) -> str:
         path = Path(value).resolve()
         if path.exists() and path.is_dir():
-            return str(path)  # Valid path
-        return value  # Assume it's a project name
+            return str(path)
+        return value
 
 
 PROJECT_TYPE = ProjectType()
 
 
-@click.command()
-@click.option(
-    "--project",
-    "project",
-    type=PROJECT_TYPE,
-    default=None,
-    help="Either an absolute path to the project directory or a name of an already registered project. "
-    "If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name afterwards.",
-)
-# Keep --project-file for backwards compatibility
-@click.option(
-    "--project-file",
-    "project",  # Use same destination variable to avoid conflicts
-    type=PROJECT_TYPE,
-    default=None,
-    help="[DEPRECATED] Use --project instead.",
-)
-# Positional argument for backwards compatibility
-@click.argument(
-    "project_file_arg",
-    type=PROJECT_TYPE,
-    required=False,
-    default=None,
-    metavar="",  # don't display anything since it's deprecated
-)
-@click.option(
-    "--context",
-    type=str,
-    show_default=True,
-    default=DEFAULT_CONTEXT,
-    help="Context to use. This can be a name of a built-in context ('desktop-app', 'agent', 'ide-assistant') "
-    "or a path to a custom context YAML file.",
-)
-@click.option(
-    "--mode",
-    "modes",
-    type=str,
-    multiple=True,
-    default=DEFAULT_MODES,
-    show_default=True,
-    help="Mode(s) to use. This can be names of built-in modes ('planning', 'editing', 'one-shot', 'interactive') "
-    "or paths to custom mode YAML files. Can be specified multiple times to combine modes.",
-)
-@click.option(
-    "--transport",
-    type=click.Choice(["stdio", "sse"]),
-    default="stdio",
-    show_default=True,
-    help="Transport protocol. If you start the server yourself (as opposed to an MCP Client starting the server), sse is recommended.",
-)
-@click.option(
-    "--host",
-    type=str,
-    show_default=True,
-    default="0.0.0.0",
-    help="Host to bind to (for SSE transport).",
-)
-@click.option(
-    "--port",
-    type=int,
-    show_default=True,
-    default=8000,
-    help="Port to bind to (for SSE transport).",
-)
-@click.option(
-    "--enable-web-dashboard",
-    type=bool,
-    is_flag=False,
-    default=None,
-    help="Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.",
-)
-@click.option(
-    "--enable-gui-log-window",
-    type=bool,
-    is_flag=False,
-    default=None,
-    help="Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then. "
-    "If not specified, will take the value from the serena configuration.",
-)
-@click.option(
-    "--log-level",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-    default=None,
-    help="Log level for GUI, dashboard and other logging. If not specified, will take the value from the serena configuration.",
-)
-@click.option(
-    "--trace-lsp-communication",
-    type=bool,
-    is_flag=False,
-    default=None,
-    help="Whether to trace the communication between Serena and the language servers. This is useful for debugging language server issues.",
-)
-@click.option(
-    "--tool-timeout",
-    type=float,
-    default=None,
-    help="Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.",
-)
-def start_mcp_server(
-    project: str | None,
-    project_file_arg: str | None,
-    context: str = DEFAULT_CONTEXT,
-    modes: tuple[str, ...] = DEFAULT_MODES,
-    transport: Literal["stdio", "sse"] = "stdio",
-    host: str = "0.0.0.0",
-    port: int = 8000,
-    enable_web_dashboard: bool | None = None,
-    enable_gui_log_window: bool | None = None,
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
-    trace_lsp_communication: bool | None = None,
-    tool_timeout: float | None = None,
-) -> None:
-    """Starts the Serena MCP server. By default, will not activate any project at startup.
-    If you want to start with an already active project, use --project to pass the project name or path.
-
-    Use --context to specify the execution environment and --mode to specify behavior mode(s).
-    The modes may be adjusted after startup (via the corresponding tool), but the context cannot be changed.
+class AutoRegisteringGroup(click.Group):
     """
-    # Prioritize the positional argument if provided
-    # This is for backward compatibility with the old CLI, should be removed in the future!
-    project_file = project_file_arg if project_file_arg is not None else project
+    A click.Group subclass that automatically registers any click.Command
+    attributes defined on the class into the group.
 
-    mcp_factory = SerenaMCPFactorySingleProcess(context=context, project=project_file)
-    mcp_server = mcp_factory.create_mcp_server(
-        host=host,
-        port=port,
-        modes=modes,
-        enable_web_dashboard=enable_web_dashboard,
-        enable_gui_log_window=enable_gui_log_window,
-        log_level=log_level,
-        trace_lsp_communication=trace_lsp_communication,
-        tool_timeout=tool_timeout,
+    After initialization, it inspects its own class for attributes that are
+    instances of click.Command (typically created via @click.command) and
+    calls self.add_command(cmd) on each. This lets you define your commands
+    as static methods on the subclass for IDE-friendly organization without
+    manual registration.
+    """
+
+    def __init__(self, name: str, help: str):
+        super().__init__(name=name, help=help)
+        # Scan class attributes for click.Command instances and register them.
+        for attr in dir(self.__class__):
+            cmd = getattr(self.__class__, attr)
+            if isinstance(cmd, click.Command):
+                self.add_command(cmd)
+
+
+class TopLevelCommands(AutoRegisteringGroup):
+    """Root CLI group containing the core Serena commands."""
+
+    def __init__(self):
+        super().__init__(name="serena", help="Serena CLI commands. You can run `subcommand --help` for more info on each command.")
+
+    @staticmethod
+    @click.command("start-mcp-server", help="Starts the Serena MCP server.")
+    @click.option("--project", "project", type=PROJECT_TYPE, default=None, help="Path or name of project to activate at startup.")
+    @click.option("--project-file", "project", type=PROJECT_TYPE, default=None, help="[DEPRECATED] Use --project instead.")
+    @click.argument("project_file_arg", type=PROJECT_TYPE, required=False, default=None, metavar="")
+    @click.option(
+        "--context", type=str, default=DEFAULT_CONTEXT, show_default=True, help="Built-in context name or path to custom context YAML."
     )
-
-    # log after server creation such that the log appears in the GUI
-    if project_file_arg is not None:
-        log.warning(
-            "The positional argument for the project file path is deprecated and will be removed in the future! "
-            "Please pass the project file path via the `--project` option instead.\n"
-            f"Used path: {project_file}"
+    @click.option(
+        "--mode",
+        "modes",
+        type=str,
+        multiple=True,
+        default=DEFAULT_MODES,
+        show_default=True,
+        help="Built-in mode names or paths to custom mode YAMLs.",
+    )
+    @click.option("--transport", type=click.Choice(["stdio", "sse"]), default="stdio", show_default=True, help="Transport protocol.")
+    @click.option("--host", type=str, default="0.0.0.0", show_default=True)
+    @click.option("--port", type=int, default=8000, show_default=True)
+    @click.option("--enable-web-dashboard", type=bool, is_flag=False, default=None, help="Override dashboard setting in config.")
+    @click.option("--enable-gui-log-window", type=bool, is_flag=False, default=None, help="Override GUI log window setting in config.")
+    @click.option(
+        "--log-level",
+        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        default=None,
+        help="Override log level in config.",
+    )
+    @click.option("--trace-lsp-communication", type=bool, is_flag=False, default=None, help="Whether to trace LSP communication.")
+    @click.option("--tool-timeout", type=float, default=None, help="Override tool execution timeout in config.")
+    def start_mcp_server(
+        project: str | None,
+        project_file_arg: str | None,
+        context: str,
+        modes: tuple[str, ...],
+        transport: Literal["stdio", "sse"],
+        host: str,
+        port: int,
+        enable_web_dashboard: bool | None,
+        enable_gui_log_window: bool | None,
+        log_level: str | None,
+        trace_lsp_communication: bool | None,
+        tool_timeout: float | None,
+    ) -> None:
+        project_file = project_file_arg or project
+        factory = SerenaMCPFactorySingleProcess(context=context, project=project_file)
+        server = factory.create_mcp_server(
+            host=host,
+            port=port,
+            modes=modes,
+            enable_web_dashboard=enable_web_dashboard,
+            enable_gui_log_window=enable_gui_log_window,
+            log_level=log_level,
+            trace_lsp_communication=trace_lsp_communication,
+            tool_timeout=tool_timeout,
         )
+        if project_file_arg:
+            log.warning(
+                "Positional project arg is deprecated; use --project instead. Used: %s",
+                project_file,
+            )
+        log.info("Starting MCP server …")
+        server.run(transport=transport)
 
-    log.info("Starting MCP server ...")
-
-    mcp_server.run(transport=transport)
-
-
-@click.command()
-@click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
-@click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-@click.option(
-    "--only-instructions",
-    is_flag=True,
-    help="If set, only print the initial instructions prompt (without prefix or postfix). The prefix and postfix are small additions that are used to"
-    "make the initial instructions more digestible for an LLM in the context of a system prompt, as opposed to their normal usage within a conversation.",
-)
-def print_system_prompt(project: str, log_level: str = "WARNING", only_instructions: bool = False) -> None:
-    """
-    Print the system prompt (initial instructions with a potential pre/post-fix) for a project.
-    """
-    prefix_to_instructions_prompt = (
-        "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
+    @staticmethod
+    @click.command("print-system-prompt", help="Print the system prompt for a project.")
+    @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
+    @click.option(
+        "--log-level",
+        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        default="WARNING",
+        help="Log level for prompt generation.",
     )
-    postfix_to_instructions_prompt = "You begin the conversation by acknowledging that you understood the above instructions on the symbolic tools and are ready to receive a task. You will not need to call the tool on getting initial instructions."
+    @click.option("--only-instructions", is_flag=True, help="Print only the initial instructions, without prefix/postfix.")
+    @click.option(
+        "--context", type=str, default=DEFAULT_CONTEXT, show_default=True, help="Built-in context name or path to custom context YAML."
+    )
+    @click.option(
+        "--mode",
+        "modes",
+        type=str,
+        multiple=True,
+        default=DEFAULT_MODES,
+        show_default=True,
+        help="Built-in mode names or paths to custom mode YAMLs.",
+    )
+    def print_system_prompt(project: str, log_level: str, only_instructions: bool, context: str, modes: tuple[str, ...]) -> None:
+        prefix = "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
+        postfix = "You begin by acknowledging that you understood the above instructions and are ready to receive tasks."
+        from serena.tools.workflow_tools import InitialInstructionsTool
 
-    from serena.tools.workflow_tools import InitialInstructionsTool
+        lvl = logging.getLevelNamesMapping()[log_level.upper()]
+        logging.configure(level=lvl)
+        context_instance = SerenaAgentContext.load(context)
+        mode_instances = [SerenaAgentMode.load(mode) for mode in modes]
+        agent = SerenaAgent(
+            project=os.path.abspath(project),
+            serena_config=SerenaConfig(web_dashboard=False, log_level=lvl),
+            context=context_instance,
+            modes=mode_instances,
+        )
+        tool = agent.get_tool(InitialInstructionsTool)
+        instr = tool.apply()
+        if only_instructions:
+            print(instr)
+        else:
+            print(f"{prefix}\n{instr}\n{postfix}")
 
-    log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
-    logging.configure(level=log_level_int)
-
-    agent = SerenaAgent(project=os.path.abspath(project), serena_config=SerenaConfig(web_dashboard=False, log_level=log_level_int))
-    initial_instructions_tool = agent.get_tool(InitialInstructionsTool)
-    initial_instructions = initial_instructions_tool.apply()
-    if only_instructions:
-        print(initial_instructions)
-    else:
-        system_prompt = f"{prefix_to_instructions_prompt}\n{initial_instructions}\n{postfix_to_instructions_prompt}"
-        print(system_prompt)
+    @staticmethod
+    @click.command("help", help="Show help for Serena CLI commands.")
+    @click.pass_context
+    def help(ctx: click.Context) -> None:
+        # ctx.parent is the root invocation context
+        root = ctx.parent
+        click.echo(root.get_help())
 
 
-@click.command()
-@click.argument("project", type=click.Path(exists=True), required=False, default=os.getcwd())
-@click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
-def index_project(project: str, log_level: str = "INFO") -> None:
-    """
-    Index a project by saving the symbols of files to Serena's language server cache.
+class ModeCommands(AutoRegisteringGroup):
+    """Group for 'mode' subcommands."""
 
-    :param project: the project to index. By default, the current working directory is used.
-    """
-    log_level_int = logging.getLevelNamesMapping()[log_level.upper()]
-    project_instance = Project.load(os.path.abspath(project))
-    print(f"Indexing symbols in project {project}")
-    ls = project_instance.create_language_server(log_level=log_level_int)
-    save_after_n_files = 10
-    with ls.start_server():
-        parsed_files = project_instance.gather_source_files()
-        files_processed = 0
-        pbar = tqdm(parsed_files, disable=False)
-        for relative_file_path in pbar:
-            pbar.set_description(f"Indexing ({os.path.basename(relative_file_path)})")
-            ls.request_document_symbols(relative_file_path, include_body=False)
-            ls.request_document_symbols(relative_file_path, include_body=True)
-            files_processed += 1
-            if files_processed % save_after_n_files == 0:
-                ls.save_cache()
-        ls.save_cache()
-    print(f"Symbols saved to {ls.cache_path}")
+    def __init__(self):
+        super().__init__(name="mode", help="Manage Serena modes.")
+
+    @staticmethod
+    @click.command("list", help="List available modes.")
+    def list():
+        mode_names = SerenaAgentMode.list_registered_mode_names()
+        max_len_name = max(len(name) for name in mode_names) if mode_names else 20
+        for name in mode_names:
+            mode_yml_path = SerenaAgentMode.get_path(name)
+            is_internal = Path(mode_yml_path).is_relative_to(SERENAS_OWN_MODE_YAMLS_DIR)
+            descriptor = " (internal)" if is_internal else f"(at {mode_yml_path})"
+            name_descr_string = f"{name:<{max_len_name + 4}}{descriptor}"
+            click.echo(name_descr_string)
+
+    @staticmethod
+    @click.command("create", help="Create a new mode or copy an internal one.")
+    @click.option(
+        "--name",
+        type=str,
+        default=None,
+        help="Name for the new mode. If --from-internal is passed may be left empty to create a mode of the same name, which will then override the internal mode.",
+    )
+    @click.option("--from-internal", "from_internal", type=str, default=None, help="Copy from an internal mode.")
+    def create(name: str, from_internal: str) -> None:
+        if not (name or from_internal):
+            raise click.UsageError("Provide at least one of --name or --from-internal.")
+        mode_name = name or from_internal
+        dest = os.path.join(USER_MODE_YAMLS_DIR, f"{mode_name}.yml")
+        src = (
+            os.path.join(SERENAS_OWN_MODE_YAMLS_DIR, f"{from_internal}.yml")
+            if from_internal
+            else os.path.join(SERENAS_OWN_MODE_YAMLS_DIR, "mode.template.yml")
+        )
+        if not os.path.exists(src):
+            raise FileNotFoundError(
+                f"Internal mode '{from_internal}' not found in {SERENAS_OWN_MODE_YAMLS_DIR}. Available modes: {SerenaAgentMode.list_registered_mode_names()}"
+            )
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copyfile(src, dest)
+        click.echo(f"Created mode '{mode_name}' at {dest}.")
+        _open_in_editor(dest)
+
+    @staticmethod
+    @click.command("edit", help="Edit a custom mode YAML file.")
+    @click.argument("mode_name")
+    def edit(mode_name: str) -> None:
+        path = os.path.join(USER_MODE_YAMLS_DIR, f"{mode_name}.yml")
+        if not os.path.exists(path):
+            if mode_name in SerenaAgentMode.list_registered_mode_names(include_user_modes=False):
+                click.echo(
+                    f"Mode '{mode_name}' is an internal mode and cannot be edited directly. "
+                    f"Use 'mode create --from-internal {mode_name}' to create a custom mode that overrides it before editing."
+                )
+            else:
+                click.echo(f"Custom mode '{mode_name}' not found. Create it with: mode create --name {mode_name}.")
+            return
+        _open_in_editor(path)
+
+    @staticmethod
+    @click.command("delete", help="Delete a custom mode file.")
+    @click.argument("mode_name")
+    def delete(mode_name: str) -> None:
+        path = os.path.join(USER_MODE_YAMLS_DIR, f"{mode_name}.yml")
+        if not os.path.exists(path):
+            click.echo(f"Custom mode '{mode_name}' not found.")
+            return
+        os.remove(path)
+        click.echo(f"Deleted custom mode '{mode_name}'.")
+
+
+class ContextCommands(AutoRegisteringGroup):
+    """Group for 'context' subcommands."""
+
+    def __init__(self):
+        super().__init__(name="context", help="Manage Serena contexts.")
+
+    @staticmethod
+    @click.command("list", help="List available contexts.")
+    def list():
+        context_names = SerenaAgentContext.list_registered_context_names()
+        max_len_name = max(len(name) for name in context_names) if context_names else 20
+        for name in context_names:
+            context_yml_path = SerenaAgentContext.get_path(name)
+            is_internal = Path(context_yml_path).is_relative_to(SERENAS_OWN_CONTEXT_YAMLS_DIR)
+            descriptor = " (internal)" if is_internal else f"(at {context_yml_path})"
+            name_descr_string = f"{name:<{max_len_name + 4}}{descriptor}"
+            click.echo(name_descr_string)
+
+    @staticmethod
+    @click.command("create", help="Create a new context or copy an internal one.")
+    @click.option(
+        "--name",
+        type=str,
+        default=None,
+        help="Name for the new context. If --from-internal is passed may be left empty to create a context of the same name, which will then override the internal context",
+    )
+    @click.option("--from-internal", "from_internal", type=str, default=None, help="Copy from an internal context.")
+    def create(name: str, from_internal: str) -> None:
+        if not (name or from_internal):
+            raise click.UsageError("Provide at least one of --name or --from-internal.")
+        ctx_name = name or from_internal
+        dest = os.path.join(USER_CONTEXT_YAMLS_DIR, f"{ctx_name}.yml")
+        src = (
+            os.path.join(SERENAS_OWN_CONTEXT_YAMLS_DIR, f"{from_internal}.yml")
+            if from_internal
+            else os.path.join(SERENAS_OWN_CONTEXT_YAMLS_DIR, "context.template.yml")
+        )
+        if not os.path.exists(src):
+            raise FileNotFoundError(
+                f"Internal context '{from_internal}' not found in {SERENAS_OWN_CONTEXT_YAMLS_DIR}. Available contexts: {SerenaAgentContext.list_registered_context_names()}"
+            )
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copyfile(src, dest)
+        click.echo(f"Created context '{ctx_name}' at {dest}.")
+        _open_in_editor(dest)
+
+    @staticmethod
+    @click.command("edit", help="Edit a custom context YAML file.")
+    @click.argument("context_name")
+    def edit(context_name: str) -> None:
+        path = os.path.join(USER_CONTEXT_YAMLS_DIR, f"{context_name}.yml")
+        if not os.path.exists(path):
+            if context_name in SerenaAgentContext.list_registered_context_names(include_user_contexts=False):
+                click.echo(
+                    f"Context '{context_name}' is an internal context and cannot be edited directly. "
+                    f"Use 'context create --from-internal {context_name}' to create a custom context that overrides it before editing."
+                )
+            else:
+                click.echo(f"Custom context '{context_name}' not found. Create it with: context create --name {context_name}.")
+            return
+        _open_in_editor(path)
+
+    @staticmethod
+    @click.command("delete", help="Delete a custom context file.")
+    @click.argument("context_name")
+    def delete(context_name: str) -> None:
+        path = os.path.join(USER_CONTEXT_YAMLS_DIR, f"{context_name}.yml")
+        if not os.path.exists(path):
+            click.echo(f"Custom context '{context_name}' not found.")
+            return
+        os.remove(path)
+        click.echo(f"Deleted custom context '{context_name}'.")
+
+
+class SerenaConfigCommands(AutoRegisteringGroup):
+    """Group for 'config' subcommands."""
+
+    def __init__(self):
+        super().__init__(name="config", help="Manage Serena configuration.")
+
+    @staticmethod
+    @click.command(
+        "edit", help="Edit serena_config.yml in your default editor. Will create a config file from the template if no config is found."
+    )
+    def edit() -> None:
+        config_path = os.path.join(SERENA_MANAGED_DIR_IN_HOME, "serena_config.yml")
+        if not os.path.exists(config_path):
+            SerenaConfig.generate_config_file(config_path)
+        _open_in_editor(config_path)
+
+
+class ProjectCommands(AutoRegisteringGroup):
+    """Group for 'project' subcommands."""
+
+    def __init__(self):
+        super().__init__(name="project", help="Manage Serena projects.")
+
+    @staticmethod
+    @click.command("generate-yml", help="Generate a project.yml file.")
+    @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
+    @click.option("--language", type=str, default=None, help="Programming language; inferred if not specified.")
+    def generate_yml(project_path: str, language: str | None = None) -> None:
+        yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
+        if os.path.exists(yml_path):
+            raise FileExistsError(f"Project file {yml_path} already exists.")
+        lang_inst = None
+        if language:
+            try:
+                lang_inst = cast(Language, Language[language.upper()])
+            except KeyError:
+                all_langs = [l.name.lower() for l in Language.iter_all(include_experimental=True)]
+                raise ValueError(f"Unknown language '{language}'. Supported: {all_langs}")
+        generated_conf = ProjectConfig.autogenerate(project_root=project_path, project_language=lang_inst)
+        print(f"Generated project.yml with language {generated_conf.language.value} at {yml_path}.")
+
+    @staticmethod
+    @click.command("index", help="Index a project by saving symbols to the LSP cache.")
+    @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
+    @click.option(
+        "--log-level",
+        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+        default="WARNING",
+        help="Log level for indexing.",
+    )
+    def index(project: str, log_level: str = "WARNING") -> None:
+        ProjectCommands._index_project(project, log_level)
+
+    @staticmethod
+    @click.command("index-deprecated", help="Deprecated alias for 'project index'.")
+    @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
+    @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
+    def index_deprecated(project: str, log_level: str = "WARNING") -> None:
+        click.echo("Deprecated! Use `project index` instead.")
+        ProjectCommands._index_project(project, log_level)
+
+    @staticmethod
+    def _index_project(project: str, log_level: str) -> None:
+        lvl = logging.getLevelNamesMapping()[log_level.upper()]
+        proj = Project.load(os.path.abspath(project))
+        print(f"Indexing symbols in project {project}…")
+        ls = proj.create_language_server(log_level=lvl)
+        with ls.start_server():
+            files = proj.gather_source_files()
+            for i, f in enumerate(tqdm(files, desc="Indexing")):
+                ls.request_document_symbols(f, include_body=False)
+                ls.request_document_symbols(f, include_body=True)
+                if (i + 1) % 10 == 0:
+                    ls.save_cache()
+            ls.save_cache()
+        print(f"Symbols saved to {ls.cache_path}")
+
+
+# Expose groups so we can reference them in pyproject.toml
+mode = ModeCommands()
+context = ContextCommands()
+project = ProjectCommands()
+config = SerenaConfigCommands()
+
+# Expose toplevel commands for the same reason
+top_level = TopLevelCommands()
+start_mcp_server = top_level.start_mcp_server
+index_project = project.index_deprecated
+print_system_prompt = top_level.print_system_prompt
+
+# needed for the help script to work - register all subcommands to the top-level group
+for subgroup in (mode, context, project, config):
+    top_level.add_command(subgroup)
+def get_help() -> str:
+    """Retrieve the help text for the top-level Serena CLI."""
+    return top_level.get_help(click.Context(top_level, info_name="serena"))
