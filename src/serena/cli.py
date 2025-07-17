@@ -219,7 +219,7 @@ class ModeCommands(AutoRegisteringGroup):
         for name in mode_names:
             mode_yml_path = SerenaAgentMode.get_path(name)
             is_internal = Path(mode_yml_path).is_relative_to(SERENAS_OWN_MODE_YAMLS_DIR)
-            descriptor = " (internal)" if is_internal else f"(at {mode_yml_path})"
+            descriptor = "(internal)" if is_internal else f"(at {mode_yml_path})"
             name_descr_string = f"{name:<{max_len_name + 4}}{descriptor}"
             click.echo(name_descr_string)
 
@@ -295,7 +295,7 @@ class ContextCommands(AutoRegisteringGroup):
         for name in context_names:
             context_yml_path = SerenaAgentContext.get_path(name)
             is_internal = Path(context_yml_path).is_relative_to(SERENAS_OWN_CONTEXT_YAMLS_DIR)
-            descriptor = " (internal)" if is_internal else f"(at {context_yml_path})"
+            descriptor = "(internal)" if is_internal else f"(at {context_yml_path})"
             name_descr_string = f"{name:<{max_len_name + 4}}{descriptor}"
             click.echo(name_descr_string)
 
