@@ -1,0 +1,4 @@
+# See Serena's documentation for more details on concept of modes.
+description: Description of the mode, not used in the code.
+prompt: Prompt that will form part of the message sent to the model when activating this mode.
+excluded_tools: []

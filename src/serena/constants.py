@@ -3,15 +3,26 @@ from pathlib import Path
 _repo_root_path = Path(__file__).parent.parent.parent.resolve()
 _serena_pkg_path = Path(__file__).parent.resolve()
 
+SERENA_MANAGED_DIR_NAME = ".serena"
+_serena_in_home_managed_dir = Path.home() / ".serena"
+
+SERENA_MANAGED_DIR_IN_HOME = str(_serena_in_home_managed_dir)
+
 REPO_ROOT = str(_repo_root_path)
 PROMPT_TEMPLATES_DIR = str(_serena_pkg_path / "resources" / "config" / "prompt_templates")
-CONTEXT_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "contexts")
-MODE_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "modes")
+SERENAS_OWN_CONTEXT_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "contexts")
+"""The contexts that are shipped with the Serena package, i.e. the default contexts."""
+USER_CONTEXT_YAMLS_DIR = str(_serena_in_home_managed_dir / "contexts")
+"""Contexts defined by the user. If a name of a context matches a name of a context in SERENAS_OWN_CONTEXT_YAMLS_DIR, the user context will override the default one."""
+SERENAS_OWN_MODE_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "modes")
+"""The modes that are shipped with the Serena package, i.e. the default modes."""
+USER_MODE_YAMLS_DIR = str(_serena_in_home_managed_dir / "modes")
+"""Modes defined by the user. If a name of a mode matches a name of a mode in SERENAS_OWN_MODE_YAMLS_DIR, the user mode will override the default one."""
 INTERNAL_MODE_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "internal_modes")
+"""Internal modes, never overridden by user modes."""
 SERENA_DASHBOARD_DIR = str(_serena_pkg_path / "resources" / "dashboard")
 SERENA_ICON_DIR = str(_serena_pkg_path / "resources" / "icons")
 
-SERENA_MANAGED_DIR_NAME = ".serena"
 
 DEFAULT_ENCODING = "utf-8"
 DEFAULT_CONTEXT = "desktop-app"

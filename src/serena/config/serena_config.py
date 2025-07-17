@@ -21,6 +21,7 @@ from serena.constants import (
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
     SELENA_CONFIG_TEMPLATE_FILE,
+    SERENA_MANAGED_DIR_IN_HOME,
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.general import load_yaml, save_yaml
@@ -113,7 +114,7 @@ class SerenaConfigError(Exception):
     pass
 
 
-def get_serena_managed_dir(project_root: str | Path) -> str:
+def get_serena_managed_in_project_dir(project_root: str | Path) -> str:
     return os.path.join(project_root, SERENA_MANAGED_DIR_NAME)
 
 
@@ -146,13 +147,16 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         return ["project_name"]
 
     @classmethod
-    def autogenerate(cls, project_root: str | Path, project_name: str | None = None, save_to_disk: bool = True) -> Self:
+    def autogenerate(
+        cls, project_root: str | Path, project_name: str | None = None, project_language: Language | None = None, save_to_disk: bool = True
+    ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
 
         :param project_root: the path to the project root
         :param project_name: the name of the project; if None, the name of the project will be the name of the directory
             containing the project
+        :param project_language: the programming language of the project; if None, it will be determined automatically
         :param save_to_disk: whether to save the project configuration to disk
         :return: the project configuration
         """
@@ -160,20 +164,23 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_name = project_name or project_root.name
-        language_composition = determine_programming_language_composition(str(project_root))
-        if len(language_composition) == 0:
-            raise ValueError(
-                f"No source files found in {project_root}\n\n"
-                f"To use Serena with this project, you need to either:\n"
-                f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP)\n"
-                f"2. Create a project configuration file manually at:\n"
-                f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
-                f"Example project.yml:\n"
-                f"  project_name: {project_name}\n"
-                f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php\n"
-            )
-        # find the language with the highest percentage
-        dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
+        if project_language is None:
+            language_composition = determine_programming_language_composition(str(project_root))
+            if len(language_composition) == 0:
+                raise ValueError(
+                    f"No source files found in {project_root}\n\n"
+                    f"To use Serena with this project, you need to either:\n"
+                    f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP)\n"
+                    f"2. Create a project configuration file manually at:\n"
+                    f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
+                    f"Example project.yml:\n"
+                    f"  project_name: {project_name}\n"
+                    f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php\n"
+                )
+            # find the language with the highest percentage
+            dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
+        else:
+            dominant_language = project_language.value
         config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
         config_with_comments["project_name"] = project_name
         config_with_comments["language"] = dominant_language
@@ -275,7 +282,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         return ["config_file_path"]
 
     @classmethod
-    def _generate_config_file(cls, config_file_path: str) -> None:
+    def generate_config_file(cls, config_file_path: str) -> None:
         """
         Generates a Serena configuration file at the specified path from the template file.
 
@@ -293,7 +300,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         if is_running_in_docker():
             return os.path.join(REPO_ROOT, cls.CONFIG_FILE_DOCKER)
         else:
-            config_path = str(Path.home() / SERENA_MANAGED_DIR_NAME / cls.CONFIG_FILE)
+            config_path = os.path.join(SERENA_MANAGED_DIR_IN_HOME, cls.CONFIG_FILE)
 
             # if the config file does not exist, check if we can migrate it from the old location
             if not os.path.exists(config_path):
@@ -319,7 +326,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
             if not generate_if_missing:
                 raise FileNotFoundError(f"Serena configuration file not found: {config_file_path}")
             log.info(f"Serena configuration file not found at {config_file_path}, autogenerating...")
-            cls._generate_config_file(config_file_path)
+            cls.generate_config_file(config_file_path)
 
         # load the configuration
         log.info(f"Loading Serena configuration from {config_file_path}")
