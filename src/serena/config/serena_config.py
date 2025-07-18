@@ -418,9 +418,19 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         return sorted(project.project_config.project_name for project in self.projects)
 
     def get_project(self, project_root_or_name: str) -> Optional["Project"]:
+        # look for project by name
+        project_candidates = []
         for project in self.projects:
             if project.project_config.project_name == project_root_or_name:
-                return project
+                project_candidates.append(project)
+        if len(project_candidates) == 1:
+            return project_candidates[0]
+        elif len(project_candidates) > 1:
+            raise ValueError(
+                f"Multiple projects found with name '{project_root_or_name}'. Please activate it by location instead. "
+                f"Locations: {[p.project_root for p in project_candidates]}"
+            )
+        # no project found by name; check if it's a path
         if os.path.isdir(project_root_or_name):
             project_root = Path(project_root_or_name).resolve()
             for project in self.projects:
@@ -428,14 +438,12 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
                     return project
         return None
 
-    def add_project_from_path(self, project_root: Path | str, project_name: str | None = None) -> tuple["Project", bool]:
+    def add_project_from_path(self, project_root: Path | str) -> tuple["Project", bool]:
         """
-        Add a project to the Serena configuration from a given path. Will raise a FileExistsError if the
-        name or path is already registered.
+        Add a project to the Serena configuration from a given path. Will raise a FileExistsError if a
+        project already exists at the path.
 
         :param project_root: the path to the project to add
-        :param project_name: the name of the project to add; if None, the name of the project will be the name of the directory
-            containing the project
         :return: the project that was added and a boolean indicating whether a new project configuration was generated and
             saved to disk. It may be that no new project configuration was generated if the project configuration already
             exists on disk but the project itself was not added yet to the Serena configuration.
@@ -448,13 +456,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         if not project_root.is_dir():
             raise FileNotFoundError(f"Error: Path is not a directory: {project_root}")
 
-        if project_name is None:
-            project_name = project_root.name
         for already_registered_project in self.projects:
-            if already_registered_project.project_name == project_name:
-                raise FileExistsError(
-                    f"Project name '{project_name}' already exists and points to {already_registered_project.project_root}."
-                )
             if str(already_registered_project.project_root) == str(project_root):
                 raise FileExistsError(
                     f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
