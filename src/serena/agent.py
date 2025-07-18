@@ -212,11 +212,8 @@ class SerenaAgent:
         if project is not None:
             try:
                 self.activate_project_from_path_or_name(project)
-            except ProjectNotFoundError as e:
-                log.error(
-                    f"Error activating project '{project}': {e}; Note that out-of-project configurations were migrated. "
-                    "You should now pass either --project <project_name> or --project <project_root>."
-                )
+            except Exception as e:
+                log.error(f"Error activating project '{project}' at startup: {e}")
 
     def record_tool_usage_if_enabled(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
         """
