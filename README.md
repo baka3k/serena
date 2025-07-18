@@ -359,7 +359,7 @@ claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-
   Do this whenever you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
 
 ℹ️ **NEW**: an alternative to the above is adding the instructions as part of the system prompt, then you will not need to run the command above or to remember re-running it after compacting.
-  This can be achieved through starting claude code with `claude --append-system-prompt $(uvx --from git+https://github.com/oraios/serena print-system-prompt)`. Note that this is **experimental**, Claude may not understand the instructions correctly in this way, and we haven't thoroughly tested the resulting behavior. Please report any issues you encounter.
+  This can be achieved through starting claude code with `claude --append-system-prompt $(uvx --from git+https://github.com/oraios/serena serena print-system-prompt)`. Note that this is **experimental**, Claude may not understand the instructions correctly in this way, and we haven't thoroughly tested the resulting behavior. Please report any issues you encounter.
 
 
 ### Claude Desktop

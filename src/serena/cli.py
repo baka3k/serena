@@ -448,7 +448,6 @@ config = SerenaConfigCommands()
 top_level = TopLevelCommands()
 start_mcp_server = top_level.start_mcp_server
 index_project = project.index_deprecated
-print_system_prompt = top_level.print_system_prompt
 
 # needed for the help script to work - register all subcommands to the top-level group
 for subgroup in (mode, context, project, config):
