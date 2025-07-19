@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal
 
 import click
 from sensai.util import logging
@@ -54,7 +54,7 @@ class ProjectType(click.ParamType):
 
     name = "[PROJECT_NAME|PROJECT_PATH]"
 
-    def convert(self, value: str, param, ctx) -> str:
+    def convert(self, value: str, param: Any, ctx: Any) -> str:
         path = Path(value).resolve()
         if path.exists() and path.is_dir():
             return str(path)
@@ -88,7 +88,7 @@ class AutoRegisteringGroup(click.Group):
 class TopLevelCommands(AutoRegisteringGroup):
     """Root CLI group containing the core Serena commands."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(name="serena", help="Serena CLI commands. You can run `<command> --help` for more info on each command.")
 
     @staticmethod
@@ -131,7 +131,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         port: int,
         enable_web_dashboard: bool | None,
         enable_gui_log_window: bool | None,
-        log_level: str | None,
+        log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
     ) -> None:
@@ -199,24 +199,16 @@ class TopLevelCommands(AutoRegisteringGroup):
         else:
             print(f"{prefix}\n{instr}\n{postfix}")
 
-    @staticmethod
-    @click.command("help", help="Show help for Serena CLI commands.")
-    @click.pass_context
-    def help(ctx: click.Context) -> None:
-        # ctx.parent is the root invocation context
-        root = ctx.parent
-        click.echo(root.get_help())
-
 
 class ModeCommands(AutoRegisteringGroup):
     """Group for 'mode' subcommands."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(name="mode", help="Manage Serena modes. You can run `mode <command> --help` for more info on each command.")
 
     @staticmethod
     @click.command("list", help="List available modes.")
-    def list():
+    def list() -> None:
         mode_names = SerenaAgentMode.list_registered_mode_names()
         max_len_name = max(len(name) for name in mode_names) if mode_names else 20
         for name in mode_names:
@@ -285,14 +277,14 @@ class ModeCommands(AutoRegisteringGroup):
 class ContextCommands(AutoRegisteringGroup):
     """Group for 'context' subcommands."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="context", help="Manage Serena contexts. You can run `context <command> --help` for more info on each command."
         )
 
     @staticmethod
     @click.command("list", help="List available contexts.")
-    def list():
+    def list() -> None:
         context_names = SerenaAgentContext.list_registered_context_names()
         max_len_name = max(len(name) for name in context_names) if context_names else 20
         for name in context_names:
@@ -361,7 +353,7 @@ class ContextCommands(AutoRegisteringGroup):
 class SerenaConfigCommands(AutoRegisteringGroup):
     """Group for 'config' subcommands."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(name="config", help="Manage Serena configuration.")
 
     @staticmethod
@@ -378,7 +370,7 @@ class SerenaConfigCommands(AutoRegisteringGroup):
 class ProjectCommands(AutoRegisteringGroup):
     """Group for 'project' subcommands."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
             name="project", help="Manage Serena projects. You can run `project <command> --help` for more info on each command."
         )
@@ -394,7 +386,7 @@ class ProjectCommands(AutoRegisteringGroup):
         lang_inst = None
         if language:
             try:
-                lang_inst = cast(Language, Language[language.upper()])
+                lang_inst = Language[language.upper()]
             except KeyError:
                 all_langs = [l.name.lower() for l in Language.iter_all(include_experimental=True)]
                 raise ValueError(f"Unknown language '{language}'. Supported: {all_langs}")
