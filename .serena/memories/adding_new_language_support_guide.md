@@ -1,6 +1,6 @@
 # Adding New Language Support to Serena
 
-This guide explains how to add support for a new programming language to Serena, using the C# implementation as a reference.
+This guide explains how to add support for a new programming language to Serena.
 
 ## Overview
 
@@ -15,7 +15,11 @@ Adding a new language involves:
 
 ### 1.1 Create Language Server Class
 
-Create a new file in `src/solidlsp/language_servers/` (e.g., `new_language_server.py`):
+Create a new file in `src/solidlsp/language_servers/` (e.g., `new_language_server.py`).
+Have a look at `intelephense.py` for a reference implementation of a language server which downloads all its dependencies, at `gopls.py` for an LS that needs some preinstalled
+dependencies, and on `pyright_server.py` that does not need any additional dependencies
+because the language server can be installed directly as python package.
+
 
 ```python
 from solidlsp.ls import SolidLanguageServer
@@ -180,214 +184,25 @@ class Program {
 
 ## Step 4: Test Suite
 
-### 4.1 Create Test File
+### 4.1 Basic Tests
 
-Create `test/solidlsp/new_language/test_new_language_basic.py`:
+Create `test/solidlsp/new_language/test_new_language_basic.py`. You should at least test:
 
-```python
-import os
-import pytest
+1. Finding symbols
+2. Finding within-file references
+3. Finding cross-file references
 
-from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from solidlsp.ls_utils import SymbolUtils
+Have a look at `test/solidlsp/php/test_php_basic.py` as an example for what should be tested.
+Don't forget to add a new language marker to `pytest.ini`.
 
-@pytest.mark.new_language
-class TestNewLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.NEW_LANGUAGE], indirect=True)
-    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
-        """Test finding symbols in the full symbol tree."""
-        symbols = language_server.request_full_symbol_tree()
-        assert SymbolUtils.symbol_tree_contains_name(symbols, "Calculator"), "Calculator class not found"
-        assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add method not found"
-        assert SymbolUtils.symbol_tree_contains_name(symbols, "Program"), "Program class not found"
+### 4.2 Integration Tests
 
-    @pytest.mark.parametrize("language_server", [Language.NEW_LANGUAGE], indirect=True)
-    def test_get_document_symbols(self, language_server: SolidLanguageServer) -> None:
-        """Test getting document symbols."""
-        file_path = "main.newlang"
-        symbols = language_server.request_document_symbols(file_path)
-        
-        assert len(symbols) > 0
-        
-        # Check for expected classes
-        class_names = [s.get("name") for s in symbols if s.get("kind") == 5]  # 5 = class
-        assert "Calculator" in class_names
-        assert "Program" in class_names
+Consider adding new cases to the parametrized tests in `test_serena_agent.py` for the new language.
 
-    @pytest.mark.parametrize("language_server", [Language.NEW_LANGUAGE], indirect=True)
-    def test_find_references(self, language_server: SolidLanguageServer) -> None:
-        """Test finding references to symbols."""
-        file_path = "main.newlang"
-        symbols = language_server.request_document_symbols(file_path)
-        
-        # Find the 'add' method
-        add_symbol = None
-        for sym in symbols:
-            if sym.get("name") == "add":
-                add_symbol = sym
-                break
-        
-        assert add_symbol is not None, "Could not find 'add' method"
-        
-        # Test finding references
-        sel_start = add_symbol["selectionRange"]["start"]
-        refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
-        
-        # Should find reference in main() method
-        assert len(refs) > 0, "No references found for 'add' method"
 
-    @pytest.mark.parametrize("language_server", [Language.NEW_LANGUAGE], indirect=True)
-    def test_cross_file_references(self, language_server: SolidLanguageServer) -> None:
-        """Test finding references across multiple files."""
-        # Test imports and cross-file symbol usage
-        file_path = "lib/helper.newlang"
-        symbols = language_server.request_document_symbols(file_path)
-        
-        # Verify symbols exist in helper file
-        assert len(symbols) > 0
-        
-        # Test that main.newlang references helper functions
-        main_file = "main.newlang"
-        main_symbols = language_server.request_document_symbols(main_file)
-        assert len(main_symbols) > 0
-```
-
-### 4.2 Test Utilities and Edge Cases
-
-Add additional test methods for:
-- **Nested namespaces/modules**
-- **Error handling** - Invalid syntax, missing files
-- **Performance** - Large files, many symbols
-- **Language-specific features** - Generics, interfaces, etc.
-
-## Step 5: Runtime Dependencies (Optional)
-
-If your language server needs automatic installation, add runtime dependencies to the language server class:
-
-```python
-from solidlsp.language_servers.common import RuntimeDependency
-
-RUNTIME_DEPENDENCIES = [
-    RuntimeDependency(
-        id="NewLanguageServer",
-        platform_id="linux-x64",
-        package_name="new-language-server",
-        package_version="1.0.0",
-        url="https://github.com/new-lang/server/releases/download/v1.0.0/server-linux.tar.gz",
-        archive_type="tar.gz",
-        binary_name="new-language-server",
-        extract_path="bin/"
-    ),
-    # Add other platforms as needed
-]
-```
-
-## Step 6: Testing
-
-### 6.1 Run Language-Specific Tests
-
-```bash
-# Run only your language tests
-pytest -m new_language
-
-# Run with verbose output
-pytest -m new_language -v
-
-# Run specific test file
-pytest test/solidlsp/new_language/test_new_language_basic.py
-```
-
-### 6.2 Integration Testing
-
-Test the full integration:
-
-```python
-# Test that language server can be created and started
-from test.conftest import create_ls
-from solidlsp.ls_config import Language
-
-def test_integration():
-    ls = create_ls(Language.NEW_LANGUAGE)
-    ls.start()
-    try:
-        # Test basic operations
-        symbols = ls.request_full_symbol_tree()
-        assert len(symbols) > 0
-    finally:
-        ls.stop()
-```
-
-## Step 7: Documentation and Configuration
-
-### 7.1 Update pytest.ini
-
-Add your language marker to `pytest.ini`:
-
-```ini
-[tool.pytest.ini_options]
-markers = [
-    "new_language: marks tests as requiring NewLanguage language server"
-]
-```
-
-### 7.2 CI/CD Configuration
-
-Update GitHub Actions workflows to include your language in CI testing.
-
-### 7.3 Documentation
+### 5 Documentation
 
 Update:
 - **README.md** - Add language to supported languages list
 - **CHANGELOG.md** - Document the new language support
 - **Language-specific docs** - Installation requirements, known issues
-
-## Common Patterns and Best Practices
-
-### Error Handling
-
-```python
-def _start_server(self):
-    try:
-        self.server.start()
-        init_response = self.server.send.initialize(self._get_initialize_params())
-    except Exception as e:
-        raise LanguageServerException(f"Failed to start NewLanguage server: {e}") from e
-```
-
-### Performance Optimization
-
-```python
-@override
-def is_ignored_dirname(self, dirname: str) -> bool:
-    """Optimize by ignoring build/cache directories."""
-    ignored_dirs = {"node_modules", "build", "dist", "target", ".cache"}
-    return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
-```
-
-### Language-Specific Configuration
-
-```python
-def _get_initialize_params(self) -> InitializeParams:
-    """Configure for optimal NewLanguage support."""
-    return {
-        "processId": os.getpid(),
-        "rootUri": PathUtils.path_to_uri(self.repository_root_path),
-        "initializationOptions": {
-            # Language-specific options
-            "new_language": {
-                "enable_formatting": True,
-                "enable_diagnostics": True,
-            }
-        },
-        "capabilities": {
-            "textDocument": {
-                "documentSymbol": {"hierarchicalDocumentSymbolSupport": True},
-                "references": {"dynamicRegistration": True},
-                "definition": {"dynamicRegistration": True},
-            }
-        }
-    }
-```
-
-This comprehensive guide should enable you to add robust support for any new programming language to Serena, following the established patterns and ensuring thorough testing.
