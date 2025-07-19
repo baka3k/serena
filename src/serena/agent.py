@@ -20,7 +20,7 @@ from sensai.util.logging import LogTime
 
 from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
-from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
+from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import SerenaConfig, ToolSet, get_serena_managed_in_project_dir
 from serena.constants import (
     SERENA_LOG_FORMAT,
@@ -179,6 +179,33 @@ class SerenaAgent:
         tool_inclusion_definitions = [self.serena_config, self._context]
         if self.serena_config.jetbrains:
             tool_inclusion_definitions.append(SerenaAgentMode.from_name_internal("jetbrains"))
+
+        # In ide-assistant mode, apply additional tool exclusions
+        if self._context.name == RegisteredContext.IDE_ASSISTANT.value:
+            additional_excluded_tools = ["activate_project"]
+
+            # If a project is provided, check for excluded tools from project.yml
+            if project is not None:
+                try:
+                    # Try to load the project to get its excluded tools
+                    project_instance = None
+                    if os.path.isdir(project):
+                        project_instance = Project.load(project, autogenerate=False)
+                    else:
+                        project_instance = self.serena_config.get_project(project)
+
+                    if project_instance is not None:
+                        additional_excluded_tools.extend(project_instance.project_config.excluded_tools)
+                except (FileNotFoundError, ValueError):
+                    # If project.yml doesn't exist or can't be loaded, no additional exclusions
+                    pass
+
+            # Create a temporary ToolInclusionDefinition for ide-assistant exclusions
+            from serena.config.serena_config import ToolInclusionDefinition
+
+            ide_assistant_exclusions = ToolInclusionDefinition(excluded_tools=additional_excluded_tools)
+            tool_inclusion_definitions.append(ide_assistant_exclusions)
+
         self._base_tool_set = ToolSet.default().apply(*tool_inclusion_definitions)
         self._exposed_tools = {tc: t for tc, t in self._all_tools.items() if self._base_tool_set.includes_name(t.get_name())}
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
