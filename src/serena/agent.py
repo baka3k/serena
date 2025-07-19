@@ -399,7 +399,7 @@ class SerenaAgent:
         if self._project_activation_callback is not None:
             self._project_activation_callback()
 
-    def activate_project_from_path_or_name(self, project_root_or_name: str) -> tuple[Project, bool]:
+    def activate_project_from_path_or_name(self, project_root_or_name: str) -> Project:
         """
         Activate a project from a path or a name.
         If the project was already registered, it will just be activated. If it was not registered,
@@ -409,7 +409,6 @@ class SerenaAgent:
         :return: a tuple of the project instance and a Boolean indicating whether the project was newly
             created
         """
-        new_project_generated = False
         project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
         if project_instance is not None:
             log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
@@ -420,10 +419,9 @@ class SerenaAgent:
                     f"Existing project names: {self.serena_config.project_names}"
                 )
             project_instance = self.serena_config.add_project_from_path(project_root_or_name)
-            new_project_generated = True
             log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}.")
         self._activate_project(project_instance)
-        return project_instance, new_project_generated
+        return project_instance
 
     def get_active_tool_classes(self) -> list[type["Tool"]]:
         """

@@ -462,7 +462,7 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
 
         project_config = ProjectConfig.load(project_root, autogenerate=True)
 
-        new_project = Project(project_root=str(project_root), project_config=project_config)
+        new_project = Project(project_root=str(project_root), project_config=project_config, is_newly_created=True)
         self.projects.append(new_project)
         self.save()
 

@@ -15,8 +15,8 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
 
         :param project: the name of a registered project to activate or a path to a project directory
         """
-        active_project, new_project_generated = self.agent.activate_project_from_path_or_name(project)
-        if new_project_generated:
+        active_project = self.agent.activate_project_from_path_or_name(project)
+        if active_project.is_newly_created:
             result_str = (
                 f"Created and activated a new project with name '{active_project.project_name}' at {active_project.project_root}, language: {active_project.project_config.language.value}. "
                 "You can activate this project later by name.\n"

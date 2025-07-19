@@ -15,9 +15,10 @@ log = logging.getLogger(__name__)
 
 
 class Project:
-    def __init__(self, project_root: str, project_config: ProjectConfig):
+    def __init__(self, project_root: str, project_config: ProjectConfig, is_newly_created: bool = False):
         self.project_root = project_root
         self.project_config = project_config
+        self.is_newly_created = is_newly_created
 
         # gather ignored paths from the project configuration and gitignore files
         ignored_patterns = project_config.ignored_paths
