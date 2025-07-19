@@ -438,15 +438,13 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
                     return project
         return None
 
-    def add_project_from_path(self, project_root: Path | str) -> tuple["Project", bool]:
+    def add_project_from_path(self, project_root: Path | str) -> "Project":
         """
         Add a project to the Serena configuration from a given path. Will raise a FileExistsError if a
         project already exists at the path.
 
         :param project_root: the path to the project to add
-        :return: the project that was added and a boolean indicating whether a new project configuration was generated and
-            saved to disk. It may be that no new project configuration was generated if the project configuration already
-            exists on disk but the project itself was not added yet to the Serena configuration.
+        :return: the project that was added
         """
         from ..project import Project
 
@@ -462,18 +460,13 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
                     f"Project with path {project_root} was already added with name '{already_registered_project.project_name}'."
                 )
 
-        try:
-            project_config = ProjectConfig.load(project_root)
-            new_project_config_generated = False
-        except FileNotFoundError:
-            project_config = ProjectConfig.autogenerate(project_root, save_to_disk=True)
-            new_project_config_generated = True
+        project_config = ProjectConfig.load(project_root, autogenerate=True)
 
         new_project = Project(project_root=str(project_root), project_config=project_config)
         self.projects.append(new_project)
         self.save()
 
-        return new_project, new_project_config_generated
+        return new_project
 
     def remove_project(self, project_name: str) -> None:
         # find the index of the project with the desired name and remove it
