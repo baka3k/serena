@@ -166,11 +166,14 @@ class SerenaAgent:
             self._dashboard_thread, port = SerenaDashboardAPI(
                 get_memory_log_handler(), tool_names, tool_usage_stats=self._tool_usage_stats
             ).run_in_thread()
+            dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
+            log.info("Serena web dashboard started at %s", dashboard_url)
             if self.serena_config.web_dashboard_open_on_launch:
                 # open the dashboard URL in the default web browser (using a separate process to control
                 # output redirection)
-                process = multiprocessing.Process(target=self._open_dashboard, args=(port,))
+                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
                 process.start()
+                process.join(timeout=1)
 
         # log fundamental information
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
@@ -257,7 +260,7 @@ class SerenaAgent:
             log.debug(f"Tool usage statistics recording is disabled, not recording usage of '{tool_name}'.")
 
     @staticmethod
-    def _open_dashboard(port: int) -> None:
+    def _open_dashboard(url: str) -> None:
         # Redirect stdout and stderr file descriptors to /dev/null,
         # making sure that nothing can be written to stdout/stderr, even by subprocesses
         null_fd = os.open(os.devnull, os.O_WRONLY)
@@ -266,7 +269,7 @@ class SerenaAgent:
         os.close(null_fd)
 
         # open the dashboard URL in the default web browser
-        webbrowser.open(f"http://localhost:{port}/dashboard/index.html")
+        webbrowser.open(url)
 
     def get_project_root(self) -> str:
         """
