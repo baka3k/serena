@@ -419,10 +419,10 @@ class SerenaAgent:
         """
         project_instance: Project | None = self.serena_config.get_project(project_root_or_name)
         if project_instance is not None:
-            log.info(f"Found registered project {project_instance.project_name} at path {project_instance.project_root}.")
+            log.info(f"Found registered project '{project_instance.project_name}' at path {project_instance.project_root}")
         elif autogenerate and os.path.isdir(project_root_or_name):
             project_instance = self.serena_config.add_project_from_path(project_root_or_name)
-            log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}.")
+            log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}")
         return project_instance
 
     def activate_project_from_path_or_name(self, project_root_or_name: str) -> Project:

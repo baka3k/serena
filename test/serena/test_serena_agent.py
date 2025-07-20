@@ -7,7 +7,7 @@ import pytest
 
 import test.solidlsp.clojure as clj
 from serena.agent import SerenaAgent
-from serena.config.serena_config import ProjectConfig, SerenaConfig
+from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool, FindSymbolTool
 from solidlsp.ls_config import Language
@@ -45,7 +45,7 @@ def serena_config():
                     encoding="utf-8",
                 ),
             )
-            test_projects.append(project)
+            test_projects.append(RegisteredProject.from_project_instance(project))
 
     config = SerenaConfig(gui_log_window_enabled=False, web_dashboard=False, log_level=logging.ERROR)
     config.projects = test_projects
