@@ -71,13 +71,9 @@ class GuiLogViewer:
                 self.message_queue.put(msg)
             memory_log_handler.add_emit_callback(lambda msg: self.message_queue.put(msg))
 
-    def print_status(self, s):
-        print(s + "\n", file=sys.stderr)
-
     def start(self):
         """Start the log viewer in a separate thread."""
         if not self.running:
-            self.print_status("Starting thread")
             self.log_thread = threading.Thread(target=self.run_gui)
             self.log_thread.daemon = True
             self.log_thread.start()
