@@ -3,8 +3,8 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-name = "serena"
-version = "0.1.0"
+name = "serena-agent"
+version = "2025.07.20"
 description = ""
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -35,6 +35,12 @@ dependencies = [
   "tiktoken>=0.9.0",
   "anthropic>=0.54.0",
 ]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
