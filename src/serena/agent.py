@@ -13,7 +13,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from logging import Logger
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -22,17 +22,15 @@ from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet, get_serena_managed_in_project_dir
-from serena.constants import (
-    SERENA_LOG_FORMAT,
-)
-from serena.dashboard import MemoryLogHandler, SerenaDashboardAPI
+from serena.dashboard import SerenaDashboardAPI
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool, Tool, ToolRegistry
+from serena.util.logging import MemoryLogHandler
 from solidlsp import SolidLanguageServer
 
 if TYPE_CHECKING:
-    from serena.gui_log_viewer import GuiLogViewerHandler
+    from serena.gui_log_viewer import GuiLogViewer
 
 log = logging.getLogger(__name__)
 TTool = TypeVar("TTool", bound="Tool")
@@ -101,6 +99,7 @@ class SerenaAgent:
         serena_config: SerenaConfig | None = None,
         context: SerenaAgentContext | None = None,
         modes: list[SerenaAgentMode] | None = None,
+        memory_log_handler: MemoryLogHandler | None = None,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -111,6 +110,8 @@ class SerenaAgent:
             The context may adjust prompts, tool availability, and tool descriptions.
         :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
             The modes may adjust prompts, tool availability, and tool descriptions.
+        :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
+            if necessary.
         """
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -121,20 +122,25 @@ class SerenaAgent:
             log.info(f"Changing the root logger level to {serena_log_level}")
             Logger.root.setLevel(serena_log_level)
 
+        def get_memory_log_handler() -> MemoryLogHandler:
+            nonlocal memory_log_handler
+            if memory_log_handler is None:
+                memory_log_handler = MemoryLogHandler(level=serena_log_level)
+                Logger.root.addHandler(memory_log_handler)
+            return memory_log_handler
+
         # open GUI log window if enabled
-        self._gui_log_handler: Union["GuiLogViewerHandler", None] = None  # noqa
+        self._gui_log_viewer: Optional["GuiLogViewer"] = None
         if self.serena_config.gui_log_window_enabled:
             if platform.system() == "Darwin":
                 log.warning("GUI log window is not supported on macOS")
             else:
                 # even importing on macOS may fail if tkinter dependencies are unavailable (depends on Python interpreter installation
                 # which uv used as a base, unfortunately)
-                from serena.gui_log_viewer import GuiLogViewer, GuiLogViewerHandler
+                from serena.gui_log_viewer import GuiLogViewer
 
-                self._gui_log_handler = GuiLogViewerHandler(
-                    GuiLogViewer("dashboard", title="Serena Logs"), level=serena_log_level, format_string=SERENA_LOG_FORMAT
-                )
-                Logger.root.addHandler(self._gui_log_handler)
+                self._gui_log_viewer = GuiLogViewer("dashboard", title="Serena Logs", memory_log_handler=get_memory_log_handler())
+                self._gui_log_viewer.start()
 
         # set the agent context
         if context is None:
@@ -146,8 +152,8 @@ class SerenaAgent:
         tool_names = [tool.get_name_from_cls() for tool in self._all_tools.values()]
 
         # If GUI log window is enabled, set the tool names for highlighting
-        if self._gui_log_handler is not None:
-            self._gui_log_handler.log_viewer.set_tool_names(tool_names)
+        if self._gui_log_viewer is not None:
+            self._gui_log_viewer.set_tool_names(tool_names)
 
         self._tool_usage_stats: ToolUsageStats | None = None
         if self.serena_config.record_tool_usage_stats:
@@ -157,10 +163,8 @@ class SerenaAgent:
 
         # start the dashboard (web frontend), registering its log handler
         if self.serena_config.web_dashboard:
-            dashboard_log_handler = MemoryLogHandler(level=serena_log_level)
-            Logger.root.addHandler(dashboard_log_handler)
             self._dashboard_thread, port = SerenaDashboardAPI(
-                dashboard_log_handler, tool_names, tool_usage_stats=self._tool_usage_stats
+                get_memory_log_handler(), tool_names, tool_usage_stats=self._tool_usage_stats
             ).run_in_thread()
             if self.serena_config.web_dashboard_open_on_launch:
                 # open the dashboard URL in the default web browser (using a separate process to control
@@ -561,7 +565,6 @@ class SerenaAgent:
             assert self.language_server is not None
             self.language_server.save_cache()
             self.language_server.stop()
-        if self._gui_log_handler:
+        if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
-            self._gui_log_handler.stop_viewer()
-            Logger.root.removeHandler(self._gui_log_handler)
+            self._gui_log_viewer.stop()

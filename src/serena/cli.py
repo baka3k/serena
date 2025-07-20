@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import sys
+from logging import Logger
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,6 +24,7 @@ from serena.constants import (
 )
 from serena.mcp import SerenaMCPFactorySingleProcess
 from serena.project import Project
+from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 
 log = logging.getLogger(__name__)
@@ -135,8 +137,14 @@ class TopLevelCommands(AutoRegisteringGroup):
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
     ) -> None:
+        # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
+        Logger.root.setLevel(logging.INFO)
+        memory_log_handler = MemoryLogHandler()
+        Logger.root.addHandler(memory_log_handler)
+
+        log.info("Starting Serena MCP server")
         project_file = project_file_arg or project
-        factory = SerenaMCPFactorySingleProcess(context=context, project=project_file)
+        factory = SerenaMCPFactorySingleProcess(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
             host=host,
             port=port,
