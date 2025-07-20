@@ -7,7 +7,6 @@ from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from logging import Formatter, Logger, StreamHandler
 from typing import Any, Literal, cast
 
 import docstring_parser
@@ -22,22 +21,19 @@ from serena.agent import (
     SerenaConfig,
 )
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
+from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, SERENA_LOG_FORMAT
 from serena.tools import Tool
 from serena.util.exception import show_fatal_exception_safe
 from serena.util.logging import MemoryLogHandler
 
 log = logging.getLogger(__name__)
-LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
-LOG_LEVEL = logging.INFO
 
 
 def configure_logging(*args, **kwargs) -> None:  # type: ignore
-    # configure logging to stderr (will be captured by Claude Desktop); stdio is the MCP communication stream and cannot be used!
-    Logger.root.setLevel(LOG_LEVEL)
-    handler = StreamHandler(stream=sys.stderr)
-    handler.formatter = Formatter(LOG_FORMAT)
-    Logger.root.addHandler(handler)
+    # We only do something here if logging has not yet been configured.
+    # Normally, logging is configured in the MCP server startup script.
+    if not logging.is_enabled():
+        logging.basicConfig(level=logging.INFO, stream=sys.stderr, format=SERENA_LOG_FORMAT)
 
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
