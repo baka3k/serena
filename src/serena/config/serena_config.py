@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
 import yaml
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
+from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
 from serena.constants import (
@@ -163,30 +164,31 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_name = project_name or project_root.name
-        if project_language is None:
-            language_composition = determine_programming_language_composition(str(project_root))
-            if len(language_composition) == 0:
-                raise ValueError(
-                    f"No source files found in {project_root}\n\n"
-                    f"To use Serena with this project, you need to either:\n"
-                    f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP)\n"
-                    f"2. Create a project configuration file manually at:\n"
-                    f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
-                    f"Example project.yml:\n"
-                    f"  project_name: {project_name}\n"
-                    f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php\n"
-                )
-            # find the language with the highest percentage
-            dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
-        else:
-            dominant_language = project_language.value
-        config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
-        config_with_comments["project_name"] = project_name
-        config_with_comments["language"] = dominant_language
-        if save_to_disk:
-            save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
-        return cls._from_dict(config_with_comments)
+        with LogTime("Project configuration auto-generation", logger=log):
+            project_name = project_name or project_root.name
+            if project_language is None:
+                language_composition = determine_programming_language_composition(str(project_root))
+                if len(language_composition) == 0:
+                    raise ValueError(
+                        f"No source files found in {project_root}\n\n"
+                        f"To use Serena with this project, you need to either:\n"
+                        f"1. Add source files in one of the supported languages (Python, JavaScript/TypeScript, Java, C#, Rust, Go, Ruby, C++, PHP)\n"
+                        f"2. Create a project configuration file manually at:\n"
+                        f"   {os.path.join(project_root, cls.rel_path_to_project_yml())}\n\n"
+                        f"Example project.yml:\n"
+                        f"  project_name: {project_name}\n"
+                        f"  language: python  # or typescript, java, csharp, rust, go, ruby, cpp, php\n"
+                    )
+                # find the language with the highest percentage
+                dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
+            else:
+                dominant_language = project_language.value
+            config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
+            config_with_comments["project_name"] = project_name
+            config_with_comments["language"] = dominant_language
+            if save_to_disk:
+                save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
+            return cls._from_dict(config_with_comments)
 
     @classmethod
     def rel_path_to_project_yml(cls) -> str:
