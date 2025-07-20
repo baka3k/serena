@@ -406,7 +406,7 @@ class ProjectCommands(AutoRegisteringGroup):
         ProjectCommands._index_project(project, log_level)
 
     @staticmethod
-    @click.command("index-deprecated", help="Deprecated alias for 'project index'.")
+    @click.command("index-deprecated", help="Deprecated alias for 'serena project index'.")
     @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
     @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="WARNING")
     def index_deprecated(project: str, log_level: str = "WARNING") -> None:
