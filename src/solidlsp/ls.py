@@ -866,12 +866,14 @@ class SolidLanguageServer(ABC):
             )
             if response is None:
                 self.logger.log(
-                    f"Received None response from the Language Server for document symbols in {relative_file_path}; returning empty list",
-                    logging.DEBUG,
+                    f"Received None response from the Language Server for document symbols in {relative_file_path}. "
+                    f"This means the language server can't understand this file (possibly due to syntax errors). It may also be due to a bug or misconfiguration of the LS. "
+                    f"Returning empty list",
+                    logging.WARNING,
                 )
                 return [], []
             self.logger.log(
-                f"Received {len(response) if response is not None else None} document symbols for {relative_file_path} from the Language Server",
+                f"Received {len(response)} document symbols for {relative_file_path} from the Language Server",
                 logging.DEBUG,
             )
 
