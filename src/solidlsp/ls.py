@@ -5,6 +5,7 @@ import logging
 import os
 import pathlib
 import pickle
+import shutil
 import subprocess
 import threading
 from abc import ABC, abstractmethod
@@ -94,7 +95,19 @@ class SolidLanguageServer(ABC):
         Returns the directory where the language server resources are downloaded.
         This is used to store language server binaries, configuration files, etc.
         """
-        result = os.path.join(os.path.dirname(__file__), "language_servers", "static", cls.__name__)
+        from serena.constants import SERENA_MANAGED_DIR_IN_HOME
+
+        result = os.path.join(SERENA_MANAGED_DIR_IN_HOME, "language_servers", "static", cls.__name__)
+
+        # Migration of previously downloaded LS resources that were downloaded to a subdir of solidlsp instead of to the user's home
+        pre_migration_ls_resources_dir = os.path.join(os.path.dirname(__file__), "language_servers", "static", cls.__name__)
+        if os.path.exists(pre_migration_ls_resources_dir):
+            if os.path.exists(result):
+                # if the directory already exists, we just remove the old resources
+                shutil.rmtree(result, ignore_errors=True)
+            else:
+                # move old resources to the new location
+                shutil.move(pre_migration_ls_resources_dir, result)
         if mkdir:
             os.makedirs(result, exist_ok=True)
         return result

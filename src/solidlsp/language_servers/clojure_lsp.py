@@ -95,17 +95,16 @@ class ClojureLSP(SolidLanguageServer):
         self.resolve_main_method_available = threading.Event()
         self.service_ready_event = threading.Event()
 
-    @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
         """Setup runtime dependencies for clojure-lsp and return the command to start the server."""
         verify_clojure_cli()
         deps = ClojureLSP.runtime_dependencies
         dependency = deps.single_for_current_platform()
 
-        clojurelsp_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clojure-lsp")
+        clojurelsp_ls_dir = cls.ls_resources_dir()
         clojurelsp_executable_path = deps.binary_path(clojurelsp_ls_dir)
         if not os.path.exists(clojurelsp_executable_path):
-            os.makedirs(clojurelsp_ls_dir, exist_ok=True)
             logger.log(
                 f"Downloading and extracting clojure-lsp from {dependency.url} to {clojurelsp_ls_dir}",
                 logging.INFO,
