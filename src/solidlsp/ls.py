@@ -872,6 +872,7 @@ class SolidLanguageServer(ABC):
                     logging.WARNING,
                 )
                 return [], []
+            assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
             self.logger.log(
                 f"Received {len(response)} document symbols for {relative_file_path} from the Language Server",
                 logging.DEBUG,
@@ -911,7 +912,6 @@ class SolidLanguageServer(ABC):
             item[LSPConstants.CHILDREN] = children
 
         flat_all_symbol_list: list[ls_types.UnifiedSymbolInformation] = []
-        assert isinstance(response, list), f"Unexpected response from Language Server: {response}"
         root_nodes: list[ls_types.UnifiedSymbolInformation] = []
         for root_item in response:
             if "range" not in root_item and "location" not in root_item:
