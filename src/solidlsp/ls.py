@@ -864,6 +864,12 @@ class SolidLanguageServer(ABC):
             response = self.server.send.document_symbol(
                 {"textDocument": {"uri": pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()}}
             )
+            if response is None:
+                self.logger.log(
+                    f"Received None response from the Language Server for document symbols in {relative_file_path}; returning empty list",
+                    logging.DEBUG,
+                )
+                return [], []
             self.logger.log(
                 f"Received {len(response) if response is not None else None} document symbols for {relative_file_path} from the Language Server",
                 logging.DEBUG,
