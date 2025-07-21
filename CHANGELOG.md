@@ -2,7 +2,7 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
-# 0.1.0
+# 0.1.1
 
 ## Summary
 
