@@ -2,6 +2,13 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# 0.1.0
+
+## Summary
+
+This is the first release of Serena to pypi. Since the last release, we have greatly improved 
+stability and performance, as well as extended functionality, improved editing tools and included support for several new languages. 
+
 * **Reduce the use of asyncio to a minimum**, improving stability and reducing the need for workarounds
    * Switch to newly developed fully synchronous LSP library `solidlsp` (derived from `multilspy`),
      removing our fork of `multilspy` (src/multilspy)
@@ -19,10 +26,13 @@ Status of the `main` branch. Changes prior to the next official version change w
 * `SearchForPatternTool`: Better default, extended parameters and description for restricting the search
 * Language support:
    * Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
-   * **Add support for Clojure**
+   * **Add support for Clojure, Elixir and Terraform. New language servers for C# and typescript.**
+   * Experimental language server implementations can now be accessed by users through configuring the `language` field
 * Configuration:
    * Add option `web_dashboard_open_on_launch` (allowing the dashboard to be enabled without opening a browser window) 
    * Add options `record_tool_usage_stats` and `token_count_estimator`
+   * Serena config, modes and contexts can now be adjusted from the user's home directory.
+   * Extended CLI to help with configuration
 * Dashboard:
   * Displaying tool usage statistics if enabled in the config
 
