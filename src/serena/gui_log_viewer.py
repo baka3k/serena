@@ -4,7 +4,6 @@ import os
 import queue
 import sys
 import threading
-import time
 import tkinter as tk
 import traceback
 from enum import Enum, auto
@@ -12,6 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from serena import constants
+from serena.util.logging import MemoryLogHandler
 
 log = logging.getLogger(__name__)
 
@@ -31,11 +31,20 @@ class GuiLogViewer:
     It can also highlight tool names in boldface when they appear in log messages.
     """
 
-    def __init__(self, mode: Literal["dashboard", "error"], title="Log Viewer", width=800, height=600):
+    def __init__(
+        self,
+        mode: Literal["dashboard", "error"],
+        title="Log Viewer",
+        memory_log_handler: MemoryLogHandler | None = None,
+        width=800,
+        height=600,
+    ):
         """
         :param mode: the mode; if "dashboard", run a dashboard with logs and some control options; if "error", run
             a simple error log viewer (for fatal exceptions)
         :param title: the window title
+        :param memory_log_handler: an optional log handler from which to obtain log messages; If not provided,
+            must pass the instance to a `GuiLogViewerHandler` to add log messages.
         :param width: the initial window width
         :param height: the initial window height
         """
@@ -57,13 +66,14 @@ class GuiLogViewer:
             LogLevel.DEFAULT: "#000000",  # Black
         }
 
-    def print_status(self, s):
-        print(s + "\n", file=sys.stderr)
+        if memory_log_handler is not None:
+            for msg in memory_log_handler.get_log_messages():
+                self.message_queue.put(msg)
+            memory_log_handler.add_emit_callback(lambda msg: self.message_queue.put(msg))
 
     def start(self):
         """Start the log viewer in a separate thread."""
         if not self.running:
-            self.print_status("Starting thread")
             self.log_thread = threading.Thread(target=self.run_gui)
             self.log_thread.daemon = True
             self.log_thread.start()
@@ -381,23 +391,15 @@ class GuiLogViewerHandler(logging.Handler):
             self.log_viewer.stop()
 
 
-def show_fatal_exception(e: Exception, duration_secs: int = 60):
+def show_fatal_exception(e: Exception):
     """
     Makes sure the given exception is shown in the GUI log viewer,
     either an existing instance or a new one.
 
     :param e: the exception to display
-    :param duration_secs: the duration for which to display the error before
-        terminating the program for the case where the log viewer is already present
-        in a daemon thread which will terminate when the program does
     """
-    if GuiLogViewerHandler.is_instance_registered():
-        # show in existing daemon thread, waiting for the given duration
-        log.error(f"Fatal error: {e}", exc_info=e)
-        time.sleep(duration_secs)
-    else:
-        # show in new window in main thread (user must close it)
-        log_viewer = GuiLogViewer("error")
-        exc_info = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-        log_viewer.add_log(f"ERROR Fatal exception: {e}\n{exc_info}")
-        log_viewer.run_gui()
+    # show in new window in main thread (user must close it)
+    log_viewer = GuiLogViewer("error")
+    exc_info = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+    log_viewer.add_log(f"ERROR Fatal exception: {e}\n{exc_info}")
+    log_viewer.run_gui()

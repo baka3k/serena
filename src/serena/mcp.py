@@ -7,7 +7,6 @@ from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from logging import Formatter, Logger, StreamHandler
 from typing import Any, Literal, cast
 
 import docstring_parser
@@ -22,21 +21,19 @@ from serena.agent import (
     SerenaConfig,
 )
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES
+from serena.constants import DEFAULT_CONTEXT, DEFAULT_MODES, SERENA_LOG_FORMAT
 from serena.tools import Tool
 from serena.util.exception import show_fatal_exception_safe
+from serena.util.logging import MemoryLogHandler
 
 log = logging.getLogger(__name__)
-LOG_FORMAT = "%(levelname)-5s %(asctime)-15s %(name)s:%(funcName)s:%(lineno)d - %(message)s"
-LOG_LEVEL = logging.INFO
 
 
 def configure_logging(*args, **kwargs) -> None:  # type: ignore
-    # configure logging to stderr (will be captured by Claude Desktop); stdio is the MCP communication stream and cannot be used!
-    Logger.root.setLevel(LOG_LEVEL)
-    handler = StreamHandler(stream=sys.stderr)
-    handler.formatter = Formatter(LOG_FORMAT)
-    Logger.root.addHandler(handler)
+    # We only do something here if logging has not yet been configured.
+    # Normally, logging is configured in the MCP server startup script.
+    if not logging.is_enabled():
+        logging.basicConfig(level=logging.INFO, stream=sys.stderr, format=SERENA_LOG_FORMAT)
 
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
@@ -190,7 +187,7 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
     MCP server factory where the SerenaAgent and its language server run in the same process as the MCP server
     """
 
-    def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None):
+    def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None, memory_log_handler: MemoryLogHandler | None = None):
         """
         :param context: The context name or path to context file
         :param project: Either an absolute path to the project directory or a name of an already registered project.
@@ -199,9 +196,12 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
         """
         super().__init__(context=context, project=project)
         self.agent: SerenaAgent | None = None
+        self.memory_log_handler = memory_log_handler
 
     def _instantiate_agent(self, serena_config: SerenaConfig, modes: list[SerenaAgentMode]) -> None:
-        self.agent = SerenaAgent(project=self.project, serena_config=serena_config, context=self.context, modes=modes)
+        self.agent = SerenaAgent(
+            project=self.project, serena_config=serena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
+        )
 
     def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None

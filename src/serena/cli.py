@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import sys
+from logging import Logger
 from pathlib import Path
 from typing import Any, Literal
 
@@ -15,6 +16,7 @@ from serena.config.serena_config import ProjectConfig, SerenaConfig
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
+    SERENA_LOG_FORMAT,
     SERENA_MANAGED_DIR_IN_HOME,
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
@@ -23,6 +25,7 @@ from serena.constants import (
 )
 from serena.mcp import SerenaMCPFactorySingleProcess
 from serena.project import Project
+from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 
 log = logging.getLogger(__name__)
@@ -135,8 +138,20 @@ class TopLevelCommands(AutoRegisteringGroup):
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
     ) -> None:
+        # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
+        #   * memory log handler (for use by GUI/Dashboard)
+        #   * stream handler for stderr (for direct console output, which will also be captured by clients like Claude Desktop)
+        # (Note that stdout must never be used for logging, as it is used by the MCP server to communicate with the client.)
+        Logger.root.setLevel(logging.INFO)
+        memory_log_handler = MemoryLogHandler()
+        Logger.root.addHandler(memory_log_handler)
+        stderr_handler = logging.StreamHandler(stream=sys.stderr)
+        stderr_handler.formatter = logging.Formatter(SERENA_LOG_FORMAT)
+        Logger.root.addHandler(stderr_handler)
+
+        log.info("Initializing Serena MCP server")
         project_file = project_file_arg or project
-        factory = SerenaMCPFactorySingleProcess(context=context, project=project_file)
+        factory = SerenaMCPFactorySingleProcess(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
             host=host,
             port=port,

@@ -1,5 +1,4 @@
 import os
-import queue
 import socket
 import threading
 from collections.abc import Callable
@@ -10,49 +9,13 @@ from pydantic import BaseModel
 from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
-from serena.constants import SERENA_DASHBOARD_DIR, SERENA_LOG_FORMAT
+from serena.constants import SERENA_DASHBOARD_DIR
+from serena.util.logging import MemoryLogHandler
 
 log = logging.getLogger(__name__)
 
 # disable Werkzeug's logging to avoid cluttering the output
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
-
-
-class MemoryLogHandler(logging.Handler):
-    def __init__(self, level: int = logging.NOTSET) -> None:
-        super().__init__(level=level)
-        self.setFormatter(logging.Formatter(SERENA_LOG_FORMAT))
-        self._log_buffer = LogBuffer()
-        self._log_queue: queue.Queue[str] = queue.Queue()
-        self._stop_event = threading.Event()
-
-        # start background thread to process logs
-        self.worker_thread = threading.Thread(target=self._process_queue, daemon=True)
-        self.worker_thread.start()
-
-    def emit(self, record: logging.LogRecord) -> None:
-        msg = self.format(record)
-        self._log_queue.put_nowait(msg)
-
-    def _process_queue(self) -> None:
-        while not self._stop_event.is_set():
-            try:
-                msg = self._log_queue.get(timeout=1)
-                self._log_buffer.append(msg)
-                self._log_queue.task_done()
-            except queue.Empty:
-                continue
-
-    def get_log_messages(self) -> list[str]:
-        return self._log_buffer.logs
-
-
-class LogBuffer:
-    def __init__(self) -> None:
-        self.logs: list[str] = []
-
-    def append(self, msg: str) -> None:
-        self.logs.append(msg)
 
 
 class RequestLog(BaseModel):
