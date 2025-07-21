@@ -71,7 +71,7 @@ google = ["google-genai>=1.8.0"]
 Homepage = "https://github.com/oraios/serena"
 
 [tool.hatch.build.targets.wheel]
-packages = ["serena", "interprompt", "solidlsp"]
+packages = ["src/serena", "src/interprompt", "src/solidlsp"]
 
 [tool.black]
 line-length = 140
