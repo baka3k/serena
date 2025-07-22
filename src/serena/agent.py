@@ -223,7 +223,7 @@ class SerenaAgent:
             try:
                 self.activate_project_from_path_or_name(project)
             except Exception as e:
-                log.error(f"Error activating project '{project}' at startup: {e}")
+                log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
 
     def _ide_context_tool_inclusion_definitions(self, project_root_or_name: str | None) -> list[ToolInclusionDefinition]:
         """
