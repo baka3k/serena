@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -6,6 +7,8 @@ from typing import NamedTuple
 
 import pathspec
 from pathspec import PathSpec
+
+log = logging.getLogger(__name__)
 
 
 class ScanResult(NamedTuple):
@@ -243,7 +246,13 @@ class GitignoreParser:
         """
         # Convert to relative path from repo root
         if os.path.isabs(path):
-            rel_path = os.path.relpath(path, self.repo_root)
+            try:
+                rel_path = os.path.relpath(path, self.repo_root)
+            except Exception as e:
+                # If the path could not be converted to a relative path,
+                # it is outside the repository root, so we ignore it
+                log.info("Ignoring path '%s' which is outside of the repository root (%s)", path, e)
+                return True
         else:
             rel_path = path
 
