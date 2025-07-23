@@ -136,7 +136,7 @@ class SerenaDashboardAPI:
         while port <= 65535:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.bind(("localhost", port))
+                    sock.bind(("0.0.0.0", port))
                     return port
             except OSError:
                 port += 1
