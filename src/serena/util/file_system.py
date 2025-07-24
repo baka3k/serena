@@ -3,6 +3,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import NamedTuple
 
 import pathspec
@@ -257,6 +258,11 @@ class GitignoreParser:
                 return True
         else:
             rel_path = path
+
+        # Ignore paths inside .git
+        rel_path_first_path = Path(rel_path).parts[0]
+        if rel_path_first_path == ".git":
+            return True
 
         abs_path = os.path.join(self.repo_root, rel_path)
 
