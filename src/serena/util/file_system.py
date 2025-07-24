@@ -205,9 +205,6 @@ class GitignoreParser:
             if is_anchored:
                 line = line[1:]
 
-            # Remove directory marker at the end since we do not support directory-only patterns
-            line = line.removesuffix("/")
-
             # Adjust pattern based on gitignore file location
             if rel_dir:
                 if is_anchored:

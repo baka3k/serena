@@ -369,7 +369,7 @@ debug.log
 
         assert "*.log" in patterns
         assert "!important.log" in patterns
-        assert "!/src/keep.log" in patterns
+        assert "!src/keep.log" in patterns
 
     def test_comments_and_empty_lines(self):
         """Test that comments and empty lines are ignored."""
