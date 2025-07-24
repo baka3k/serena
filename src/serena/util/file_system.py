@@ -76,8 +76,10 @@ def find_all_non_ignored_files(repo_root: str) -> list[str]:
     :return: A list of all non-ignored files in the repository
     """
     gitignore_parser = GitignoreParser(repo_root)
-    _, files = scan_directory(repo_root, recursive=True)
-    return [file for file in files if not gitignore_parser.should_ignore(file)]
+    _, files = scan_directory(
+        repo_root, recursive=True, is_ignored_dir=gitignore_parser.should_ignore, is_ignored_file=gitignore_parser.should_ignore
+    )
+    return files
 
 
 @dataclass
