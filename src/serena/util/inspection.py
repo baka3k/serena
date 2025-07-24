@@ -19,7 +19,7 @@ def iter_subclasses(cls: type[T], recursive: bool = True) -> Generator[type[T], 
             yield from iter_subclasses(subclass, recursive)
 
 
-def determine_programming_language_composition(repo_path: str, rel_path_to_gitignore: str = ".gitignore") -> dict[str, float]:
+def determine_programming_language_composition(repo_path: str) -> dict[str, float]:
     """
     Determine the programming language composition of a repository.
 
