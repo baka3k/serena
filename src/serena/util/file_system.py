@@ -185,10 +185,6 @@ class GitignoreParser:
             if not line or line.lstrip().startswith("#"):
                 continue
 
-            # Handle escaped characters at the beginning
-            if line.startswith(("\\#", "\\!")):
-                line = line[1:]
-
             # Store whether this is a negation pattern
             is_negation = line.startswith("!")
             if is_negation:
@@ -200,12 +196,17 @@ class GitignoreParser:
             if not line:
                 continue
 
-            # Determine if pattern is anchored to the gitignore directory
-            is_anchored = "/" in line[:-1] or line.startswith("/")
-
-            # Remove leading slash for processing
-            if line.startswith("/"):
+            # Handle escaped characters at the beginning
+            if line.startswith(("\\#", "\\!")):
                 line = line[1:]
+
+            # Determine if pattern is anchored to the gitignore directory and remove leading slash for processing
+            is_anchored = line.startswith("/")
+            if is_anchored:
+                line = line[1:]
+
+            # Remove directory marker at the end since we do not support directory-only patterns
+            line = line.removesuffix("/")
 
             # Adjust pattern based on gitignore file location
             if rel_dir:
