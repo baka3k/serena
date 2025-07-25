@@ -15,6 +15,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -78,17 +79,20 @@ class ClojureLSP(SolidLanguageServer):
         ]
     )
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a ClojureLSP instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clojure_lsp_executable_path = self._setup_runtime_dependencies(logger, config)
+        clojure_lsp_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         super().__init__(
             config,
             logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=clojure_lsp_executable_path, cwd=repository_root_path),
             "clojure",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
@@ -96,13 +100,15 @@ class ClojureLSP(SolidLanguageServer):
         self.service_ready_event = threading.Event()
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
         """Setup runtime dependencies for clojure-lsp and return the command to start the server."""
         verify_clojure_cli()
         deps = ClojureLSP.runtime_dependencies
         dependency = deps.single_for_current_platform()
 
-        clojurelsp_ls_dir = cls.ls_resources_dir()
+        clojurelsp_ls_dir = cls.ls_resources_dir(solidlsp_settings)
         clojurelsp_executable_path = deps.binary_path(clojurelsp_ls_dir)
         if not os.path.exists(clojurelsp_executable_path):
             logger.log(
