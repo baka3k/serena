@@ -44,7 +44,9 @@ class EclipseJDTLS(SolidLanguageServer):
     The EclipseJDTLS class provides a Java specific implementation of the LanguageServer class
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
@@ -55,7 +57,7 @@ class EclipseJDTLS(SolidLanguageServer):
         # ws_dir is the workspace directory for the EclipseJDTLS server
         ws_dir = str(
             PurePath(
-                SolidLSPSettings.get_language_server_directory(),
+                solidlsp_settings.ls_resources_dir,
                 "EclipseJDTLS",
                 "workspaces",
                 uuid.uuid4().hex,
@@ -63,14 +65,14 @@ class EclipseJDTLS(SolidLanguageServer):
         )
 
         # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
-        shared_cache_location = str(PurePath(SolidLSPSettings.get_global_cache_directory(), "lsp", "EclipseJDTLS", "sharedIndex"))
+        shared_cache_location = str(PurePath(solidlsp_settings.ls_resources_dir, "lsp", "EclipseJDTLS", "sharedIndex"))
+        os.makedirs(shared_cache_location, exist_ok=True)
+        os.makedirs(ws_dir, exist_ok=True)
 
         jre_path = self.runtime_dependency_paths.jre_path
         lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
 
         jdtls_launcher_jar = self.runtime_dependency_paths.jdtls_launcher_jar_path
-
-        os.makedirs(ws_dir, exist_ok=True)
 
         data_dir = str(PurePath(ws_dir, "data_dir"))
         jdtls_config_path = str(PurePath(ws_dir, "config_path"))
@@ -132,7 +134,9 @@ class EclipseJDTLS(SolidLanguageServer):
         self.intellicode_enable_command_available = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
-        super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java")
+        super().__init__(
+            config, logger, repository_root_path, ProcessLaunchInfo(cmd, proc_env, proc_cwd), "java", solidlsp_settings=solidlsp_settings
+        )
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

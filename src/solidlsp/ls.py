@@ -35,6 +35,7 @@ from solidlsp.lsp_protocol_handler.server import (
     ProcessLaunchInfo,
     StringDict,
 )
+from solidlsp.settings import SolidLSPSettings
 
 GenericDocumentSymbol = Union[LSPTypes.DocumentSymbol, LSPTypes.SymbolInformation, ls_types.UnifiedSymbolInformation]
 
@@ -90,14 +91,14 @@ class SolidLanguageServer(ABC):
         return dirname.startswith(".")
 
     @classmethod
-    def ls_resources_dir(cls, mkdir: bool = True) -> str:
+    def ls_resources_dir(cls, solidlsp_settings: SolidLSPSettings, mkdir: bool = True) -> str:
         """
         Returns the directory where the language server resources are downloaded.
         This is used to store language server binaries, configuration files, etc.
         """
-        from serena.constants import SERENA_MANAGED_DIR_IN_HOME
-
-        result = os.path.join(SERENA_MANAGED_DIR_IN_HOME, "language_servers", "static", cls.__name__)
+        if solidlsp_settings is None:
+            solidlsp_settings = SolidLSPSettings()
+        result = os.path.join(solidlsp_settings.ls_resources_dir, cls.__name__)
 
         # Migration of previously downloaded LS resources that were downloaded to a subdir of solidlsp instead of to the user's home
         pre_migration_ls_resources_dir = os.path.join(os.path.dirname(__file__), "language_servers", "static", cls.__name__)
@@ -114,7 +115,12 @@ class SolidLanguageServer(ABC):
 
     @classmethod
     def create(
-        cls, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, timeout: float | None = None
+        cls,
+        config: LanguageServerConfig,
+        logger: LanguageServerLogger,
+        repository_root_path: str,
+        solidlsp_settings: SolidLSPSettings,
+        timeout: float | None = None,
     ) -> "SolidLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
@@ -135,90 +141,90 @@ class SolidLanguageServer(ABC):
                 PyrightServer,
             )
 
-            ls = PyrightServer(config, logger, repository_root_path)
+            ls = PyrightServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         elif config.code_language == Language.PYTHON_JEDI:
             from solidlsp.language_servers.jedi_server import JediServer
 
-            ls = JediServer(config, logger, repository_root_path)
+            ls = JediServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         elif config.code_language == Language.JAVA:
             from solidlsp.language_servers.eclipse_jdtls import (
                 EclipseJDTLS,
             )
 
-            ls = EclipseJDTLS(config, logger, repository_root_path)
+            ls = EclipseJDTLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.KOTLIN:
             from solidlsp.language_servers.kotlin_language_server import (
                 KotlinLanguageServer,
             )
 
-            ls = KotlinLanguageServer(config, logger, repository_root_path)
+            ls = KotlinLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.RUST:
             from solidlsp.language_servers.rust_analyzer import (
                 RustAnalyzer,
             )
 
-            ls = RustAnalyzer(config, logger, repository_root_path)
+            ls = RustAnalyzer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.CSHARP:
             from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
 
-            ls = CSharpLanguageServer(config, logger, repository_root_path)
+            ls = CSharpLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         elif config.code_language == Language.CSHARP_OMNISHARP:
-            from solidlsp.language_servers.omnisharp.omnisharp import OmniSharp
+            from solidlsp.language_servers.omnisharp import OmniSharp
 
-            ls = OmniSharp(config, logger, repository_root_path)
+            ls = OmniSharp(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         elif config.code_language == Language.TYPESCRIPT:
             from solidlsp.language_servers.typescript_language_server import (
                 TypeScriptLanguageServer,
             )
 
-            ls = TypeScriptLanguageServer(config, logger, repository_root_path)
+            ls = TypeScriptLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         elif config.code_language == Language.TYPESCRIPT_VTS:
             # VTS based Language Server implementation, need to experiment to see if it improves performance
             from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
-            ls = VtsLanguageServer(config, logger, repository_root_path)
+            ls = VtsLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
         elif config.code_language == Language.GO:
             from solidlsp.language_servers.gopls import Gopls
 
-            ls = Gopls(config, logger, repository_root_path)
+            ls = Gopls(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.RUBY:
             from solidlsp.language_servers.solargraph import Solargraph
 
-            ls = Solargraph(config, logger, repository_root_path)
+            ls = Solargraph(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.DART:
             from solidlsp.language_servers.dart_language_server import DartLanguageServer
 
-            ls = DartLanguageServer(config, logger, repository_root_path)
+            ls = DartLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.CPP:
             from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
 
-            ls = ClangdLanguageServer(config, logger, repository_root_path)
+            ls = ClangdLanguageServer(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.PHP:
             from solidlsp.language_servers.intelephense import Intelephense
 
-            ls = Intelephense(config, logger, repository_root_path)
+            ls = Intelephense(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.CLOJURE:
             from solidlsp.language_servers.clojure_lsp import ClojureLSP
 
-            ls = ClojureLSP(config, logger, repository_root_path)
+            ls = ClojureLSP(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.ELIXIR:
             from solidlsp.language_servers.elixir_tools.elixir_tools import ElixirTools
 
-            ls = ElixirTools(config, logger, repository_root_path)
+            ls = ElixirTools(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         elif config.code_language == Language.TERRAFORM:
             from solidlsp.language_servers.terraform_ls import TerraformLS
 
-            ls = TerraformLS(config, logger, repository_root_path)
+            ls = TerraformLS(config, logger, repository_root_path, solidlsp_settings=solidlsp_settings)
 
         else:
             logger.log(f"Language {config.code_language} is not supported", logging.ERROR)
@@ -234,6 +240,7 @@ class SolidLanguageServer(ABC):
         repository_root_path: str,
         process_launch_info: ProcessLaunchInfo,
         language_id: str,
+        solidlsp_settings: SolidLSPSettings,
     ):
         """
         Initializes a LanguageServer instance.
@@ -248,6 +255,7 @@ class SolidLanguageServer(ABC):
                     The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
+        self._solidlsp_settings = solidlsp_settings
         self.logger = logger
         self.repository_root_path: str = repository_root_path
         self.logger.log(
