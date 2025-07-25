@@ -369,7 +369,7 @@ debug.log
 
         assert "*.log" in patterns
         assert "!important.log" in patterns
-        assert "!/src/keep.log" in patterns
+        assert "!src/keep.log" in patterns
 
     def test_comments_and_empty_lines(self):
         """Test that comments and empty lines are ignored."""
@@ -418,6 +418,38 @@ build/
 
         assert "#not-a-comment.txt" in patterns
         assert "!not-negation.txt" in patterns
+
+    def test_escaped_negation_patterns(self):
+        test_dir = self.repo_path / "test_escaped_negation"
+        test_dir.mkdir()
+
+        gitignore = test_dir / ".gitignore"
+        gitignore.write_text(
+            """*.log
+\\!not-negation.log
+!actual-negation.log
+"""
+        )
+
+        parser = GitignoreParser(str(test_dir))
+        specs = parser.get_ignore_specs()
+
+        assert len(specs) == 1
+        patterns = specs[0].patterns
+
+        # Key assertions: escaped exclamation becomes literal, real negation preserved
+        assert "!not-negation.log" in patterns  # escaped -> literal
+        assert "!actual-negation.log" in patterns  # real negation preserved
+
+        # Test the actual behavioral difference between escaped and real negation:
+        # *.log pattern should ignore test.log
+        assert parser.should_ignore("test.log")
+
+        # Escaped negation file should still be ignored by *.log pattern
+        assert parser.should_ignore("!not-negation.log")
+
+        # Actual negation should override the *.log pattern
+        assert not parser.should_ignore("actual-negation.log")
 
     def test_glob_patterns(self):
         """Test various glob patterns work correctly."""
