@@ -119,8 +119,8 @@ class SolidLanguageServer(ABC):
         config: LanguageServerConfig,
         logger: LanguageServerLogger,
         repository_root_path: str,
-        solidlsp_settings: SolidLSPSettings,
         timeout: float | None = None,
+        solidlsp_settings: SolidLSPSettings | None = None,
     ) -> "SolidLanguageServer":
         """
         Creates a language specific LanguageServer instance based on the given configuration, and appropriate settings for the programming language.
@@ -135,6 +135,8 @@ class SolidLanguageServer(ABC):
         :return LanguageServer: A language specific LanguageServer instance.
         """
         ls: SolidLanguageServer
+        if solidlsp_settings is None:
+            solidlsp_settings = SolidLSPSettings()
 
         if config.code_language == Language.PYTHON:
             from solidlsp.language_servers.pyright_server import (

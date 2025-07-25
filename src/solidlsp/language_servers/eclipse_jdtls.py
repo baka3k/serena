@@ -51,7 +51,7 @@ class EclipseJDTLS(SolidLanguageServer):
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        runtime_dependency_paths = self._setupRuntimeDependencies(logger, config)
+        runtime_dependency_paths = self._setupRuntimeDependencies(logger, config, solidlsp_settings)
         self.runtime_dependency_paths = runtime_dependency_paths
 
         # ws_dir is the workspace directory for the EclipseJDTLS server
@@ -157,7 +157,9 @@ class EclipseJDTLS(SolidLanguageServer):
         ]
 
     @classmethod
-    def _setupRuntimeDependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> RuntimeDependencyPaths:
+    def _setupRuntimeDependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> RuntimeDependencyPaths:
         """
         Setup runtime dependencies for EclipseJDTLS and return the paths.
         """
@@ -242,7 +244,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         gradle_path = str(
             PurePath(
-                cls.ls_resources_dir(),
+                cls.ls_resources_dir(solidlsp_settings),
                 "gradle-7.3.3",
             )
         )
@@ -258,7 +260,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(gradle_path)
 
         dependency = runtime_dependencies["vscode-java"][platformId.value]
-        vscode_java_path = str(PurePath(cls.ls_resources_dir(), dependency["relative_extraction_path"]))
+        vscode_java_path = str(PurePath(cls.ls_resources_dir(solidlsp_settings), dependency["relative_extraction_path"]))
         os.makedirs(vscode_java_path, exist_ok=True)
         jre_home_path = str(PurePath(vscode_java_path, dependency["jre_home_path"]))
         jre_path = str(PurePath(vscode_java_path, dependency["jre_path"]))
@@ -287,7 +289,7 @@ class EclipseJDTLS(SolidLanguageServer):
         assert os.path.exists(jdtls_readonly_config_path)
 
         dependency = runtime_dependencies["intellicode"]["platform-agnostic"]
-        intellicode_directory_path = str(PurePath(cls.ls_resources_dir(), dependency["relative_extraction_path"]))
+        intellicode_directory_path = str(PurePath(cls.ls_resources_dir(solidlsp_settings), dependency["relative_extraction_path"]))
         os.makedirs(intellicode_directory_path, exist_ok=True)
         intellicode_jar_path = str(PurePath(intellicode_directory_path, dependency["intellicode_jar_path"]))
         intellisense_members_path = str(PurePath(intellicode_directory_path, dependency["intellisense_members_path"]))

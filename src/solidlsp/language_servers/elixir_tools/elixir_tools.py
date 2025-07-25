@@ -14,6 +14,7 @@ from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from ..common import RuntimeDependency
 
@@ -80,7 +81,9 @@ class ElixirTools(SolidLanguageServer):
         return None
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
         """
         Setup runtime dependencies for Next LS.
         Downloads the Next LS binary for the current platform and returns the path to the executable.
@@ -110,7 +113,7 @@ class ElixirTools(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for Next LS at the moment"
 
-        next_ls_dir = os.path.join(cls.ls_resources_dir(), "next-ls")
+        next_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "next-ls")
 
         # Define runtime dependencies inline
         runtime_deps = {
@@ -162,8 +165,10 @@ class ElixirTools(SolidLanguageServer):
         logger.log(f"Next LS binary ready at: {executable_path}", logging.INFO)
         return executable_path
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
-        nextls_executable_path = self._setup_runtime_dependencies(logger, config)
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
+        nextls_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
         super().__init__(
             config,
@@ -171,6 +176,7 @@ class ElixirTools(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd=f'"{nextls_executable_path}" --stdio', cwd=repository_root_path),
             "elixir",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.request_id = 0
