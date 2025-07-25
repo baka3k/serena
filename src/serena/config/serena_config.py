@@ -7,6 +7,7 @@ import shutil
 from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
+from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
 import yaml
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
-from sensai.util.logging import LogTime
+from sensai.util.logging import LogTime, datetime_tag
 from sensai.util.string import ToStringMixin
 
 from serena.constants import (
@@ -30,6 +31,7 @@ from serena.util.inspection import determine_programming_language_composition
 from solidlsp.ls_config import Language
 
 from ..analytics import RegisteredTokenCountEstimator
+from ..util.class_decorators import singleton
 
 if TYPE_CHECKING:
     from ..project import Project
@@ -37,6 +39,30 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 DEFAULT_TOOL_TIMEOUT: float = 240
+
+
+@singleton
+class SerenaPaths:
+    """
+    Provides paths to various Serena-related directories and files.
+    """
+
+    def __init__(self):
+        self.user_config_dir: str = SERENA_MANAGED_DIR_IN_HOME
+        """
+        the path to the user's Serena configuration directory, which is typically ~/.serena
+        """
+
+    def get_next_log_file_path(self, prefix: str):
+        """
+        :param prefix: the filename prefix indicating the type of the log file
+        :return: the full path to the log file to use
+        """
+        log_dir = os.path.join(self.user_config_dir, "logs", datetime.now().strftime("%Y-%m-%d"))
+        os.makedirs(log_dir, exist_ok=True)
+        return os.path.join(log_dir, prefix + "_" + datetime_tag() + ".txt")
+
+    # TODO: Paths from constants.py should be moved here
 
 
 class ToolSet:

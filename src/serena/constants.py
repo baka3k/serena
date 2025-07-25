@@ -8,6 +8,7 @@ _serena_in_home_managed_dir = Path.home() / ".serena"
 
 SERENA_MANAGED_DIR_IN_HOME = str(_serena_in_home_managed_dir)
 
+# TODO: Path-related constants should be moved to SerenaPaths; don't add further constants here.
 REPO_ROOT = str(_repo_root_path)
 PROMPT_TEMPLATES_DIR = str(_serena_pkg_path / "resources" / "config" / "prompt_templates")
 SERENAS_OWN_CONTEXT_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "contexts")
@@ -22,7 +23,6 @@ INTERNAL_MODE_YAMLS_DIR = str(_serena_pkg_path / "resources" / "config" / "inter
 """Internal modes, never overridden by user modes."""
 SERENA_DASHBOARD_DIR = str(_serena_pkg_path / "resources" / "dashboard")
 SERENA_ICON_DIR = str(_serena_pkg_path / "resources" / "icons")
-
 
 DEFAULT_ENCODING = "utf-8"
 DEFAULT_CONTEXT = "desktop-app"
