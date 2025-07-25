@@ -96,8 +96,6 @@ class SolidLanguageServer(ABC):
         Returns the directory where the language server resources are downloaded.
         This is used to store language server binaries, configuration files, etc.
         """
-        if solidlsp_settings is None:
-            solidlsp_settings = SolidLSPSettings()
         result = os.path.join(solidlsp_settings.ls_resources_dir, cls.__name__)
 
         # Migration of previously downloaded LS resources that were downloaded to a subdir of solidlsp instead of to the user's home
