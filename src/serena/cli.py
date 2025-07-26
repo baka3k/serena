@@ -245,6 +245,8 @@ class ModeCommands(AutoRegisteringGroup):
     @click.command("create", help="Create a new mode or copy an internal one.")
     @click.option(
         "--name",
+        "-n",
+        multiple=True,
         type=str,
         default=None,
         help="Name for the new mode. If --from-internal is passed may be left empty to create a mode of the same name, which will then override the internal mode.",
@@ -321,6 +323,8 @@ class ContextCommands(AutoRegisteringGroup):
     @click.command("create", help="Create a new context or copy an internal one.")
     @click.option(
         "--name",
+        "-n",
+        multiple=True,
         type=str,
         default=None,
         help="Name for the new context. If --from-internal is passed may be left empty to create a context of the same name, which will then override the internal context",

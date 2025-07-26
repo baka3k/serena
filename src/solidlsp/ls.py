@@ -709,10 +709,8 @@ class SolidLanguageServer(ABC):
             ret.append(ls_types.Location(**new_item))
 
         return ret
-    
-    def request_text_document_diagnostics(
-        self, relative_file_path: str
-    ) -> list[ls_types.Diagnostic]:
+
+    def request_text_document_diagnostics(self, relative_file_path: str) -> list[ls_types.Diagnostic]:
         """
         Raise a [textDocument/diagnostic](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_diagnostic) request to the Language Server
         to find diagnostics for the given file. Wait for the response and return the result.
@@ -748,7 +746,7 @@ class SolidLanguageServer(ABC):
                 "severity": item["severity"],
                 "message": item["message"],
                 "range": item["range"],
-                "code": item["code"]
+                "code": item["code"],
             }
             ret.append(ls_types.Diagnostic(new_item))
 
@@ -1577,7 +1575,6 @@ class SolidLanguageServer(ABC):
         defining_symbol = self.request_containing_symbol(def_path, def_line, def_col, strict=False, include_body=include_body)
 
         return defining_symbol
-    
 
     @property
     def cache_path(self) -> Path:
