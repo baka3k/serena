@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from collections.abc import Sequence
@@ -7,6 +8,8 @@ from dataclasses import dataclass
 
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import FileUtils, PlatformUtils
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
@@ -69,28 +72,28 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _run_command(command: str, cwd: str) -> None:
-        if PlatformUtils.get_platform_id().value.startswith("win"):
-            subprocess.run(
-                command,
-                shell=True,
-                check=True,
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+        kwargs = {}
+        if PlatformUtils.get_platform_id().is_windows():
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
         else:
             import pwd
 
-            user = pwd.getpwuid(os.getuid()).pw_name
-            subprocess.run(
-                command,
-                shell=True,
-                check=True,
-                user=user,
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
+        log.info("Running command '%s' in '%s'", command, cwd)
+        completed_proces = subprocess.run(
+            command,
+            shell=True,
+            check=True,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            **kwargs,
+        )
+        log.log(
+            logging.WARNING if completed_proces.returncode else logging.INFO,
+            "Command completed with return code %d",
+            completed_proces.returncode,
+        )
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:

@@ -10,6 +10,7 @@ import threading
 from time import sleep
 
 from overrides import override
+from sensai.util.logging import LogTime
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -117,7 +118,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
         if not os.path.exists(tsserver_executable_path):
             logger.log(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...", logging.INFO)
-            deps.install(logger, tsserver_ls_dir)
+            with LogTime("Installation of TypeScript language server dependencies", logger=logger.logger):
+                deps.install(logger, tsserver_ls_dir)
 
         if not os.path.exists(tsserver_executable_path):
             raise FileNotFoundError(
