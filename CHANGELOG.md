@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+Fixes:
+* Ignore `.git` in check for ignored paths and improve performance of `find_all_non_ignored_files`
+
 # 0.1.3
 
 ## Summary

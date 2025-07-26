@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
-from serena.config.serena_config import ProjectConfig, SerenaConfig
+from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
 from serena.constants import (
     DEFAULT_CONTEXT,
     DEFAULT_MODES,
@@ -142,15 +142,22 @@ class TopLevelCommands(AutoRegisteringGroup):
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
         #   * stream handler for stderr (for direct console output, which will also be captured by clients like Claude Desktop)
+        #   * file handler
         # (Note that stdout must never be used for logging, as it is used by the MCP server to communicate with the client.)
         Logger.root.setLevel(logging.INFO)
+        formatter = logging.Formatter(SERENA_LOG_FORMAT)
         memory_log_handler = MemoryLogHandler()
         Logger.root.addHandler(memory_log_handler)
         stderr_handler = logging.StreamHandler(stream=sys.stderr)
-        stderr_handler.formatter = logging.Formatter(SERENA_LOG_FORMAT)
+        stderr_handler.formatter = formatter
         Logger.root.addHandler(stderr_handler)
+        log_path = SerenaPaths().get_next_log_file_path("mcp")
+        file_handler = logging.FileHandler(log_path, mode="w")
+        file_handler.formatter = formatter
+        Logger.root.addHandler(file_handler)
 
         log.info("Initializing Serena MCP server")
+        log.info("Storing logs in %s", log_path)
         project_file = project_file_arg or project
         factory = SerenaMCPFactorySingleProcess(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(

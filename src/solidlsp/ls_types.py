@@ -317,3 +317,26 @@ class Hover(TypedDict):
     range: NotRequired[Range]
     """ An optional range inside the text document that is used to
     visualize the hover, e.g. by changing the background color. """
+
+class DiagnosticsSeverity(IntEnum):
+    ERROR = 1
+    WARNING = 2
+    INFORMATION = 3
+    HINT = 4
+
+
+class Diagnostic(TypedDict):
+    """Diagnostic information for a text document."""
+
+    uri: DocumentUri
+    """ The URI of the text document to which the diagnostics apply. """
+    range: Range
+    """ The range of the text document to which the diagnostics apply. """
+    severity: NotRequired[DiagnosticsSeverity]
+    """ The severity of the diagnostic. """
+    message: str
+    """ The diagnostic message. """
+    code: str
+    """ The code of the diagnostic. """
+    source: NotRequired[str]
+    """ The source of the diagnostic, e.g. the name of the tool that produced it. """

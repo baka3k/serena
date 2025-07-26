@@ -3,6 +3,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import NamedTuple
 
 import pathspec
@@ -76,8 +77,10 @@ def find_all_non_ignored_files(repo_root: str) -> list[str]:
     :return: A list of all non-ignored files in the repository
     """
     gitignore_parser = GitignoreParser(repo_root)
-    _, files = scan_directory(repo_root, recursive=True)
-    return [file for file in files if not gitignore_parser.should_ignore(file)]
+    _, files = scan_directory(
+        repo_root, recursive=True, is_ignored_dir=gitignore_parser.should_ignore, is_ignored_file=gitignore_parser.should_ignore
+    )
+    return files
 
 
 @dataclass
@@ -182,10 +185,6 @@ class GitignoreParser:
             if not line or line.lstrip().startswith("#"):
                 continue
 
-            # Handle escaped characters at the beginning
-            if line.startswith(("\\#", "\\!")):
-                line = line[1:]
-
             # Store whether this is a negation pattern
             is_negation = line.startswith("!")
             if is_negation:
@@ -197,11 +196,13 @@ class GitignoreParser:
             if not line:
                 continue
 
-            # Determine if pattern is anchored to the gitignore directory
-            is_anchored = "/" in line[:-1] or line.startswith("/")
+            # Handle escaped characters at the beginning
+            if line.startswith(("\\#", "\\!")):
+                line = line[1:]
 
-            # Remove leading slash for processing
-            if line.startswith("/"):
+            # Determine if pattern is anchored to the gitignore directory and remove leading slash for processing
+            is_anchored = line.startswith("/")
+            if is_anchored:
                 line = line[1:]
 
             # Adjust pattern based on gitignore file location
@@ -255,6 +256,11 @@ class GitignoreParser:
                 return True
         else:
             rel_path = path
+
+        # Ignore paths inside .git
+        rel_path_first_path = Path(rel_path).parts[0]
+        if rel_path_first_path == ".git":
+            return True
 
         abs_path = os.path.join(self.repo_root, rel_path)
 
