@@ -25,6 +25,7 @@ from serena.constants import (
 )
 from serena.mcp import SerenaMCPFactorySingleProcess
 from serena.project import Project
+from serena.tools import ToolRegistry
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 
@@ -445,11 +446,33 @@ class ProjectCommands(AutoRegisteringGroup):
         print(f"Symbols saved to {ls.cache_path}")
 
 
+class ToolCommands(AutoRegisteringGroup):
+    """Group for 'tool' subcommands."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="tools",
+            help="Commands related to Serena's tools. You can run `serena tools <command> --help` for more info on each command.",
+        )
+
+    @staticmethod
+    @click.command("list", help="Prints an overview of all tools implemented in Serena (not just the active ones for your project).")
+    @click.option("--quiet", "-q", multiple=True, is_flag=True)
+    def list(quiet: bool = False) -> None:
+        tool_registry = ToolRegistry()
+        if quiet:
+            for tool_name in tool_registry.get_tool_names_default_enabled():
+                click.echo(tool_name)
+        else:
+            ToolRegistry().print_tool_overview()
+
+
 # Expose groups so we can reference them in pyproject.toml
 mode = ModeCommands()
 context = ContextCommands()
 project = ProjectCommands()
 config = SerenaConfigCommands()
+tools = ToolCommands()
 
 # Expose toplevel commands for the same reason
 top_level = TopLevelCommands()
@@ -457,7 +480,7 @@ start_mcp_server = top_level.start_mcp_server
 index_project = project.index_deprecated
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (mode, context, project, config):
+for subgroup in (mode, context, project, config, tools):
     top_level.add_command(subgroup)
 
 
