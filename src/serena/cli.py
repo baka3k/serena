@@ -246,7 +246,6 @@ class ModeCommands(AutoRegisteringGroup):
     @click.option(
         "--name",
         "-n",
-        multiple=True,
         type=str,
         default=None,
         help="Name for the new mode. If --from-internal is passed may be left empty to create a mode of the same name, which will then override the internal mode.",
@@ -268,7 +267,7 @@ class ModeCommands(AutoRegisteringGroup):
             )
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copyfile(src, dest)
-        click.echo(f"Created mode '{mode_name}' at {dest}.")
+        click.echo(f"Created mode '{mode_name}' at {dest}")
         _open_in_editor(dest)
 
     @staticmethod
@@ -324,7 +323,6 @@ class ContextCommands(AutoRegisteringGroup):
     @click.option(
         "--name",
         "-n",
-        multiple=True,
         type=str,
         default=None,
         help="Name for the new context. If --from-internal is passed may be left empty to create a context of the same name, which will then override the internal context",
@@ -346,7 +344,7 @@ class ContextCommands(AutoRegisteringGroup):
             )
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copyfile(src, dest)
-        click.echo(f"Created context '{ctx_name}' at {dest}.")
+        click.echo(f"Created context '{ctx_name}' at {dest}")
         _open_in_editor(dest)
 
     @staticmethod
@@ -468,7 +466,7 @@ class ToolCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command("list", help="Prints an overview of all tools implemented in Serena (not just the active ones for your project).")
-    @click.option("--quiet", "-q", multiple=True, is_flag=True)
+    @click.option("--quiet", "-q", is_flag=True)
     def list(quiet: bool = False) -> None:
         tool_registry = ToolRegistry()
         if quiet:
