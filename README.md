@@ -354,11 +354,14 @@ For example, when using `uvx`, you would run
 claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena-mcp-server --context ide-assistant --project $(pwd)
 ```
 
-ℹ️ Serena comes with an instruction text, and Claude needs to read it to properly use Serena's tools. 
-  Once in Claude Code, you can ask to "read Serena's initial instructions" or run `/mcp__serena__initial_instructions` to load the instruction text. 
-  Do this whenever you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
+ℹ️ Serena comes with an instruction text, and Claude needs to read it to properly use Serena's tools.
+  As of version `v1.0.52`, claude code reads the instructions of the MCP server, so this is handled automatically.
+  If you are using an older version, or if Claude fails to read the instructions, you can ask it explicitly
+  to "read Serena's initial instructions" or run `/mcp__serena__initial_instructions` to load the instruction text. 
+  You may have to do that whenever you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
 
-ℹ️ **NEW**: an alternative to the above is adding the instructions as part of the system prompt, then you will not need to run the command above or to remember re-running it after compacting.
+ℹ️ If Claude is not automatically picking up on the instructions and running Serena's tools, and you don't want to run the command in each session,
+  an alternative to the above is adding the instructions as part of the system prompt, then you will not need to run the command above or to remember re-running it after compacting.
   This can be achieved through starting claude code with `claude --append-system-prompt $(uvx --from git+https://github.com/oraios/serena serena print-system-prompt)`. Note that this is **experimental**, Claude may not understand the instructions correctly in this way, and we haven't thoroughly tested the resulting behavior. Please report any issues you encounter.
 
 
