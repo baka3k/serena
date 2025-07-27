@@ -172,7 +172,8 @@ class SerenaMCPFactory:
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
 
         mcp_settings: Settings = Settings(lifespan=self.server_lifespan, host=host, port=port)
-        mcp = FastMCP(**mcp_settings.model_dump())
+        instructions = self._get_initial_instructions()
+        mcp = FastMCP(**mcp_settings.model_dump(), instructions=instructions)
         return mcp
 
     @asynccontextmanager
@@ -180,6 +181,10 @@ class SerenaMCPFactory:
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
         """Manage server startup and shutdown lifecycle."""
         yield None  # ensures MyPy understands we yield None
+
+    @abstractmethod
+    def _get_initial_instructions(self) -> str:
+        pass
 
 
 class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
@@ -206,6 +211,11 @@ class SerenaMCPFactorySingleProcess(SerenaMCPFactory):
     def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
+
+    def _get_initial_instructions(self) -> str:
+        assert self.agent is not None
+        # we don't use the tool (which at the time of writing calls this method), since the tool may be disabled by the config
+        return self.agent.create_system_prompt()
 
     @asynccontextmanager
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
