@@ -30,7 +30,7 @@ from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink, SymbolKind
 from solidlsp.lsp_protocol_handler.server import (
-    Error,
+    LSPError,
     ProcessLaunchInfo,
     StringDict,
 )
@@ -672,7 +672,7 @@ class SolidLanguageServer(ABC):
                 response = self._send_references_request(relative_file_path, line=line, column=column)
             except Exception as e:
                 # Catch LSP internal error (-32603) and raise a more informative exception
-                if isinstance(e, Error) and getattr(e, "code", None) == -32603:
+                if isinstance(e, LSPError) and getattr(e, "code", None) == -32603:
                     raise RuntimeError(
                         f"LSP internal error (-32603) when requesting references for {relative_file_path}:{line}:{column}. "
                         "This often occurs when requesting references for a symbol not referenced in the expected way. "

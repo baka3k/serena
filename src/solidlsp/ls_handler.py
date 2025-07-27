@@ -20,7 +20,7 @@ from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
 from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
 from solidlsp.lsp_protocol_handler.server import (
     ENCODING,
-    Error,
+    LSPError,
     MessageType,
     PayloadLike,
     ProcessLaunchInfo,
@@ -414,7 +414,7 @@ class SolidLanguageServerHandler:
         """
         self._send_payload(make_response(request_id, params))
 
-    def send_error_response(self, request_id: Any, err: Error) -> None:
+    def send_error_response(self, request_id: Any, err: LSPError) -> None:
         """
         Send error response to the given request id to the server with the given error
         """
@@ -501,9 +501,9 @@ class SolidLanguageServerHandler:
         if "result" in response and "error" not in response:
             request.on_result(response["result"])
         elif "result" not in response and "error" in response:
-            request.on_error(Error.from_lsp(response["error"]))
+            request.on_error(LSPError.from_lsp(response["error"]))
         else:
-            request.on_error(Error(ErrorCodes.InvalidRequest, ""))
+            request.on_error(LSPError(ErrorCodes.InvalidRequest, ""))
 
     def _request_handler(self, response: StringDict) -> None:
         """
@@ -516,7 +516,7 @@ class SolidLanguageServerHandler:
         if not handler:
             self.send_error_response(
                 request_id,
-                Error(
+                LSPError(
                     ErrorCodes.MethodNotFound,
                     f"method '{method}' not handled on client.",
                 ),
@@ -524,10 +524,10 @@ class SolidLanguageServerHandler:
             return
         try:
             self.send_response(request_id, handler(params))
-        except Error as ex:
+        except LSPError as ex:
             self.send_error_response(request_id, ex)
         except Exception as ex:
-            self.send_error_response(request_id, Error(ErrorCodes.InternalError, str(ex)))
+            self.send_error_response(request_id, LSPError(ErrorCodes.InternalError, str(ex)))
 
     def _notification_handler(self, response: StringDict) -> None:
         """
