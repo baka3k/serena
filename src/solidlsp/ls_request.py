@@ -1,11 +1,13 @@
-from typing import Any, Union
+from typing import TYPE_CHECKING, Any, Union
 
-from solidlsp.ls_handler import SolidLanguageServerHandler
 from solidlsp.lsp_protocol_handler import lsp_types
+
+if TYPE_CHECKING:
+    from .ls_handler import SolidLanguageServerHandler
 
 
 class LanguageServerRequest:
-    def __init__(self, handler: SolidLanguageServerHandler):
+    def __init__(self, handler: "SolidLanguageServerHandler"):
         self.handler = handler
 
     def _send_request(self, method: str, params: Any | None = None) -> Any:
