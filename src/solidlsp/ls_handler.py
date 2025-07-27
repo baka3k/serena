@@ -225,21 +225,6 @@ class SolidLanguageServerHandler:
         # First try to terminate the process tree gracefully
         self._signal_process_tree(process, terminate=True)
 
-        # TODO
-        """
-        # Wait for the process to exit (with timeout)
-        try:
-            asyncio.wait_for(process.wait(), timeout=10)
-        except (asyncio.TimeoutError, Exception):
-            # If termination failed, forcefully kill the process tree
-            self._signal_process_tree(process, terminate=False)
-            try:
-                # Give it one more chance to exit
-                await asyncio.wait_for(process.wait(), timeout=2)
-            except Exception:
-                pass
-        """
-
     def _signal_process_tree(self, process, terminate=True):
         """Send signal (terminate or kill) to the process and all its children."""
         signal_method = "terminate" if terminate else "kill"
@@ -283,14 +268,6 @@ class SolidLanguageServerHandler:
         self._log("Sending exit notification to server")
         self.notify.exit()
         self._log("Sent exit notification to server")
-        # TODO
-        """
-        if self.process and self.process.stdout:
-            self.process.stdout.set_exception(StopLoopException())
-            # This yields the control to the event loop to allow the exception to be handled
-            # in the run_forever and run_forever_stderr methods
-            await asyncio.sleep(0)
-        """
 
     def _log(self, message: str | StringDict) -> None:
         """
