@@ -80,7 +80,7 @@ class RuntimeDependencyCollection:
 
             kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
         log.info("Running command '%s' in '%s'", command, cwd)
-        completed_proces = subprocess.run(
+        completed_process = subprocess.run(
             command,
             shell=True,
             check=True,
@@ -89,11 +89,13 @@ class RuntimeDependencyCollection:
             stderr=subprocess.STDOUT,
             **kwargs,
         )
-        log.log(
-            logging.WARNING if completed_proces.returncode else logging.INFO,
-            "Command completed with return code %d",
-            completed_proces.returncode,
-        )
+        if completed_process.returncode != 0:
+            log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
+            log.warning("Command output:\n%s", completed_process.stdout)
+        else:
+            log.info(
+                "Command completed successfully",
+            )
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
