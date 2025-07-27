@@ -104,7 +104,7 @@ class SolidLanguageServerHandler:
         start_independent_lsp_process=True,
         request_timeout: float | None = None,
     ) -> None:
-        self.send = LanguageServerRequest(self.send_request)
+        self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
         self.process_launch_info = process_launch_info
