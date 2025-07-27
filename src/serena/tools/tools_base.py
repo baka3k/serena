@@ -15,7 +15,7 @@ from serena.prompt_factory import PromptFactory
 from serena.symbol import LanguageServerSymbolRetriever
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
-from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
     from serena.agent import LinesRead, MemoriesManager, SerenaAgent
@@ -239,7 +239,7 @@ class Tool(Component):
                 # apply the actual tool
                 try:
                     result = apply_fn(**kwargs)
-                except LanguageServerException as e:
+                except SolidLSPException as e:
                     if e.is_language_server_terminated():
                         log.error(f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ...")
                         self.agent.reset_language_server()

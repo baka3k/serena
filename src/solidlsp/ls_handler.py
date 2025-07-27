@@ -14,7 +14,7 @@ from typing import Any
 import psutil
 from sensai.util.string import ToStringMixin
 
-from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
 from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
@@ -454,7 +454,7 @@ class SolidLanguageServerHandler:
 
         self._log("Processing result")
         if result.is_error():
-            raise LanguageServerException(f"Error processing request {method} with params:\n{params}", cause=result.error) from result.error
+            raise SolidLSPException(f"Error processing request {method} with params:\n{params}", cause=result.error) from result.error
 
         self._log(f"Returning non-error result, which is:\n{result.payload}")
         return result.payload

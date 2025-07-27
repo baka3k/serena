@@ -3,7 +3,7 @@ This module contains the exceptions raised by the framework.
 """
 
 
-class LanguageServerException(Exception):
+class SolidLSPException(Exception):
     def __init__(self, message: str, cause: Exception | None = None):
         """
         Initializes the exception with the given message.
