@@ -54,6 +54,14 @@ class RustAnalyzer(SolidLanguageServer):
             [
                 RuntimeDependency(
                     id="RustAnalyzer",
+                    description="RustAnalyzer for macOS (x64)",
+                    url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-x86_64-apple-darwin.gz",
+                    platform_id="osx-x64",
+                    archive_type="gz",
+                    binary_name="rust_analyzer",
+                ),
+                RuntimeDependency(
+                    id="RustAnalyzer",
                     description="RustAnalyzer for macOS (arm64)",
                     url="https://github.com/rust-lang/rust-analyzer/releases/download/2023-10-09/rust-analyzer-aarch64-apple-darwin.gz",
                     platform_id="osx-arm64",
