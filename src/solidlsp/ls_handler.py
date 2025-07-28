@@ -365,7 +365,7 @@ class SolidLanguageServerHandler:
                 line = self.process.stderr.readline()
                 if not line:
                     continue
-                self._log("LSP stderr: " + line.decode(ENCODING, errors="replace"))
+                log.error(line.decode(ENCODING, errors="replace"))
         except (BrokenPipeError, ConnectionResetError):
             pass
         log.info("Language server stderr reader thread has terminated")
