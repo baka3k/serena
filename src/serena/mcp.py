@@ -170,10 +170,8 @@ class SerenaMCPFactory:
         # `.env` files (e.g. containing LOG_LEVEL) that are not supposed to override the MCP settings;
         # retain only FASTMCP_ prefix for already set environment variables.
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
-
-        mcp_settings: Settings = Settings(lifespan=self.server_lifespan, host=host, port=port)
         instructions = self._get_initial_instructions()
-        mcp = FastMCP(**mcp_settings.model_dump(), instructions=instructions)
+        mcp = FastMCP(lifespan=self.server_lifespan, host=host, port=port, instructions=instructions)
         return mcp
 
     @asynccontextmanager
