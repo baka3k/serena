@@ -23,3 +23,6 @@ excluded_tools:
   - replace_lines
   - insert_at_line
   - execute_shell_command
+  - prepare_for_new_conversation
+  - summarize_changes
+  - get_current_config
