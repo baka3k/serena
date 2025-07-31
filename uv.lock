@@ -1174,7 +1174,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "jinja2", marker = "extra == 'dev'" },
     { name = "joblib", specifier = ">=1.5.1" },
-    { name = "mcp", specifier = ">=1.5.0" },
+    { name = "mcp", specifier = "==1.12.2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.16.1" },
     { name = "overrides", specifier = ">=7.7.0,<8" },
     { name = "pathspec", specifier = ">=0.12.1" },
