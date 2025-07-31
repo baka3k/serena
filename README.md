@@ -195,6 +195,16 @@ Note that no matter how you run the MCP server, Serena will, by default, start a
 MCP server (since many clients fail to clean up processes correctly).
 This and other settings can be adjusted in the [configuration](#configuration) and/or by providing [command-line arguments](#command-line-arguments).
 
+##### Using uvx
+
+`uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
+
+```shell
+uvx --from git+https://github.com/oraios/serena serena start-mcp-server
+```
+
+Explore the CLI to see some of the customization options that serena provides (more info on them below).
+
 ###### Local Installation
 
 1. Clone the repository and change into it.
@@ -214,15 +224,7 @@ This and other settings can be adjusted in the [configuration](#configuration) a
    When running from outside the serena installation directory, be sure to pass it, i.e., use
    ```shell
     uv run --directory /abs/path/to/serena serena start-mcp-server
-    ```
-
-##### Using uvx
-
-`uvx` can be used to run the latest version of Serena directly from the repository, without an explicit local installation.
-
-```shell
-uvx --from git+https://github.com/oraios/serena serena start-mcp-server
-```
+   ```
 
 ##### Using Docker (Experimental)
 
