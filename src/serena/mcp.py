@@ -68,8 +68,7 @@ class SerenaMCPFactory:
 
         # Mount the tool description as a combination of the docstring description and
         # the return value description, if it exists.
-        agent = cast(SerenaAgent, tool.agent)
-        overridden_description = agent.get_context().tool_description_overrides.get(func_name, None)
+        overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
 
         if overridden_description is not None:
             func_doc = overridden_description
@@ -78,6 +77,8 @@ class SerenaMCPFactory:
         else:
             func_doc = ""
         func_doc = func_doc.strip().strip(".")
+        if func_doc:
+            func_doc += "."
         if docstring.returns and (docstring_returns_descr := docstring.returns.description):
             # Only add a space before "Returns" if func_doc is not empty
             prefix = " " if func_doc else ""
