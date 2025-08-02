@@ -3,8 +3,7 @@ Context and Mode configuration loader
 """
 
 import os
-from copy import copy
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self

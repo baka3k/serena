@@ -18,7 +18,7 @@ Run the following command to launch Serena as http server (assuming port 8000):
 ```bash
 uvx mcpo --port 8000 --api-key <YOUR_SECRET_KEY> -- \
   uvx --from git+https://github.com/oraios/serena \
-  serena start-mcp-server --project $(pwd)
+  serena start-mcp-server --context chatgpt --project $(pwd)
 ```
 
 - `--api-key` is required to secure the server.
@@ -63,6 +63,7 @@ Your server is now securely exposed to the internet.
     ```
      "servers": ["url": "<cloudflared_url>"],
     ```
+   **Important**: don't include a trailing slash at the end of the URL!
 
 ChatGPT will read the schema and create functions automatically.
 
