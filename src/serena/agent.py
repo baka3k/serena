@@ -25,7 +25,8 @@ from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, T
 from serena.dashboard import SerenaDashboardAPI
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
-from serena.tools import ActivateProjectTool, Tool, ToolRegistry
+from serena.tools import ActivateProjectTool, Tool, ToolMarker, ToolRegistry
+from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp import SolidLanguageServer
 
@@ -336,10 +337,23 @@ class SerenaAgent:
         return list(self._modes)
 
     def create_system_prompt(self) -> str:
-        return self.prompt_factory.create_system_prompt(
+        available_tools = [tool.get_name_from_cls() for tool in self.get_exposed_tool_instances()]
+
+        # determine available tool markers (i.e. tool categories)
+        available_markers = set()
+        for marker_class in iter_subclasses(ToolMarker):
+            for tool in self.get_exposed_tool_instances():
+                if isinstance(tool, marker_class):
+                    available_markers.add(marker_class.__name__)
+
+        log.info("Generating system prompt with available_tools=(see exposed tools), available_markers=%s", available_markers)
+        system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._context.prompt,
             mode_system_prompts=[mode.prompt for mode in self._modes],
+            available_tools=available_tools,
+            available_markers=available_markers,
         )
+        log.info("System prompt:\n%s", system_prompt)
 
     def _update_active_tools(self) -> None:
         """
