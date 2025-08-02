@@ -44,17 +44,6 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     def _tostring_includes(self) -> list[str]:
         return ["name"]
 
-    def to_json_dict(self) -> dict[str, str | list[str]]:
-        result = asdict(self)
-        result["excluded_tools"] = list(result["excluded_tools"])
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        data = copy(data)
-        data["excluded_tools"] = set(data["excluded_tools"])
-        return cls(**data)
-
     def print_overview(self) -> None:
         """Print an overview of the mode."""
         print(f"{self.name}:\n {self.description}")
@@ -140,30 +129,16 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     def _tostring_includes(self) -> list[str]:
         return ["name"]
 
-    def to_json_dict(self) -> dict[str, str | list[str]]:
-        result = asdict(self)
-        result["excluded_tools"] = list(result["excluded_tools"])
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        data = copy(data)
-        data["excluded_tools"] = set(data["excluded_tools"])
-        # Ensure backwards compatibility for tool_description_overrides
-        if "tool_description_overrides" not in data:
-            data["tool_description_overrides"] = {}
-        return cls(**data)
-
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
         """Load a context from a YAML file."""
         with open(yaml_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         name = data.pop("name", Path(yaml_path).stem)
-        prompt = data["prompt"]
-        description = data.get("description", "")
-        tool_description_overrides = data.get("tool_description_overrides", {})
-        return cls(name=name, prompt=prompt, description=description, tool_description_overrides=tool_description_overrides)
+        # Ensure backwards compatibility for tool_description_overrides
+        if "tool_description_overrides" not in data:
+            data["tool_description_overrides"] = {}
+        return cls(name=name, **data)
 
     @classmethod
     def get_path(cls, name: str) -> str:
