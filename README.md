@@ -76,6 +76,7 @@ With Serena, we provide
      * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
      * Clojure
      * C/C++ (You may experience issues with finding references, we are working on it)
+     * Swift (requires Swift and sourcekit-lsp to be installed)
  * indirect support (may require some code changes/manual installation) for:
      * Ruby (untested)
      * Kotlin (untested)

@@ -45,7 +45,7 @@ explicit = true
 [project.scripts]
 serena = "serena.cli:top_level"
 serena-mcp-server = "serena.cli:start_mcp_server"
-index-project = "serena.cli:index_project" # deprecated
+index-project = "serena.cli:index_project"        # deprecated
 
 [project.license]
 text = "MIT"
@@ -259,6 +259,7 @@ markers = [
   "csharp: language server running for C#",
   "elixir: language server running for Elixir",
   "terraform: language server running for Terraform",
+  "swift: language server running for Swift",
   "snapshot: snapshot tests for symbolic editing operations",
 ]
 
