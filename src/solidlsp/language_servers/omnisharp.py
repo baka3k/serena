@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import pathlib
-import stat
 import threading
 from collections.abc import Iterable
 
@@ -14,11 +13,12 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_exceptions import LanguageServerException
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.ls_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 def breadth_first_file_scan(root) -> Iterable[str]:
@@ -59,16 +59,18 @@ class OmniSharp(SolidLanguageServer):
     Provides C# specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C#.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates an OmniSharp instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        omnisharp_executable_path, dll_path = self._setup_runtime_dependencies(logger, config)
+        omnisharp_executable_path, dll_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
         slnfilename = find_least_depth_sln_file(repository_root_path)
         if slnfilename is None:
             logger.log("No *.sln file found in repository", logging.ERROR)
-            raise LanguageServerException("No SLN file found in repository")
+            raise SolidLSPException("No SLN file found in repository")
 
         cmd = " ".join(
             [
@@ -102,7 +104,9 @@ class OmniSharp(SolidLanguageServer):
                 "formattingOptions:indentationSize=4",
             ]
         )
-        super().__init__(config, logger, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp")
+        super().__init__(
+            config, logger, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp", solidlsp_settings
+        )
 
         self.server_ready = threading.Event()
         self.definition_available = threading.Event()
@@ -138,7 +142,9 @@ class OmniSharp(SolidLanguageServer):
         return d
 
     @classmethod
-    def _setup_runtime_dependencies(cls, logger: LanguageServerLogger, config: LanguageServerConfig) -> tuple[str, str]:
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> tuple[str, str]:
         """
         Setup runtime dependencies for OmniSharp.
         """
@@ -181,15 +187,15 @@ class OmniSharp(SolidLanguageServer):
         assert "OmniSharp" in runtime_dependencies
         assert "RazorOmnisharp" in runtime_dependencies
 
-        omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(), "OmniSharp")
+        omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "OmniSharp")
         if not os.path.exists(omnisharp_ls_dir):
             os.makedirs(omnisharp_ls_dir)
             FileUtils.download_and_extract_archive(logger, runtime_dependencies["OmniSharp"]["url"], omnisharp_ls_dir, "zip")
         omnisharp_executable_path = os.path.join(omnisharp_ls_dir, runtime_dependencies["OmniSharp"]["binaryName"])
         assert os.path.exists(omnisharp_executable_path)
-        os.chmod(omnisharp_executable_path, stat.S_IEXEC)
+        os.chmod(omnisharp_executable_path, 0o755)
 
-        razor_omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(), "RazorOmnisharp")
+        razor_omnisharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "RazorOmnisharp")
         if not os.path.exists(razor_omnisharp_ls_dir):
             os.makedirs(razor_omnisharp_ls_dir)
             FileUtils.download_and_extract_archive(logger, runtime_dependencies["RazorOmnisharp"]["url"], razor_omnisharp_ls_dir, "zip")

@@ -5,7 +5,6 @@ Provides C/C++ specific instantiation of the LanguageServer class. Contains vari
 import logging
 import os
 import pathlib
-import stat
 import threading
 
 from solidlsp.ls import SolidLanguageServer
@@ -13,6 +12,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -24,25 +24,30 @@ class ClangdLanguageServer(SolidLanguageServer):
     Also make sure compile_commands.json is created at root of the source directory. Check clangd test case for example.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        clangd_executable_path = self._setup_runtime_dependencies(logger, config)
+        clangd_executable_path = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
         super().__init__(
             config,
             logger,
             repository_root_path,
             ProcessLaunchInfo(cmd=clangd_executable_path, cwd=repository_root_path),
             "cpp",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
 
-    @staticmethod
-    def _setup_runtime_dependencies(logger: LanguageServerLogger, config: LanguageServerConfig) -> str:
+    @classmethod
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
         """
         Setup runtime dependencies for ClangdLanguageServer and return the command to start the server.
         """
@@ -75,7 +80,7 @@ class ClangdLanguageServer(SolidLanguageServer):
             ]
         )
 
-        clangd_ls_dir = os.path.join(os.path.dirname(__file__), "static", "clangd")
+        clangd_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "clangd")
         dep = deps.single_for_current_platform()
         clangd_executable_path = deps.binary_path(clangd_ls_dir)
         if not os.path.exists(clangd_executable_path):
@@ -89,7 +94,7 @@ class ClangdLanguageServer(SolidLanguageServer):
                 f"Clangd executable not found at {clangd_executable_path}.\n"
                 "Make sure you have installed clangd. See https://clangd.llvm.org/installation"
             )
-        os.chmod(clangd_executable_path, stat.S_IEXEC)
+        os.chmod(clangd_executable_path, 0o755)
 
         return clangd_executable_path
 

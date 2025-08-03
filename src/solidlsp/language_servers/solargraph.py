@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import pathlib
-import stat
 import subprocess
 import threading
 
@@ -18,6 +17,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
+from solidlsp.settings import SolidLSPSettings
 
 
 class Solargraph(SolidLanguageServer):
@@ -26,7 +26,9 @@ class Solargraph(SolidLanguageServer):
     Contains various configurations and settings specific to Ruby.
     """
 
-    def __init__(self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str):
+    def __init__(
+        self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
+    ):
         """
         Creates a Solargraph instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
@@ -38,6 +40,7 @@ class Solargraph(SolidLanguageServer):
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{solargraph_executable_path} stdio", cwd=repository_root_path),
             "ruby",
+            solidlsp_settings,
         )
         self.server_ready = threading.Event()
         self.service_ready_event = threading.Event()
@@ -83,19 +86,7 @@ class Solargraph(SolidLanguageServer):
                 logger.log("Installing Solargraph...", logging.INFO)
                 subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
 
-            # Get the gem executable path directly
-            result = subprocess.run(["gem", "which", "solargraph"], check=True, capture_output=True, text=True, cwd=repository_root_path)
-            gem_path = result.stdout.strip()
-            bin_dir = os.path.join(os.path.dirname(os.path.dirname(gem_path)), "bin")
-            executable_path = os.path.join(bin_dir, "solargraph")
-
-            if not os.path.exists(executable_path):
-                raise RuntimeError(f"Solargraph executable not found at {executable_path}")
-
-            # Ensure the executable has the right permissions
-            os.chmod(executable_path, os.stat(executable_path).st_mode | stat.S_IEXEC)
-
-            return executable_path
+            return "gem exec solargraph"
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to check or install Solargraph. {e.stderr}") from e
 

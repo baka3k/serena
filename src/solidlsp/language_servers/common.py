@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -21,7 +22,7 @@ class RuntimeDependency:
     url: str | None = None
     archive_type: str | None = None
     binary_name: str | None = None
-    command: str | None = None
+    command: str | list[str] | None = None
     package_name: str | None = None
     package_version: str | None = None
     extract_path: str | None = None
@@ -71,7 +72,7 @@ class RuntimeDependencyCollection:
         return results
 
     @staticmethod
-    def _run_command(command: str, cwd: str) -> None:
+    def _run_command(command: str | list[str], cwd: str) -> None:
         kwargs = {}
         if PlatformUtils.get_platform_id().is_windows():
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
@@ -79,8 +80,16 @@ class RuntimeDependencyCollection:
             import pwd
 
             kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
-        log.info("Running command '%s' in '%s'", command, cwd)
-        completed_proces = subprocess.run(
+
+        is_windows = platform.system() == "Windows"
+        if not isinstance(command, str) and not is_windows:
+            # Since we are using the shell, we need to convert the command list to a single string
+            # on Linux/macOS
+            command = " ".join(command)
+
+        log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
+
+        completed_process = subprocess.run(
             command,
             shell=True,
             check=True,
@@ -89,11 +98,13 @@ class RuntimeDependencyCollection:
             stderr=subprocess.STDOUT,
             **kwargs,
         )
-        log.log(
-            logging.WARNING if completed_proces.returncode else logging.INFO,
-            "Command completed with return code %d",
-            completed_proces.returncode,
-        )
+        if completed_process.returncode != 0:
+            log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
+            log.warning("Command output:\n%s", completed_process.stdout)
+        else:
+            log.info(
+                "Command completed successfully",
+            )
 
     @staticmethod
     def _install_from_url(dep: RuntimeDependency, logger: LanguageServerLogger, target_dir: str) -> None:
