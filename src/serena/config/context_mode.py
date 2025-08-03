@@ -3,8 +3,7 @@ Context and Mode configuration loader
 """
 
 import os
-from copy import copy
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -43,17 +42,6 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
     def _tostring_includes(self) -> list[str]:
         return ["name"]
-
-    def to_json_dict(self) -> dict[str, str | list[str]]:
-        result = asdict(self)
-        result["excluded_tools"] = list(result["excluded_tools"])
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        data = copy(data)
-        data["excluded_tools"] = set(data["excluded_tools"])
-        return cls(**data)
 
     def print_overview(self) -> None:
         """Print an overview of the mode."""
@@ -134,20 +122,11 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     name: str
     prompt: str
     description: str = ""
+    tool_description_overrides: dict[str, str] = field(default_factory=dict)
+    """Maps tool names to custom descriptions, default descriptions are extracted from the tool docstrings."""
 
     def _tostring_includes(self) -> list[str]:
         return ["name"]
-
-    def to_json_dict(self) -> dict[str, str | list[str]]:
-        result = asdict(self)
-        result["excluded_tools"] = list(result["excluded_tools"])
-        return result
-
-    @classmethod
-    def from_json_dict(cls, data: dict) -> Self:
-        data = copy(data)
-        data["excluded_tools"] = set(data["excluded_tools"])
-        return cls(**data)
 
     @classmethod
     def from_yaml(cls, yaml_path: str | Path) -> Self:
@@ -155,6 +134,9 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
         with open(yaml_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         name = data.pop("name", Path(yaml_path).stem)
+        # Ensure backwards compatibility for tool_description_overrides
+        if "tool_description_overrides" not in data:
+            data["tool_description_overrides"] = {}
         return cls(name=name, **data)
 
     @classmethod
