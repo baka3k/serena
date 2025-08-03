@@ -5,7 +5,6 @@ Provides Rust specific instantiation of the LanguageServer class. Contains vario
 import logging
 import os
 import pathlib
-import stat
 import threading
 
 from overrides import override
@@ -104,7 +103,7 @@ class RustAnalyzer(SolidLanguageServer):
             os.makedirs(rustanalyzer_ls_dir)
             deps.install(logger, rustanalyzer_ls_dir)
         assert os.path.exists(rustanalyzer_executable_path)
-        os.chmod(rustanalyzer_executable_path, stat.S_IEXEC)
+        os.chmod(rustanalyzer_executable_path, 0o755)
 
         return rustanalyzer_executable_path
 
