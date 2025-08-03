@@ -4,8 +4,9 @@
 </p>
 
 * :rocket: Serena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
+  Unlike most other tools, it is not tied to an LLM, framework or an interface, making it easy to use it in a variety of ways.
 * :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.
-* :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
+* :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge. 
 
 ### Demonstration
 
@@ -45,10 +46,9 @@ Serena can be integrated with an LLM in several ways:
      * Claude Code and Claude Desktop, 
      * IDEs like VSCode, Cursor or IntelliJ,
      * Extensions like Cline or Roo Code
-     * and many others, including [the ChatGPT app soon](https://x.com/OpenAIDevs/status/1904957755829481737)
- * by using **Agno – the model-agnostic agent framework**.  
-   Serena's Agno-based agent allows you to turn virtually any LLM into a coding agent, whether it's provided by Google, OpenAI or Anthropic (with a paid API key)
-   or a free model provided by Ollama, Together or Anyscale.
+     * Local clients like [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp), [Jan](https://jan.ai/docs/mcp-examples/browser/browserbase#enable-mcp), Agno and others
+ * by using [mcpo to connect it to ChatGPT](docs/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling.
+ * by using in your custom agent beyond MCP, illustrated in our [Agno tooll integration](#agno-agent).
  * by incorporating Serena's tools into an agent framework of your choice.  
    Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
 
@@ -96,22 +96,27 @@ implementation.
 <!-- toc -->
 
 - [What Can I Use Serena For?](#what-can-i-use-serena-for)
+  * [As MCP Server](#as-mcp-server)
+  * [As Library](#as-library)
 - [Free Coding Agents with Serena](#free-coding-agents-with-serena)
+  * [Note](#note)
 - [Quick Start](#quick-start)
   * [Running the Serena MCP Server](#running-the-serena-mcp-server)
     + [Usage](#usage)
-        * [Local Installation](#local-installation)
       - [Using uvx](#using-uvx)
+        * [Local Installation](#local-installation)
       - [Using Docker (Experimental)](#using-docker-experimental)
     + [SSE Mode](#sse-mode)
     + [Command-Line Arguments](#command-line-arguments)
   * [Configuration](#configuration)
   * [Project Activation & Indexing](#project-activation--indexing)
   * [Claude Code](#claude-code)
+  * [Other Terminal-Based Clients](#other-terminal-based-clients)
   * [Claude Desktop](#claude-desktop)
-  * [Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#other-mcp-clients-cline-roo-code-cursor-windsurf-etc)
-  * [Agno Agent](#agno-agent)
-  * [Other Agent Frameworks](#other-agent-frameworks)
+  * [MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#mcp-coding-clients-cline-roo-code-cursor-windsurf-etc)
+  * [Local GUIs and Frameworks](#local-guis-and-frameworks)
+  * [Custom Integrations](#custom-integrations)
+    + [Other Agent Frameworks](#other-agent-frameworks)
 - [Detailed Usage and Recommendations](#detailed-usage-and-recommendations)
   * [Tool Execution](#tool-execution)
     + [Shell Execution and Editing Tools](#shell-execution-and-editing-tools)
@@ -142,12 +147,16 @@ implementation.
 
 ## What Can I Use Serena For?
 
+Serena is a toolkit, which means it can be used in various ways, depending on your needs and preferences.
+It can be used as a highly configurable MCP server (application), as a toolkit for building agents (library), or 
+as a framework for building custom integrations based on language servers (the solidlsp package).
+
+### As MCP Server
 You can use Serena for any coding tasks – whether it is focussed on analysis, planning, 
 designing new components or refactoring existing ones.
 Since Serena's tools allow an LLM to close the cognitive perception-action loop, 
 agents based on Serena can autonomously carry out coding tasks from start to finish – 
-from the initial analysis to the implementation, testing and, finally, the version
-control system commit.
+from the initial analysis to the implementation, testing and, finally, the commit.
 
 Serena can read, write and execute code, read logs and the terminal output.
 While we do not necessarily encourage it, "vibe coding" is certainly possible, and if you 
@@ -155,11 +164,25 @@ want to almost feel like "the code no longer exists",
 you may find Serena even more adequate for vibing than an agent inside an IDE
 (since you will have a separate GUI that really lets you forget).
 
+The application layer of Serena is highly configurable, so you can adapt it to your needs.
+You can select the tools you want to use, adjust the prompts and even the tool descriptions
+without writing any code. Serena comes with a CLI to facilitate this.
+
+See the sections on [configuration](#configuration) and [modes and contexts](#modes-and-contexts) 
+for more information on how to adapt Serena to your needs,
+and explore the cli with `uvx --from git+https://github.com/oraios/serena serena --help`.
+
+### As Library
+While the lower level interfaces should not be considered as stable yet and have no extensive documentation,
+we do develop them with generality and ease of use in mind. 
+As a result, you can use Serena as a library to build your own agents using the provided tools
+and language server capabilities.
+
+
 ## Free Coding Agents with Serena
 
 Even the free tier of Anthropic's Claude has support for MCP Servers, so you can use Serena with Claude for free.
-Presumably, the same will soon be possible with ChatGPT Desktop once support for MCP servers is added.  
-Through Agno, you furthermore have the option to use Serena with a free/open-weights model.
+You can also connect it to ChatGPT and turn it into a coding agent with the help of mcpo, see [here](docs/serena_on_chatgpt.md).
 
 Serena is [Oraios AI](https://oraios-ai.de/)'s contribution to the developer community.  
 We use it ourselves on a regular basis.
@@ -168,6 +191,12 @@ We got tired of having to pay multiple
 IDE-based subscriptions (such as Windsurf or Cursor) that forced us to keep purchasing tokens on top of the chat subscription costs we already had.
 The substantial API costs incurred by tools like Claude Code, Cline, Aider and other API-based tools are similarly unattractive.
 We thus built Serena with the prospect of being able to cancel most other subscriptions.
+
+### Note
+
+We had built Serena before Claude Code was included in Antrhopic's pro tier. Now the cost saving aspect is less important,
+but Serena is still valuable as its tools are more powerful than those of Claude Code or other agents that we are aware of (at least for now), so many users
+find value in using Serena together with Claude Code or similar coding agents.
 
 ## Quick Start
 
@@ -360,6 +389,16 @@ claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena 
   in your config.
   Note that you may have to make Claude read the instructions you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
 
+### Other Terminal-Based Clients
+
+There are many terminal-based coding assistants that support MCP servers, such as [Codex](https://github.com/openai/codex?tab=readme-ov-file#model-context-protocol-mcp), 
+[Gemini-CLI](https://github.com/google-gemini/gemini-cli), [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder),
+[rovodev](https://community.atlassian.com/forums/Rovo-for-Software-Teams-Beta/Introducing-Rovo-Dev-CLI-AI-Powered-Development-in-your-terminal/ba-p/3043623),
+the [OpenHands CLI](https://docs.all-hands.dev/usage/how-to/cli-mode) and [opencode](https://github.com/sst/opencode).
+
+They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
+by writing your own context, modes or prompts to adjust it to your workflow, to other MCP servers you are using, and to 
+the client's internal capabilities.
 
 ### Claude Desktop
 
@@ -421,7 +460,7 @@ After restarting, you should see Serena's tools in your chat interface (notice t
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
-### Other MCP Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
+### MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
 
 Being an MCP Server, Serena can be included in any MCP Client. The same configuration as above,
 perhaps with small client-specific modifications, should work. Most of the popular
@@ -437,16 +476,21 @@ e.g., for one of the following reasons:
 2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian).
 3. You want tighter integration of Serena into your IDE and don't mind paying for that.
 
-### Agno Agent
+### Local GUIs and Frameworks
+
+Over the last months, several technologies have emerged that allow you to run a powerful local GUI
+and connect it to an MCP server. They will work with Serena out of the box.
+Some of the leading open source GUI technologies offering this are 
+[Jan](https://jan.ai/docs/mcp), [OpenHands](https://github.com/All-Hands-AI/OpenHands/),
+[OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp) and [Agno](https://docs.agno.com/introduction/playground).
+They allow combining Serena with almost any LLM (including locally running ones) and offer various other integrations.
+
+### Custom Integrations
 
 Agno is a model-agnostic agent framework that allows you to turn Serena into an agent 
-(independent of the MCP technology) with a large number of underlying LLMs. Agno is currently
-the simplest way of running Serena in a chat GUI with an LLM of your choice.
-
-While Agno is not yet entirely stable, we chose it, because it comes with its own open-source UI, 
-making it easy to directly use the agent using a chat interface.  With Agno, Serena is turned into an agent
-(so no longer an MCP Server), so it can be used in programmatic ways (for example for benchmarking or within 
-your application).
+(independent of the MCP technology) with a large number of underlying LLMs. While Agno has recently
+added support for MCP servers out of the box, our Agno integration predates this and is a good illustration of how
+easy it is to integrate Serena into an arbitrary agent framework.
 
 Here's how it works (see also [Agno's documentation](https://docs.agno.com/introduction/playground)):
 
@@ -499,7 +543,7 @@ this in our testing with Claude, allowing this may not be entirely safe.
 You may choose to disable certain tools for your setup in your Serena project's
 configuration file (`.yml`).
 
-### Other Agent Frameworks
+#### Other Agent Frameworks
 
 It should be straightforward to incorporate Serena into any
 agent framework (like [pydantic-ai](https://ai.pydantic.dev/), [langgraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/) or others).
