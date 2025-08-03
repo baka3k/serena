@@ -1,5 +1,6 @@
 class LogMessage {
     constructor(message, toolNames) {
+        message = this.escapeHtml(message);
         const logLevel = this.determineLogLevel(message);
         const highlightedMessage = this.highlightToolNames(message, toolNames);
         this.$elem = $('<div>').addClass('log-' + logLevel).html(highlightedMessage + '\n');
@@ -27,6 +28,21 @@ class LogMessage {
         });
         return highlightedMessage;
     }
+
+    escapeHtml (convertString) {
+        if (typeof convertString !== 'string') return convertString; 
+
+        const patterns = {
+            '<'  : '&lt;',
+            '>'  : '&gt;',
+            '&'  : '&amp;',
+            '"'  : '&quot;',
+            '\'' : '&#x27;',
+            '`'  : '&#x60;'
+        };
+
+        return convertString.replace(/[<>&"'`]/g, match => patterns[match]);
+  };
 }
 
 class Dashboard {
