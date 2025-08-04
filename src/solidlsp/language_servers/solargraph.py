@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import pathlib
+import shutil
 import subprocess
 import threading
 
@@ -56,17 +57,6 @@ class Solargraph(SolidLanguageServer):
         """
         Setup runtime dependencies for Solargraph and return the command to start the server.
         """
-        runtime_dependencies = [
-            {
-                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
-                "installCommand": "gem install solargraph -v 0.51.1",
-                "binaryName": "solargraph",
-                "archiveType": "gem",
-            }
-        ]
-
-        dependency = runtime_dependencies[0]
-
         # Check if Ruby is installed
         try:
             result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path)
@@ -78,6 +68,23 @@ class Solargraph(SolidLanguageServer):
             raise RuntimeError("Ruby is not installed. Please install Ruby before continuing.") from e
 
         # Check if solargraph is installed
+        # First, try to find solargraph in PATH (includes asdf shims)
+        solargraph_path = shutil.which("solargraph")
+        if solargraph_path:
+            logger.log(f"Found solargraph at: {solargraph_path}", logging.INFO)
+            return solargraph_path
+
+        # Fallback to gem exec
+        runtime_dependencies = [
+            {
+                "url": "https://rubygems.org/downloads/solargraph-0.51.1.gem",
+                "installCommand": "gem install solargraph -v 0.51.1",
+                "binaryName": "solargraph",
+                "archiveType": "gem",
+            }
+        ]
+
+        dependency = runtime_dependencies[0]
         try:
             result = subprocess.run(
                 ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
