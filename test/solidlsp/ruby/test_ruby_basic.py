@@ -27,14 +27,16 @@ class TestRubyLanguageServer:
                 helper_symbol = sym
                 break
         print(helper_symbol)
-        assert helper_symbol is not None, "Could not find 'helper_function' symbol in main.rb"   
+        assert helper_symbol is not None, "Could not find 'helper_function' symbol in main.rb"
 
     @pytest.mark.parametrize("language_server", [Language.RUBY], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.RUBY], indirect=True)  
-    def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:        
+    @pytest.mark.parametrize("repo_path", [Language.RUBY], indirect=True)
+    def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # Test finding Calculator.add method definition from line 17: Calculator.new.add(demo.value, 10)
-        definition_location_list = language_server.request_definition(str(repo_path / "main.rb"), 16,17)  # add method at line 17 (0-indexed 16), position 17
-           
+        definition_location_list = language_server.request_definition(
+            str(repo_path / "main.rb"), 16, 17
+        )  # add method at line 17 (0-indexed 16), position 17
+
         assert len(definition_location_list) == 1
         definition_location = definition_location_list[0]
         print(f"Found definition: {definition_location}")
