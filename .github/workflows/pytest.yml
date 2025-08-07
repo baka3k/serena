@@ -28,6 +28,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ">=1.17.0"
+      - name: Ensure cached directory exist before calling cache-related actions
+        shell: bash
+        run: |
+          mkdir -p $HOME/.serena/language_servers/static
+          mkdir -p $HOME/.cache/go-build
+          mkdir -p $HOME/go/bin
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
@@ -92,6 +98,13 @@ jobs:
           echo "=== Adding Swift toolchain to PATH ==="
           echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
           echo "Swiftly installed successfully!"
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - name: Install Ruby language server
+        shell: bash
+        run: gem install solargraph
       - name: Install uv
         shell: bash
         run: curl -LsSf https://astral.sh/uv/install.sh | sh

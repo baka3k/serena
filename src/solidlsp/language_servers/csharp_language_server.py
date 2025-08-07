@@ -7,7 +7,6 @@ import logging
 import os
 import platform
 import shutil
-import stat
 import subprocess
 import tarfile
 import threading
@@ -26,6 +25,7 @@ from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.zip import SafeZipExtractor
 
 from .common import RuntimeDependency
 
@@ -314,7 +314,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
         # Make executable on Unix systems
         if platform.system().lower() != "windows":
-            server_dll.chmod(server_dll.stat().st_mode | stat.S_IEXEC)
+            server_dll.chmod(0o755)
 
         logger.log(f"Successfully installed Microsoft.CodeAnalysis.LanguageServer to {server_dll}", logging.INFO)
         return str(server_dll)
@@ -387,8 +387,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             package_extract_dir = temp_dir / f"{package_name}.{package_version}"
             package_extract_dir.mkdir(exist_ok=True)
 
-            with zipfile.ZipFile(nupkg_file, "r") as zip_ref:
-                zip_ref.extractall(package_extract_dir)
+            # Use SafeZipExtractor to handle long paths and skip errors
+            extractor = SafeZipExtractor(archive_path=nupkg_file, extract_dir=package_extract_dir, verbose=False)
+            extractor.extract_all()
 
             # Clean up the nupkg file
             nupkg_file.unlink()
@@ -456,7 +457,7 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             # Make dotnet executable on Unix
             if platform.system().lower() != "windows":
-                dotnet_exe.chmod(dotnet_exe.stat().st_mode | stat.S_IEXEC)
+                dotnet_exe.chmod(0o755)
 
             logger.log(f"Successfully installed .NET 9 runtime to {dotnet_exe}", logging.INFO)
             return str(dotnet_exe)
