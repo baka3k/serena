@@ -7,6 +7,7 @@ import time
 
 from overrides import override
 
+from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -60,6 +61,7 @@ class SourceKitLSP(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
         self.request_id = 0
+        self._did_sleep_before_requesting_references = False
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -343,8 +345,14 @@ class SourceKitLSP(SolidLanguageServer):
         self.server_ready.set()
         self.server_ready.wait()
 
+    @override
+    def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
         # SourceKit LSP needs a short initialization period after startup
         # before it can provide accurate reference information. This sleep
         # prevents race conditions where references might not be available yet.
         # Unfortunately, sourcekit doesn't send a signal when it's really ready
-        time.sleep(5)
+        if not self._did_sleep_before_requesting_references:
+            self.logger.log("Sleeping 5s before requesting references for the first time", logging.DEBUG)
+            time.sleep(5)
+            self._did_sleep_before_requesting_references = True
+        return super().request_references(relative_file_path, line, column)
