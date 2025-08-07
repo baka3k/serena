@@ -3,17 +3,16 @@ import os
 import pathlib
 import subprocess
 import threading
+import time
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
-from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 
 
 class SourceKitLSP(SolidLanguageServer):
@@ -31,53 +30,25 @@ class SourceKitLSP(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".build", ".swiftpm", "node_modules", "dist", "build"]
 
     @staticmethod
-    def _get_swift_version():
-        """Get the installed Swift version or None if not found."""
-        try:
-            result = subprocess.run(["swift", "--version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except FileNotFoundError:
-            return None
-        return None
-
-    @staticmethod
-    def _get_sourcekit_lsp_version():
-        """Get the installed sourcekit-lsp version or None if not found."""
+    def _get_sourcekit_lsp_version() -> str:
+        """Get the installed sourcekit-lsp version or raise error if sourcekit was not found."""
         try:
             result = subprocess.run(["sourcekit-lsp", "-h"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
-        except FileNotFoundError:
-            return None
-        return None
-
-    @staticmethod
-    def _setup_runtime_dependency():
-        """
-        Check if required Swift runtime dependencies are available.
-        Raises RuntimeError with helpful message if dependencies are missing.
-        """
-        swift_version = SourceKitLSP._get_swift_version()
-        if not swift_version:
+            else:
+                raise Exception(f"`sourcekit-lsp -h` resulted in: {result}")
+        except Exception as e:
             raise RuntimeError(
-                "Swift is not installed. Please install Swift from https://swift.org/download/ and make sure it is added to your PATH."
-            )
-
-        sourcekit_lsp_version = SourceKitLSP._get_sourcekit_lsp_version()
-        if not sourcekit_lsp_version:
-            raise RuntimeError(
-                "Found a Swift version but sourcekit-lsp is not installed.\n"
-                "Please install sourcekit-lsp as described in https://github.com/apple/sourcekit-lsp#installation\n\n"
-                "After installation, make sure it is added to your PATH."
-            )
-
-        return True
+                "Could not find sourcekit-lsp, please install it as described in https://github.com/apple/sourcekit-lsp#installation"
+                "And make sure it is available on your PATH."
+            ) from e
 
     def __init__(
         self, config: LanguageServerConfig, logger: LanguageServerLogger, repository_root_path: str, solidlsp_settings: SolidLSPSettings
     ):
-        self._setup_runtime_dependency()
+        sourcekit_version = self._get_sourcekit_lsp_version()
+        logger.log(f"Starting sourcekit lsp with version: {sourcekit_version}", logging.INFO)
 
         super().__init__(
             config,
@@ -96,40 +67,25 @@ class SourceKitLSP(SolidLanguageServer):
         Returns the initialize params for the Swift Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        
+
         initialize_params = {
             "capabilities": {
                 "general": {
-                    "markdown": {
-                        "parser": "marked",
-                        "version": "1.1.0"
-                    },
-                    "positionEncodings": [
-                        "utf-16"
-                    ],
-                    "regularExpressions": {
-                        "engine": "ECMAScript",
-                        "version": "ES2020"
-                    },
+                    "markdown": {"parser": "marked", "version": "1.1.0"},
+                    "positionEncodings": ["utf-16"],
+                    "regularExpressions": {"engine": "ECMAScript", "version": "ES2020"},
                     "staleRequestSupport": {
                         "cancel": True,
                         "retryOnContentModified": [
                             "textDocument/semanticTokens/full",
                             "textDocument/semanticTokens/range",
-                            "textDocument/semanticTokens/full/delta"
-                        ]
-                    }
-                },
-                "notebookDocument": {
-                    "synchronization": {
-                        "dynamicRegistration": True,
-                        "executionSummarySupport": True
-                    }
-                },
-                "textDocument": {
-                    "callHierarchy": {
-                        "dynamicRegistration": True
+                            "textDocument/semanticTokens/full/delta",
+                        ],
                     },
+                },
+                "notebookDocument": {"synchronization": {"dynamicRegistration": True, "executionSummarySupport": True}},
+                "textDocument": {
+                    "callHierarchy": {"dynamicRegistration": True},
                     "codeAction": {
                         "codeActionLiteralSupport": {
                             "codeActionKind": {
@@ -141,7 +97,7 @@ class SourceKitLSP(SolidLanguageServer):
                                     "refactor.inline",
                                     "refactor.rewrite",
                                     "source",
-                                    "source.organizeImports"
+                                    "source.organizeImports",
                                 ]
                             }
                         },
@@ -150,193 +106,85 @@ class SourceKitLSP(SolidLanguageServer):
                         "dynamicRegistration": True,
                         "honorsChangeAnnotations": True,
                         "isPreferredSupport": True,
-                        "resolveSupport": {
-                            "properties": [
-                                "edit"
-                            ]
-                        }
+                        "resolveSupport": {"properties": ["edit"]},
                     },
-                    "codeLens": {
-                        "dynamicRegistration": True
-                    },
-                    "colorProvider": {
-                        "dynamicRegistration": True
-                    },
+                    "codeLens": {"dynamicRegistration": True},
+                    "colorProvider": {"dynamicRegistration": True},
                     "completion": {
                         "completionItem": {
                             "commitCharactersSupport": True,
                             "deprecatedSupport": True,
-                            "documentationFormat": [
-                                "markdown",
-                                "plaintext"
-                            ],
+                            "documentationFormat": ["markdown", "plaintext"],
                             "insertReplaceSupport": True,
-                            "insertTextModeSupport": {
-                                "valueSet": [
-                                    1,
-                                    2
-                                ]
-                            },
+                            "insertTextModeSupport": {"valueSet": [1, 2]},
                             "labelDetailsSupport": True,
                             "preselectSupport": True,
-                            "resolveSupport": {
-                                "properties": [
-                                    "documentation",
-                                    "detail",
-                                    "additionalTextEdits"
-                                ]
-                            },
+                            "resolveSupport": {"properties": ["documentation", "detail", "additionalTextEdits"]},
                             "snippetSupport": True,
-                            "tagSupport": {
-                                "valueSet": [
-                                    1
-                                ]
-                            }
+                            "tagSupport": {"valueSet": [1]},
                         },
                         "completionItemKind": {
-                            "valueSet": [
-                                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25
-                            ]
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
                         },
-                        "completionList": {
-                            "itemDefaults": [
-                                "commitCharacters",
-                                "editRange",
-                                "insertTextFormat",
-                                "insertTextMode",
-                                "data"
-                            ]
-                        },
+                        "completionList": {"itemDefaults": ["commitCharacters", "editRange", "insertTextFormat", "insertTextMode", "data"]},
                         "contextSupport": True,
                         "dynamicRegistration": True,
-                        "insertTextMode": 2
+                        "insertTextMode": 2,
                     },
-                    "declaration": {
-                        "dynamicRegistration": True,
-                        "linkSupport": True
-                    },
-                    "definition": {
-                        "dynamicRegistration": True,
-                        "linkSupport": True
-                    },
-                    "diagnostic": {
-                        "dynamicRegistration": True,
-                        "relatedDocumentSupport": False
-                    },
-                    "documentHighlight": {
-                        "dynamicRegistration": True
-                    },
-                    "documentLink": {
-                        "dynamicRegistration": True,
-                        "tooltipSupport": True
-                    },
+                    "declaration": {"dynamicRegistration": True, "linkSupport": True},
+                    "definition": {"dynamicRegistration": True, "linkSupport": True},
+                    "diagnostic": {"dynamicRegistration": True, "relatedDocumentSupport": False},
+                    "documentHighlight": {"dynamicRegistration": True},
+                    "documentLink": {"dynamicRegistration": True, "tooltipSupport": True},
                     "documentSymbol": {
                         "dynamicRegistration": True,
                         "hierarchicalDocumentSymbolSupport": True,
                         "labelSupport": True,
                         "symbolKind": {
-                            "valueSet": [
-                                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
-                            ]
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
                         },
-                        "tagSupport": {
-                            "valueSet": [
-                                1
-                            ]
-                        }
+                        "tagSupport": {"valueSet": [1]},
                     },
                     "foldingRange": {
                         "dynamicRegistration": True,
-                        "foldingRange": {
-                            "collapsedText": False
-                        },
-                        "foldingRangeKind": {
-                            "valueSet": [
-                                "comment",
-                                "imports",
-                                "region"
-                            ]
-                        },
+                        "foldingRange": {"collapsedText": False},
+                        "foldingRangeKind": {"valueSet": ["comment", "imports", "region"]},
                         "lineFoldingOnly": True,
-                        "rangeLimit": 5000
+                        "rangeLimit": 5000,
                     },
-                    "formatting": {
-                        "dynamicRegistration": True
-                    },
-                    "hover": {
-                        "contentFormat": [
-                            "markdown",
-                            "plaintext"
-                        ],
-                        "dynamicRegistration": True
-                    },
-                    "implementation": {
-                        "dynamicRegistration": True,
-                        "linkSupport": True
-                    },
+                    "formatting": {"dynamicRegistration": True},
+                    "hover": {"contentFormat": ["markdown", "plaintext"], "dynamicRegistration": True},
+                    "implementation": {"dynamicRegistration": True, "linkSupport": True},
                     "inlayHint": {
                         "dynamicRegistration": True,
-                        "resolveSupport": {
-                            "properties": [
-                                "tooltip",
-                                "textEdits",
-                                "label.tooltip",
-                                "label.location",
-                                "label.command"
-                            ]
-                        }
+                        "resolveSupport": {"properties": ["tooltip", "textEdits", "label.tooltip", "label.location", "label.command"]},
                     },
-                    "inlineValue": {
-                        "dynamicRegistration": True
-                    },
-                    "linkedEditingRange": {
-                        "dynamicRegistration": True
-                    },
-                    "onTypeFormatting": {
-                        "dynamicRegistration": True
-                    },
+                    "inlineValue": {"dynamicRegistration": True},
+                    "linkedEditingRange": {"dynamicRegistration": True},
+                    "onTypeFormatting": {"dynamicRegistration": True},
                     "publishDiagnostics": {
                         "codeDescriptionSupport": True,
                         "dataSupport": True,
                         "relatedInformation": True,
-                        "tagSupport": {
-                            "valueSet": [
-                                1,
-                                2
-                            ]
-                        },
-                        "versionSupport": False
+                        "tagSupport": {"valueSet": [1, 2]},
+                        "versionSupport": False,
                     },
-                    "rangeFormatting": {
-                        "dynamicRegistration": True,
-                        "rangesSupport": True
-                    },
-                    "references": {
-                        "dynamicRegistration": True
-                    },
+                    "rangeFormatting": {"dynamicRegistration": True, "rangesSupport": True},
+                    "references": {"dynamicRegistration": True},
                     "rename": {
                         "dynamicRegistration": True,
                         "honorsChangeAnnotations": True,
                         "prepareSupport": True,
-                        "prepareSupportDefaultBehavior": 1
+                        "prepareSupportDefaultBehavior": 1,
                     },
-                    "selectionRange": {
-                        "dynamicRegistration": True
-                    },
+                    "selectionRange": {"dynamicRegistration": True},
                     "semanticTokens": {
                         "augmentsSyntaxTokens": True,
                         "dynamicRegistration": True,
-                        "formats": [
-                            "relative"
-                        ],
+                        "formats": ["relative"],
                         "multilineTokenSupport": False,
                         "overlappingTokenSupport": False,
-                        "requests": {
-                            "full": {
-                                "delta": True
-                            },
-                            "range": True
-                        },
+                        "requests": {"full": {"delta": True}, "range": True},
                         "serverCancelSupport": True,
                         "tokenModifiers": [
                             "declaration",
@@ -348,7 +196,7 @@ class SourceKitLSP(SolidLanguageServer):
                             "async",
                             "modification",
                             "documentation",
-                            "defaultLibrary"
+                            "defaultLibrary",
                         ],
                         "tokenTypes": [
                             "namespace",
@@ -373,67 +221,35 @@ class SourceKitLSP(SolidLanguageServer):
                             "number",
                             "regexp",
                             "operator",
-                            "decorator"
-                        ]
+                            "decorator",
+                        ],
                     },
                     "signatureHelp": {
                         "contextSupport": True,
                         "dynamicRegistration": True,
                         "signatureInformation": {
                             "activeParameterSupport": True,
-                            "documentationFormat": [
-                                "markdown",
-                                "plaintext"
-                            ],
-                            "parameterInformation": {
-                                "labelOffsetSupport": True
-                            }
-                        }
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
+                        },
                     },
-                    "synchronization": {
-                        "didSave": True,
-                        "dynamicRegistration": True,
-                        "willSave": True,
-                        "willSaveWaitUntil": True
-                    },
-                    "typeDefinition": {
-                        "dynamicRegistration": True,
-                        "linkSupport": True
-                    },
-                    "typeHierarchy": {
-                        "dynamicRegistration": True
-                    }
+                    "synchronization": {"didSave": True, "dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True},
+                    "typeDefinition": {"dynamicRegistration": True, "linkSupport": True},
+                    "typeHierarchy": {"dynamicRegistration": True},
                 },
                 "window": {
-                    "showDocument": {
-                        "support": True
-                    },
-                    "showMessage": {
-                        "messageActionItem": {
-                            "additionalPropertiesSupport": True
-                        }
-                    },
-                    "workDoneProgress": True
+                    "showDocument": {"support": True},
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "workDoneProgress": True,
                 },
                 "workspace": {
                     "applyEdit": True,
-                    "codeLens": {
-                        "refreshSupport": True
-                    },
+                    "codeLens": {"refreshSupport": True},
                     "configuration": True,
-                    "diagnostics": {
-                        "refreshSupport": True
-                    },
-                    "didChangeConfiguration": {
-                        "dynamicRegistration": True
-                    },
-                    "didChangeWatchedFiles": {
-                        "dynamicRegistration": True,
-                        "relativePatternSupport": True
-                    },
-                    "executeCommand": {
-                        "dynamicRegistration": True
-                    },
+                    "diagnostics": {"refreshSupport": True},
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True, "relativePatternSupport": True},
+                    "executeCommand": {"dynamicRegistration": True},
                     "fileOperations": {
                         "didCreate": True,
                         "didDelete": True,
@@ -441,70 +257,38 @@ class SourceKitLSP(SolidLanguageServer):
                         "dynamicRegistration": True,
                         "willCreate": True,
                         "willDelete": True,
-                        "willRename": True
+                        "willRename": True,
                     },
-                    "foldingRange": {
-                        "refreshSupport": True
-                    },
-                    "inlayHint": {
-                        "refreshSupport": True
-                    },
-                    "inlineValue": {
-                        "refreshSupport": True
-                    },
-                    "semanticTokens": {
-                        "refreshSupport": False
-                    },
+                    "foldingRange": {"refreshSupport": True},
+                    "inlayHint": {"refreshSupport": True},
+                    "inlineValue": {"refreshSupport": True},
+                    "semanticTokens": {"refreshSupport": False},
                     "symbol": {
                         "dynamicRegistration": True,
-                        "resolveSupport": {
-                            "properties": [
-                                "location.range"
-                            ]
-                        },
+                        "resolveSupport": {"properties": ["location.range"]},
                         "symbolKind": {
-                            "valueSet": [
-                                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
-                            ]
+                            "valueSet": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]
                         },
-                        "tagSupport": {
-                            "valueSet": [
-                                1
-                            ]
-                        }
+                        "tagSupport": {"valueSet": [1]},
                     },
                     "workspaceEdit": {
-                        "changeAnnotationSupport": {
-                            "groupsOnLabel": True
-                        },
+                        "changeAnnotationSupport": {"groupsOnLabel": True},
                         "documentChanges": True,
                         "failureHandling": "textOnlyTransactional",
                         "normalizesLineEndings": True,
-                        "resourceOperations": [
-                            "create",
-                            "rename",
-                            "delete"
-                        ]
+                        "resourceOperations": ["create", "rename", "delete"],
                     },
-                    "workspaceFolders": True
-                }
+                    "workspaceFolders": True,
+                },
             },
-            "clientInfo": {
-                "name": "Visual Studio Code",
-                "version": "1.102.2"
-            },
+            "clientInfo": {"name": "Visual Studio Code", "version": "1.102.2"},
             "initializationOptions": {
                 "backgroundIndexing": True,
                 "backgroundPreparationMode": "enabled",
-                "textDocument/codeLens": {
-                    "supportedCommands": {
-                        "swift.debug": "swift.debug",
-                        "swift.run": "swift.run"
-                    }
-                },
+                "textDocument/codeLens": {"supportedCommands": {"swift.debug": "swift.debug", "swift.run": "swift.run"}},
                 "window/didChangeActiveDocument": True,
                 "workspace/getReferenceDocument": True,
-                "workspace/peekDocuments": True
+                "workspace/peekDocuments": True,
             },
             "locale": "en",
             "processId": os.getpid(),
@@ -517,7 +301,7 @@ class SourceKitLSP(SolidLanguageServer):
                 }
             ],
         }
-        
+
         return initialize_params
 
     def _start_server(self):
@@ -549,13 +333,18 @@ class SourceKitLSP(SolidLanguageServer):
 
         capabilities = init_response["capabilities"]
         self.logger.log(f"SourceKit LSP capabilities: {list(capabilities.keys())}", logging.INFO)
-        
+
         assert "textDocumentSync" in capabilities, "textDocumentSync capability missing"
         assert "definitionProvider" in capabilities, "definitionProvider capability missing"
 
         self.server.notify.initialized({})
         self.completions_available.set()
 
-        # sourcekit-lsp server is typically ready immediately after initialization
         self.server_ready.set()
         self.server_ready.wait()
+
+        # SourceKit LSP needs a short initialization period after startup
+        # before it can provide accurate reference information. This sleep
+        # prevents race conditions where references might not be available yet.
+        # Unfortunately, sourcekit doesn't send a signal when it's really ready
+        time.sleep(5)
