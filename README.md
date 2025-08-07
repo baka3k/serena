@@ -6,11 +6,13 @@
 * :rocket: Serena is a powerful **coding agent toolkit** capable of turning an LLM into a fully-featured agent that works **directly on your codebase**.
   Unlike most other tools, it is not tied to an LLM, framework or an interface, making it easy to use it in a variety of ways.
 * :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.
-* :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge. 
+* :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
 
 ### Demonstration 1 - Efficient Operation in Claude Code
 
-Here is a demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Note that efficient editing and retrieval are not only useful for saving costs, but also for generally improving the quality of the code produced by the LLM.
+Here is a demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Note that efficient editing and retrieval are not only useful for saving costs, but also for generally improving the quality of the code produced by the LLM. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
+
+https://github.com/user-attachments/assets/ab78ebe0-f77d-43cc-879a-cc399efefd87
 
 ### Demonstration 2 - Serena in Claude Desktop
 
