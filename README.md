@@ -73,19 +73,19 @@ Language servers provide support for a wide range of programming languages.
 With Serena, we provide 
  * direct, out-of-the-box support for:
      * Python
-     * TypeScript/Javascript (currently has some instability issues, we are working on it)
+     * TypeScript/Javascript
      * PHP
-     * Go (need to install go and gopls first)
+     * Go (requires installation of gopls)
      * Rust
      * C#
      * Ruby
      * Swift
      * Java (_Note_: startup is slow, initial startup especially so. There may be issues with java on macos and linux, we are working on it.)
-     * Elixir (Requires NextLS and Elixir install; **Windows not supported** - Next LS does not provide Windows binaries)
+     * Elixir (Requires NextLS and Elixir install; **Windows not supported**)
      * Clojure
-     * Bash (Requires Node.js and npm for bash-language-server installation)
+     * Bash
      * C/C++ (You may experience issues with finding references, we are working on it)
-     * Swift (requires Swift and sourcekit-lsp to be installed)
+     * Swift
  * indirect support (may require some code changes/manual installation) for:
      * Kotlin (untested)
      * Dart (untested)
