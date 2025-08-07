@@ -104,11 +104,6 @@ implementation.
 
 <!-- toc -->
 
-- [What Can I Use Serena For?](#what-can-i-use-serena-for)
-  * [As MCP Server](#as-mcp-server)
-  * [As Library](#as-library)
-- [Free Coding Agents with Serena](#free-coding-agents-with-serena)
-  * [Note](#note)
 - [Quick Start](#quick-start)
   * [Running the Serena MCP Server](#running-the-serena-mcp-server)
     + [Usage](#usage)
@@ -124,8 +119,6 @@ implementation.
   * [Claude Desktop](#claude-desktop)
   * [MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)](#mcp-coding-clients-cline-roo-code-cursor-windsurf-etc)
   * [Local GUIs and Frameworks](#local-guis-and-frameworks)
-  * [Custom Integrations](#custom-integrations)
-    + [Other Agent Frameworks](#other-agent-frameworks)
 - [Detailed Usage and Recommendations](#detailed-usage-and-recommendations)
   * [Tool Execution](#tool-execution)
     + [Shell Execution and Editing Tools](#shell-execution-and-editing-tools)
@@ -150,7 +143,7 @@ implementation.
   * [Other MCP-Based Coding Agents](#other-mcp-based-coding-agents)
 - [Acknowledgements](#acknowledgements)
 - [Customizing and Extending Serena](#customizing-and-extending-serena)
-- [Full List of Tools](#full-list-of-tools)
+- [List of Tools](#list-of-tools)
 
 <!-- tocstop -->
 
