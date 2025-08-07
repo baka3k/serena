@@ -388,11 +388,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             package_extract_dir.mkdir(exist_ok=True)
 
             # Use SafeZipExtractor to handle long paths and skip errors
-            extractor = SafeZipExtractor(
-                archive_path=nupkg_file,
-                extract_dir=package_extract_dir,
-                verbose=False
-            )
+            extractor = SafeZipExtractor(archive_path=nupkg_file, extract_dir=package_extract_dir, verbose=False)
             extractor.extract_all()
 
             # Clean up the nupkg file

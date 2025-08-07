@@ -1,12 +1,13 @@
+import fnmatch
 import logging
 import os
 import sys
 import zipfile
 from pathlib import Path
-from typing import Optional, List
-import fnmatch
+from typing import Optional
 
 log = logging.getLogger(__name__)
+
 
 class SafeZipExtractor:
     """
@@ -24,8 +25,8 @@ class SafeZipExtractor:
         archive_path: Path,
         extract_dir: Path,
         verbose: bool = True,
-        include_patterns: Optional[List[str]] = None,
-        exclude_patterns: Optional[List[str]] = None
+        include_patterns: Optional[list[str]] = None,
+        exclude_patterns: Optional[list[str]] = None,
     ) -> None:
         """
         Initialize the SafeZipExtractor.
@@ -113,7 +114,7 @@ class SafeZipExtractor:
         :return: Normalized path
         """
         if sys.platform.startswith("win"):
-            return Path(r"\\?\{}".format(os.path.abspath(path)))
+            return Path(rf"\\?\{os.path.abspath(path)}")
         return path
 
 

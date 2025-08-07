@@ -1,8 +1,7 @@
-import io
-import os
 import sys
 import zipfile
 from pathlib import Path
+
 import pytest
 
 from solidlsp.util.zip import SafeZipExtractor
@@ -33,9 +32,7 @@ def test_extract_all_success(temp_zip_file: Path, tmp_path: Path) -> None:
 def test_include_patterns(temp_zip_file: Path, tmp_path: Path) -> None:
     """Only files matching include_patterns should be extracted."""
     dest_dir = tmp_path / "extracted"
-    extractor = SafeZipExtractor(
-        temp_zip_file, dest_dir, verbose=False, include_patterns=["*.txt"]
-    )
+    extractor = SafeZipExtractor(temp_zip_file, dest_dir, verbose=False, include_patterns=["*.txt"])
     extractor.extract_all()
 
     assert (dest_dir / "file1.txt").exists()
@@ -46,9 +43,7 @@ def test_include_patterns(temp_zip_file: Path, tmp_path: Path) -> None:
 def test_exclude_patterns(temp_zip_file: Path, tmp_path: Path) -> None:
     """Files matching exclude_patterns should be skipped."""
     dest_dir = tmp_path / "extracted"
-    extractor = SafeZipExtractor(
-        temp_zip_file, dest_dir, verbose=False, exclude_patterns=["file2.txt"]
-    )
+    extractor = SafeZipExtractor(temp_zip_file, dest_dir, verbose=False, exclude_patterns=["file2.txt"])
     extractor.extract_all()
 
     assert (dest_dir / "file1.txt").exists()
@@ -81,7 +76,7 @@ def test_skip_on_error(monkeypatch, temp_zip_file: Path, tmp_path: Path) -> None
 
     def failing_open(self, member, *args, **kwargs):
         if member.filename == "file2.txt":
-            raise IOError("Simulated failure")
+            raise OSError("Simulated failure")
         return original_open(self, member, *args, **kwargs)
 
     # Patch the method on the class, not on an instance
@@ -94,9 +89,10 @@ def test_skip_on_error(monkeypatch, temp_zip_file: Path, tmp_path: Path) -> None
     assert not (dest_dir / "file2.txt").exists()
     assert (dest_dir / "folder" / "file3.txt").exists()
 
+
 @pytest.mark.skipif(not sys.platform.startswith("win"), reason="Windows-only test")
 def test_long_path_normalization(temp_zip_file: Path, tmp_path: Path) -> None:
-    """Ensure _normalize_path adds \\?\ prefix on Windows."""
+    r"""Ensure _normalize_path adds \\?\\ prefix on Windows."""
     dest_dir = tmp_path / ("a" * 250)  # Simulate long path
     extractor = SafeZipExtractor(temp_zip_file, dest_dir, verbose=False)
     norm_path = extractor._normalize_path(dest_dir / "file.txt")
