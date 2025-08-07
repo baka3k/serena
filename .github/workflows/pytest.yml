@@ -73,6 +73,10 @@ jobs:
       - name: Install swift
         if: runner.os != 'Windows'
         uses: swift-actions/setup-swift@v2
+      # Installation of swift screws with installation of ruby on macOS for some reason
+      - name: Install Xcode Command Line Tools
+        run: xcode-select --install || true
+        if: runner.os == 'macOS'
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
         with:
