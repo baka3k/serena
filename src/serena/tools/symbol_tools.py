@@ -87,10 +87,10 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         self,
         name_path: str,
         depth: int = 0,
-        relative_path: str | None = None,
+        relative_path: str = "",
         include_body: bool = False,
-        include_kinds: list[int] | None = None,
-        exclude_kinds: list[int] | None = None,
+        include_kinds: list[int] = [],  # noqa: B006
+        exclude_kinds: list[int] = [],  # noqa: B006
         substring_matching: bool = False,
         max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
@@ -136,8 +136,10 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param include_kinds: Optional. List of LSP symbol kind integers to include. (e.g., 5 for Class, 12 for Function).
             Valid kinds: 1=file, 2=module, 3=namespace, 4=package, 5=class, 6=method, 7=property, 8=field, 9=constructor, 10=enum,
             11=interface, 12=function, 13=variable, 14=constant, 15=string, 16=number, 17=boolean, 18=array, 19=object,
-            20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter
+            20=key, 21=null, 22=enum member, 23=struct, 24=event, 25=operator, 26=type parameter.
+            If not provided, all kinds are included.
         :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
+            If not provided, no kinds are excluded.
         :param substring_matching: If True, use substring matching for the last segment of `name`.
         :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
         :return: a list of symbols (with locations) matching the name.
@@ -167,8 +169,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         self,
         name_path: str,
         relative_path: str,
-        include_kinds: list[int] | None = None,
-        exclude_kinds: list[int] | None = None,
+        include_kinds: list[int] = [],  # noqa: B006
+        exclude_kinds: list[int] = [],  # noqa: B006
         max_answer_chars: int = TOOL_DEFAULT_MAX_ANSWER_LENGTH,
     ) -> str:
         """
