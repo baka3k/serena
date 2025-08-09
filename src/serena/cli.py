@@ -460,6 +460,52 @@ class ProjectCommands(AutoRegisteringGroup):
             ls.save_cache()
         print(f"Symbols saved to {ls.cache_path}")
 
+    @staticmethod
+    @click.command("is_ignored_path", help="Check if a path is ignored by the project configuration.")
+    @click.argument("path", type=click.Path(exists=False, file_okay=True, dir_okay=True))
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def is_ignored_path(path: str, project: str) -> None:
+        """
+        Check if a given path is ignored by the project configuration.
+
+        :param path: The path to check.
+        :param project: The path to the project directory, defaults to the current working directory.
+        """
+        proj = Project.load(os.path.abspath(project))
+        if os.path.isabs(path):
+            path = os.path.relpath(path, start=proj.project_root)
+        is_ignored = proj.is_ignored_path(path)
+        click.echo(f"Path '{path}' IS {'ignored' if is_ignored else 'IS NOT ignored'} by the project configuration.")
+
+    @staticmethod
+    @click.command("index-file", help="Index a single file by saving its symbols to the LSP cache.")
+    @click.argument("file", type=click.Path(exists=True, file_okay=True, dir_okay=False))
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option("--verbose", "-v", is_flag=True, help="Print detailed information about the indexed symbols.")
+    def index_file(file: str, project: str, verbose: bool) -> None:
+        """
+        Index a single file by saving its symbols to the LSP cache, useful for debugging.
+        :param file: path to the file to index, must be inside the project directory.
+        :param project: path to the project directory, defaults to the current working directory.
+        :param verbose: if set, prints detailed information about the indexed symbols.
+        """
+        proj = Project.load(os.path.abspath(project))
+        if os.path.isabs(file):
+            file = os.path.relpath(file, start=proj.project_root)
+        if proj.is_ignored_path(file, ignore_non_source_files=True):
+            click.echo(f"'{file}' is ignored or declared as non-code file by the project configuration, won't index.")
+            exit(1)
+        ls = proj.create_language_server()
+        with ls.start_server():
+            symbols, _ = ls.request_document_symbols(file, include_body=False)
+            ls.request_document_symbols(file, include_body=True)
+            if verbose:
+                click.echo(f"Symbols in file '{file}':")
+                for symbol in symbols:
+                    click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
+            ls.save_cache()
+            click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to {ls.cache_path}.")
+
 
 class ToolCommands(AutoRegisteringGroup):
     """Group for 'tool' subcommands."""
