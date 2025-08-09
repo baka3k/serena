@@ -792,7 +792,6 @@ Here is the list of Serena's default tools with a short description (output of `
 * `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
 * `replace_regex`: Replaces content in a file by using regular expressions.
 * `replace_symbol_body`: Replaces the full definition of a symbol.
-* `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
 * `search_for_pattern`: Performs a search for a pattern in the project.
 * `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
 * `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
@@ -815,5 +814,6 @@ The full list of optional tools is (output of `uv run serena tools list --only-o
 * `jet_brains_get_symbols_overview`: Retrieves an overview of the top-level symbols within a specified file
 * `remove_project`: Removes a project from the Serena configuration.
 * `replace_lines`: Replaces a range of lines within a file with new content.
+* `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
 * `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
 * `switch_modes`: Activates modes by providing a list of their names

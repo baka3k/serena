@@ -16,6 +16,7 @@ from serena.tools import (
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
 )
+from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
 
 
@@ -35,7 +36,7 @@ def _sanitize_symbol_dict(symbol_dict: dict[str, Any]) -> dict[str, Any]:
     return symbol_dict
 
 
-class RestartLanguageServerTool(Tool):
+class RestartLanguageServerTool(Tool, ToolMarkerOptional):
     """Restarts the language server, may be necessary when edits not through Serena happen."""
 
     def apply(self) -> str:
