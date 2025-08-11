@@ -634,9 +634,7 @@ class ProjectCommands(AutoRegisteringGroup):
                     tools_working = False
 
                 if len(find_refs_data) == 0 and pattern_matches == 0:
-                    log.warning(
-                        "Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue"
-                    )
+                    log.warning("Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue")
 
                 log.info("Health check completed successfully")
 
