@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     wget \
     zip \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pipx.
