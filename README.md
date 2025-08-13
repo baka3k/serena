@@ -30,7 +30,7 @@ Several videos and blog posts have been written about Serena by now:
 
 #### On Blogs
 
-* [Serena's Design Principles](https://medium.com/@souradip1000/deconstructing-serenas-mcp-powered-semantic-code-understanding-architecture-75802515d116https://www.niceblog.com/serena-mcp-coding-agent-toolkit/)
+* [Serena's Design Principles](https://medium.com/@souradip1000/deconstructing-serenas-mcp-powered-semantic-code-understanding-architecture-75802515d116)
 * [Serena with Claude Code (in Japanese)](https://blog.lai.so/serena/)
 
 ### Demonstration 1 - Efficient Operation in Claude Code
