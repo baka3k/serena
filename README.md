@@ -8,15 +8,40 @@
 * :wrench: Serena provides essential **semantic code retrieval and editing tools** that are akin to an IDE's capabilities, extracting code entities at the symbol level and exploiting relational structure. When combined with an existing coding agent, these tools greatly enhance (token) efficiency.
 * :free: Serena is **free & open-source**, enhancing the capabilities of LLMs you already have access to free of charge.
 
+You can think of Serena as an IDE for a coding agent. With it, the agent no longer needs to read entire
+files, perform grep-like searches or string replacements to find and and edit the right code. Instead, it can use code centered tools like `find_symbol`, `find_referencing_symbols` and `insert_after_symbol`.
+
+### Users' Feedback
+
+Most users report that Serena has strong positive effects on the results of their coding agents, even when used within
+very capable agents like Claude Code. Serena is often described to be a [game changer](https://www.reddit.com/r/ClaudeAI/comments/1lfsdll/try_out_serena_mcp_thank_me_later/), or an enormous [productivity boost](https://www.reddit.com/r/ClaudeCode/comments/1mguoia/absolutely_insane_improvement_of_claude_code).
+
+However, in very small projects or in tasks that involve only one file (tasks which do not require reading/editing only subsets of files),
+you may not benefit from including Serena. For example, for creating code from scratch, Serena will not provide much value.
+You also might want to adjust Serena to your needs and workflows using its extensive configuration options.
+
+Several videos and blog posts have been written about Serena by now:
+
+#### On YouTube
+
+* [AI Labs](https://www.youtube.com/watch?v=wYWyJNs1HVk&t=1s)
+* [Yo Van Eyck](https://www.youtube.com/watch?v=UqfxuQKuMo8&t=45s)
+* [JeredBlu](https://www.youtube.com/watch?v=fzPnM3ySmjE&t=32s)
+
+#### On Blogs
+
+* [Serena's Design Principles](https://medium.com/@souradip1000/deconstructing-serenas-mcp-powered-semantic-code-understanding-architecture-75802515d116https://www.niceblog.com/serena-mcp-coding-agent-toolkit/)
+* [Serena with Claude Code (in Japanese)](https://blog.lai.so/serena/)
+
 ### Demonstration 1 - Efficient Operation in Claude Code
 
-Here is a demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Note that efficient editing and retrieval are not only useful for saving costs, but also for generally improving the quality of the code produced by the LLM. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
+A demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Efficient operations are not only useful for saving costs, but also for generally improving the generated code's quality. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
 
 https://github.com/user-attachments/assets/ab78ebe0-f77d-43cc-879a-cc399efefd87
 
 ### Demonstration 2 - Serena in Claude Desktop
 
-Here is a demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
+A demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
 Note how Serena's tools enable Claude to find and edit the right symbols.
 
 https://github.com/user-attachments/assets/6eaa9aa1-610d-4723-a2d6-bf1e487ba753
