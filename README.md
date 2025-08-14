@@ -256,7 +256,7 @@ Replace `/path/to/your/projects` with the absolute path to your projects directo
 * No need to install language servers and dependencies locally
 * Consistent environment across different systems
 
-Alternatively, use the docker-compose file provided in the repository.
+Alternatively, use docker compose with the `compose.yml` file provided in the repository.
 
 See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
