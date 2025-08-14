@@ -742,5 +742,5 @@ class CSharpLanguageServer(SolidLanguageServer):
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[Location]:
         # Like in the typescript LS, we need to wait here for the language server to
         # get correct results that include cross-file references.
-        sleep(1)
+        sleep(2)
         return super().request_references(relative_file_path, line, column)
