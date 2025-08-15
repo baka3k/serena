@@ -120,6 +120,10 @@ class TestCSharpLanguageServer:
             "Models/Person.cs" in ref_file for ref_file in ref_files
         ), "Should find reference in Models/Person.cs where Calculator.Subtract is called"
 
+        # check for a second time, since the first call may trigger initialization and change the state of the LS
+        refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
+        assert refs_second_call == refs, "Second call to request_references should return the same results"
+
 
 @pytest.mark.csharp
 class TestCSharpSolutionProjectOpening:
