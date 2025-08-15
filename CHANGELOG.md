@@ -34,6 +34,7 @@ Fixes:
 * Ignore `.git` in check for ignored paths and improve performance of `find_all_non_ignored_files`
 * Fix language server startup issues on Windows when using Claude Code (which was due to
   default shell reconfiguration imposed by Claude Code)
+* Additional wait for initialization in C# language server before requesting references, allowing cross-file references to be found.
 
 # 0.1.3
 
