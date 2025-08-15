@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
+from time import sleep
 from typing import Self, Union, cast
 
 import pathspec
@@ -322,6 +323,16 @@ class SolidLanguageServer(ABC):
 
         self._server_context = None
         self._request_timeout: float | None = None
+
+        self._has_waited_for_cross_file_references = False
+
+    def _get_wait_time_for_cross_file_referencing(self) -> float:
+        """Meant to be overridden by subclasses for LS that don't have a reliable "finished initializing" signal.
+
+        LS may return incomplete results on calls to `request_references` (only references found in the same file),
+        if the LS is not fully initialized yet.
+        """
+        return 0
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
@@ -698,6 +709,12 @@ class SolidLanguageServer(ABC):
                 logging.ERROR,
             )
             raise SolidLSPException("Language Server not started")
+
+        if not self._has_waited_for_cross_file_references:
+            # Some LS require waiting for a while before they can return cross-file references.
+            # This is a workaround for such LS that don't have a reliable "finished initializing" signal.
+            sleep(self._get_wait_time_for_cross_file_referencing())
+            self._has_waited_for_cross_file_references = True
 
         with self.open_file(relative_file_path):
             try:
