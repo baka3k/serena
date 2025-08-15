@@ -738,9 +738,4 @@ class CSharpLanguageServer(SolidLanguageServer):
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        is_windows = platform.system() == "Windows"
-        # seems like on windows initialization may take longer
-        if is_windows:
-            return 3
-        else:
-            return 1
+        return 1
