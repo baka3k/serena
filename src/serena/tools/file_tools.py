@@ -179,7 +179,7 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
         the form "beginning.*?end-of-text-to-be-replaced".
         Always try to use wildcards to avoid specifying the exact content of the code to be replaced,
         especially if it spans several lines.
-        
+
         IMPORTANT: REMEMBER TO USE WILDCARDS WHEN APPROPRIATE! I WILL BE VERY UNHAPPY IF YOU WRITE LONG REGEXES WITHOUT USING WILDCARDS INSTEAD!
 
         :param relative_path: the relative path to the file
