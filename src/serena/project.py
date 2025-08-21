@@ -82,9 +82,6 @@ class Project:
         """
         return self._ignore_spec
 
-    def _is_ignored_dirname(self, dirname: str) -> bool:
-        return dirname.startswith(".")
-
     def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
         """
         Determine whether an existing path should be ignored based on file type and ignore patterns.
@@ -113,16 +110,6 @@ class Project:
         # always ignore paths inside .git
         if len(rel_path.parts) > 0 and rel_path.parts[0] == ".git":
             return True
-
-        # Check each part of the path against always fulfilled ignore conditions
-        dir_parts = rel_path.parts
-        if is_file:
-            dir_parts = dir_parts[:-1]
-        for part in dir_parts:
-            if not part:  # Skip empty parts (e.g., from leading '/')
-                continue
-            if self._is_ignored_dirname(part):
-                return True
 
         return match_path(str(relative_path), self.get_ignore_spec(), root_path=self.project_root)
 
