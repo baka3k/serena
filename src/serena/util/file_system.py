@@ -143,11 +143,6 @@ class GitignoreParser:
             if spec.patterns:  # Only add non-empty specs
                 self.ignore_specs.append(spec)
 
-    @dataclass
-    class _QueueItem:
-        abs_path: str
-        rel_path: str | None = None
-
     def _iter_gitignore_files(self, follow_symlinks: bool = False) -> Iterator[str]:
         """
         Iteratively discover .gitignore files in a top-down fashion, starting from the repository root.
@@ -155,21 +150,22 @@ class GitignoreParser:
 
         :return: an iterator yielding paths to .gitignore files (top-down)
         """
-        queue: list[GitignoreParser._QueueItem] = [self._QueueItem(abs_path=self.repo_root)]
+        queue: list[str] = [self.repo_root]
 
-        def scan(abs_path: str, rel_path: str | None):
+        def scan(abs_path: str | None):
             for entry in os.scandir(abs_path):
                 if entry.is_dir(follow_symlinks=follow_symlinks):
-                    dir_rel_path = rel_path + "/" + entry.name if rel_path else entry.name
-                    queue.append(self._QueueItem(abs_path=entry.path, rel_path=dir_rel_path))
+                    queue.append(entry.path)
                 elif entry.is_file(follow_symlinks=follow_symlinks) and entry.name == ".gitignore":
                     yield entry.path
 
         while queue:
-            item = queue.pop(0)
-            if item.rel_path is not None and self.should_ignore(item.rel_path):
-                continue
-            yield from scan(item.abs_path, item.rel_path)
+            next_abs_path = queue.pop(0)
+            if next_abs_path != self.repo_root:
+                rel_path = os.path.relpath(next_abs_path, self.repo_root)
+                if self.should_ignore(rel_path):
+                    continue
+            yield from scan(next_abs_path)
 
     def _create_ignore_spec(self, gitignore_file_path: str) -> GitignoreSpec:
         """
