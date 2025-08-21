@@ -151,8 +151,11 @@ class GitignoreParser:
 
         :return: List of absolute paths to .gitignore files
         """
+        log.info("Looking for .gitignore files in %s", self.repo_root)
         relative_paths = glob.glob("**/.gitignore", root_dir=self.repo_root, recursive=True)
-        return [os.path.join(self.repo_root, rel_path) for rel_path in relative_paths]
+        result = [os.path.join(self.repo_root, rel_path) for rel_path in relative_paths]
+        log.info("Found %s .gitignore files", len(result))
+        return result
 
     def _create_ignore_spec(self, gitignore_file_path: str) -> GitignoreSpec:
         """

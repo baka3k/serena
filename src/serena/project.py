@@ -28,9 +28,7 @@ class Project:
             log.info(f"Using {len(ignored_patterns)} ignored paths from the explicit project configuration.")
             log.debug(f"Ignored paths: {ignored_patterns}")
         if project_config.ignore_all_files_in_gitignore:
-            log.info(f"Parsing all gitignore files in {self.project_root}")
             gitignore_parser = GitignoreParser(self.project_root)
-            log.info(f"Found {len(gitignore_parser.get_ignore_specs())} gitignore files.")
             for spec in gitignore_parser.get_ignore_specs():
                 log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                 ignored_patterns.extend(spec.patterns)
