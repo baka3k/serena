@@ -1,7 +1,6 @@
-import glob
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -138,24 +137,39 @@ class GitignoreParser:
 
     def _load_gitignore_files(self) -> None:
         """Load all gitignore files from the repository."""
-        gitignore_files = self._find_gitignore_files()
-
-        for gitignore_file in gitignore_files:
-            spec = self._create_ignore_spec(gitignore_file)
+        for gitignore_path in self._iter_gitignore_files():
+            log.info("Processing gitignore file: %s", gitignore_path)
+            spec = self._create_ignore_spec(gitignore_path)
             if spec.patterns:  # Only add non-empty specs
                 self.ignore_specs.append(spec)
 
-    def _find_gitignore_files(self) -> list[str]:
-        """
-        Find all .gitignore files in the repository.
+    @dataclass
+    class _QueueItem:
+        abs_path: str
+        rel_path: str | None = None
 
-        :return: List of absolute paths to .gitignore files
+    def _iter_gitignore_files(self, follow_symlinks: bool = False) -> Iterator[str]:
         """
-        log.info("Looking for .gitignore files in %s", self.repo_root)
-        relative_paths = glob.glob("**/.gitignore", root_dir=self.repo_root, recursive=True)
-        result = [os.path.join(self.repo_root, rel_path) for rel_path in relative_paths]
-        log.info("Found %s .gitignore files", len(result))
-        return result
+        Iteratively discover .gitignore files in a top-down fashion, starting from the repository root.
+        Directory paths are skipped if they match any already loaded ignore patterns.
+
+        :return: an iterator yielding paths to .gitignore files (top-down)
+        """
+        queue: list[GitignoreParser._QueueItem] = [self._QueueItem(abs_path=self.repo_root)]
+
+        def scan(abs_path: str, rel_path: str | None):
+            for entry in os.scandir(abs_path):
+                if entry.is_dir(follow_symlinks=follow_symlinks):
+                    dir_rel_path = rel_path + "/" + entry.name if rel_path else entry.name
+                    queue.append(self._QueueItem(abs_path=entry.path, rel_path=dir_rel_path))
+                elif entry.is_file(follow_symlinks=follow_symlinks) and entry.name == ".gitignore":
+                    yield entry.path
+
+        while queue:
+            item = queue.pop(0)
+            if item.rel_path is not None and self.should_ignore(item.rel_path):
+                continue
+            yield from scan(item.abs_path, item.rel_path)
 
     def _create_ignore_spec(self, gitignore_file_path: str) -> GitignoreSpec:
         """
