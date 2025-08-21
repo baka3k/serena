@@ -178,7 +178,9 @@ class Project:
             return [relative_path]
         else:
             for root, dirs, files in os.walk(start_path, followlinks=True):
-                dirs[:] = [d for d in dirs if not self._is_ignored_relative_path(os.path.join(root, d))]
+                # prevent recursion into ignored directories
+                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+
                 for file in files:
                     rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root)
                     try:
