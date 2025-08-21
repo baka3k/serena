@@ -123,7 +123,13 @@ class Project:
         """
         path = Path(path)
         if path.is_absolute():
-            relative_path = path.relative_to(self.project_root)
+            try:
+                relative_path = path.relative_to(self.project_root)
+            except ValueError:
+                # If the path is not relative to the project root, we consider it as an absolute path outside the project
+                # (which we ignore)
+                log.warning(f"Path {path} is not relative to the project root {self.project_root} and was therefore ignored")
+                return True
         else:
             relative_path = path
 
@@ -181,14 +187,16 @@ class Project:
                 # prevent recursion into ignored directories
                 dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
 
+                # collect non-ignored files
                 for file in files:
-                    rel_file_path = os.path.relpath(os.path.join(root, file), start=self.project_root)
+                    abs_file_path = os.path.join(root, file)
                     try:
-                        if not self._is_ignored_relative_path(rel_file_path):
+                        if not self.is_ignored_path(abs_file_path):
+                            rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
                             rel_file_paths.append(rel_file_path)
                     except FileNotFoundError:
                         log.warning(
-                            f"File {rel_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
+                            f"File {abs_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
                         )
             return rel_file_paths
 
