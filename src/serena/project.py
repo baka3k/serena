@@ -194,8 +194,12 @@ class Project:
                         if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True):
                             try:
                                 rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
-                            except Exception as e:
-                                log.warning("Ignoring path '%s' because it appears to be outside of the project root (%s)", abs_file_path, self.project_root)
+                            except Exception:
+                                log.warning(
+                                    "Ignoring path '%s' because it appears to be outside of the project root (%s)",
+                                    abs_file_path,
+                                    self.project_root,
+                                )
                                 continue
                             rel_file_paths.append(rel_file_path)
                     except FileNotFoundError:
