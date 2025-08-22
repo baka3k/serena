@@ -191,7 +191,7 @@ class Project:
                 for file in files:
                     abs_file_path = os.path.join(root, file)
                     try:
-                        if not self.is_ignored_path(abs_file_path):
+                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True):
                             try:
                                 rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
                             except Exception as e:
