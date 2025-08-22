@@ -264,6 +264,9 @@ markers = [
   "bash: language server running for Bash",
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby",
+  "zig: language server running for Zig",
+  "lua: language server running for Lua",
+  "nix: language server running for Nix",
   "dart: language server running for Dart",
 ]
 

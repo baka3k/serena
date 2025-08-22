@@ -111,6 +111,9 @@ With Serena, we provide
   * Clojure
   * Bash
   * C/C++ (You may experience issues with finding references, we are working on it)
+  * Zig (requires installation of ZLS - Zig Language Server)
+  * Lua (automatically downloads lua-language-server if not installed)
+  * Nix (requires nixd installation)
   * Dart
 * indirect support (may require some code changes/manual installation) for:
   * Kotlin (untested)
