@@ -7,6 +7,7 @@ from typing import NamedTuple
 
 import pathspec
 from pathspec import PathSpec
+from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
 
@@ -137,11 +138,12 @@ class GitignoreParser:
 
     def _load_gitignore_files(self) -> None:
         """Load all gitignore files from the repository."""
-        for gitignore_path in self._iter_gitignore_files():
-            log.info("Processing gitignore file: %s", gitignore_path)
-            spec = self._create_ignore_spec(gitignore_path)
-            if spec.patterns:  # Only add non-empty specs
-                self.ignore_specs.append(spec)
+        with LogTime("Loading of .gitignore files", logger=log):
+            for gitignore_path in self._iter_gitignore_files():
+                log.info("Processing .gitignore file: %s", gitignore_path)
+                spec = self._create_ignore_spec(gitignore_path)
+                if spec.patterns:  # Only add non-empty specs
+                    self.ignore_specs.append(spec)
 
     def _iter_gitignore_files(self, follow_symlinks: bool = False) -> Iterator[str]:
         """
