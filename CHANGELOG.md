@@ -1,15 +1,19 @@
 # latest
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
-* New languages supported:
-  * **Add support for Zig** via ZLS (Zig Language Server)
-  * **Add support for Lua** via lua-language-server (automatically downloaded if not installed)
-  * **Add support for Nix** via nixd (Nix Language server) - requires nixd installation (Windows not supported)
-  * **Dart language support**: Dart was always working, but now tests were added and it is promoted to "officially supported"
- 
-## Breaking Changes
+* Language support:
+  * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)
+  * **Add support for Lua** via lua-language-server
+  * **Add support for Nix** requires nixd installation (Windows not supported)
+  * **Dart now officially supported**: Dart was always working, but now tests were added, and it is promoted to "officially supported"
+  * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
 
-* **Rust support now requires rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries. If you don't have rustup installed, you'll need to install it from https://rustup.rs/
+* Client support:
+  * New mode `oaicompat-agent` and extensions in the openai tool compatibility, **permitting Serena to work with llama.cpp**
+
+* General:
+  * Various fixes related to indexing, special paths and determation of ignored paths
+  * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
 
 # 0.1.4
 
