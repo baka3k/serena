@@ -13,6 +13,8 @@ class WriteMemoryTool(Tool):
         Write some information about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful.
         """
+        if max_answer_chars == -1:
+            max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if len(content) > max_answer_chars:
             raise ValueError(
                 f"Content for {memory_name} is too long. Max length is {max_answer_chars} characters. " + "Please make the content shorter."
