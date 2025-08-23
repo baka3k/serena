@@ -55,17 +55,11 @@ jobs:
         with:
           elixir-version: "1.18.4"
           otp-version: "26.1"
-
-      - name: Prepare java
-        uses: actions/setup-java@v3
-        with:
-          distribution: "temurin"
-          java-version: "17"
       - name: Install clojure tools
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
-      - name: Setup kotlin
+      - name: Setup Java (for JVM based languages)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
