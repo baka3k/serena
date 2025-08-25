@@ -1,4 +1,5 @@
 ---
+blank_issues_enabled: false
 name: Issue Template
 about: General Issue
 title: ''
