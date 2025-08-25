@@ -1,6 +1,5 @@
 ---
-blank_issues_enabled: false
-name: Issue Template
+name: Issue (bug, performance problem, question)
 about: General Issue
 title: ''
 labels: ''
