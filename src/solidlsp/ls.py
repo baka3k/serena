@@ -357,7 +357,7 @@ class SolidLanguageServer(ABC):
         LS may return incomplete results on calls to `request_references` (only references found in the same file),
         if the LS is not fully initialized yet.
         """
-        return 0
+        return 2
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
