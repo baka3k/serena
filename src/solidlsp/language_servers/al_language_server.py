@@ -5,12 +5,10 @@ import os
 import platform
 import time
 from pathlib import Path
-from typing import Any
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
-from solidlsp.ls_types import Location
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -35,6 +33,7 @@ class ALLanguageServer(SolidLanguageServer):
             logger: Logger instance for debugging
             repository_root_path: Root path of the AL project
             solidlsp_settings: Solid LSP settings
+
         """
         # Get the language server command
         cmd = self._get_language_server_command(logger)
@@ -57,6 +56,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Raises:
             RuntimeError: If AL extension cannot be found
+
         """
         # Check if AL extension path is configured via environment variable
         al_extension_path = os.environ.get("AL_EXTENSION_PATH")
@@ -102,7 +102,7 @@ class ALLanguageServer(SolidLanguageServer):
         # Verify executable exists
         if not os.path.exists(executable):
             raise RuntimeError(
-                f"AL Language Server executable not found at: {executable}\n" f"Please ensure the AL extension is properly installed."
+                f"AL Language Server executable not found at: {executable}\nPlease ensure the AL extension is properly installed."
             )
 
         # Make sure executable has proper permissions on Unix-like systems
@@ -127,6 +127,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Returns:
             Path to AL extension directory or None if not found
+
         """
         home = Path.home()
         possible_paths = []
@@ -166,8 +167,8 @@ class ALLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the AL Language Server.
         """
-        import pathlib
         import os
+        import pathlib
 
         # Ensure we have an absolute path for URI generation
         repository_path = pathlib.Path(repository_absolute_path).resolve()
@@ -254,7 +255,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         def handle_al_notifications(params):
             # AL server sends custom notifications during project loading
-            self.logger.log(f"AL LSP: Notification received", logging.DEBUG)
+            self.logger.log("AL LSP: Notification received", logging.DEBUG)
 
         # Register handlers for AL-specific notifications
         self.server.on_notification("window/logMessage", window_log_message)
@@ -310,7 +311,6 @@ class ALLanguageServer(SolidLanguageServer):
         3. Open app.json to trigger project loading
         4. Wait for project to be loaded
         """
-        import json
         import time
         from pathlib import Path
 
@@ -350,7 +350,7 @@ class ALLanguageServer(SolidLanguageServer):
         app_json_path = Path(self.repository_root_path) / "app.json"
         if app_json_path.exists():
             try:
-                with open(app_json_path, "r", encoding="utf-8") as f:
+                with open(app_json_path, encoding="utf-8") as f:
                     app_json_content = f.read()
 
                 # Use forward slashes for URI
@@ -418,6 +418,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Returns:
             True if directory should be ignored
+
         """
         al_ignore_dirs = {
             ".alpackages",  # AL package cache
@@ -448,6 +449,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Returns:
             Full symbol tree with all AL symbols from opened files
+
         """
         import os
         from pathlib import Path
@@ -599,9 +601,10 @@ class ALLanguageServer(SolidLanguageServer):
 
         Returns:
             Tuple of (all symbols, root level symbols)
+
         """
-        from pathlib import Path
         import pathlib
+        from pathlib import Path
 
         self.logger.log(f"AL: Requesting document symbols for {relative_file_path}", level=5)
 
@@ -616,7 +619,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         try:
             # Read file content
-            with open(abs_path, "r", encoding="utf-8") as f:
+            with open(abs_path, encoding="utf-8") as f:
                 content = f.read()
 
             # Create URI - ensure consistent format
@@ -630,7 +633,7 @@ class ALLanguageServer(SolidLanguageServer):
                 "textDocument/didOpen", {"textDocument": {"uri": file_uri, "languageId": "al", "version": 1, "text": content}}
             )
 
-            self.logger.log(f"AL: File opened, waiting for processing", level=5)
+            self.logger.log("AL: File opened, waiting for processing", level=5)
 
             # Give server time to process the file
             import time
@@ -693,8 +696,6 @@ class ALLanguageServer(SolidLanguageServer):
 
     def _convert_lsp_symbol(self, lsp_symbol: dict) -> dict:
         """Convert LSP symbol format to Serena format."""
-        import lsprotocol.types as lsp_types
-
         # Extract basic info
         name = lsp_symbol.get("name", "")
         kind = lsp_symbol.get("kind", 0)
@@ -714,7 +715,7 @@ class ALLanguageServer(SolidLanguageServer):
             symbol_info["detail"] = lsp_symbol["detail"]
 
         # Add children if present
-        if "children" in lsp_symbol and lsp_symbol["children"]:
+        if lsp_symbol.get("children"):
             symbol_info["children"] = [self._convert_lsp_symbol(child) for child in lsp_symbol["children"]]
 
         return symbol_info
@@ -756,6 +757,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Returns:
             bool: True if project is loaded, False otherwise
+
         """
         if not hasattr(self, "server") or not self.server_started:
             self.logger.log("Cannot check project load - server not started", logging.DEBUG)
@@ -789,6 +791,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Returns:
             bool: True if project loaded within timeout, False otherwise
+
         """
         start_time = time.time()
         self.logger.log(f"Waiting for AL project to load (timeout: {timeout}s)...", logging.INFO)
@@ -812,6 +815,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         Args:
             workspace_uri: URI of workspace to set as active, or None to use repository root
+
         """
         if not hasattr(self, "server") or not self.server_started:
             self.logger.log("Cannot set active workspace - server not started", logging.DEBUG)

@@ -152,8 +152,6 @@ class TestALLanguageServer:
         has_table = any("Table" in s for s in al_symbols)
         has_page = any("Page" in s for s in al_symbols)
         has_codeunit = any("Codeunit" in s for s in al_symbols)
-        has_enum = any("Enum" in s for s in al_symbols)
-        has_interface = any("Interface" in s for s in al_symbols)
 
         assert has_table, f"No Table symbols found in: {al_symbols}"
         assert has_page, f"No Page symbols found in: {al_symbols}"
