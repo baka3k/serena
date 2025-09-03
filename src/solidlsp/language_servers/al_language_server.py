@@ -4,7 +4,10 @@ import logging
 import os
 import platform
 import time
+import zipfile
 from pathlib import Path
+
+import requests
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
@@ -35,8 +38,8 @@ class ALLanguageServer(SolidLanguageServer):
             solidlsp_settings: Solid LSP settings
 
         """
-        # Get the language server command
-        cmd = self._get_language_server_command(logger)
+        # Setup runtime dependencies and get the language server command
+        cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
         super().__init__(
             config,
@@ -47,7 +50,124 @@ class ALLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
 
-    def _get_language_server_command(self, logger: LanguageServerLogger) -> str:
+    @classmethod
+    def _download_al_extension(cls, logger: LanguageServerLogger, url: str, target_dir: str) -> bool:
+        """
+        Download and extract the AL extension from VS Code marketplace.
+
+        Returns:
+            True if successful, False otherwise
+
+        """
+        try:
+            logger.log(f"Downloading AL extension from {url}", logging.INFO)
+
+            # Create target directory
+            os.makedirs(target_dir, exist_ok=True)
+
+            # Download with proper headers
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/octet-stream, application/vsix, */*",
+            }
+
+            response = requests.get(url, headers=headers, stream=True, timeout=300)
+            response.raise_for_status()
+
+            # Save to temporary file
+            temp_file = os.path.join(target_dir, "al_extension_temp.vsix")
+            total_size = int(response.headers.get("content-length", 0))
+
+            logger.log(f"Downloading {total_size / 1024 / 1024:.1f} MB...", logging.INFO)
+
+            with open(temp_file, "wb") as f:
+                downloaded = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0 and downloaded % (10 * 1024 * 1024) == 0:  # Log progress every 10MB
+                            progress = (downloaded / total_size) * 100
+                            logger.log(f"Download progress: {progress:.1f}%", logging.INFO)
+
+            logger.log("Download complete, extracting...", logging.INFO)
+
+            # Extract VSIX (which is a ZIP file)
+            with zipfile.ZipFile(temp_file, "r") as zip_ref:
+                zip_ref.extractall(target_dir)
+
+            # Clean up temp file
+            os.remove(temp_file)
+
+            logger.log("AL extension extracted successfully", logging.INFO)
+            return True
+
+        except Exception as e:
+            logger.log(f"Error downloading/extracting AL extension: {e}", logging.ERROR)
+            return False
+
+    @classmethod
+    def _setup_runtime_dependencies(
+        cls, logger: LanguageServerLogger, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings
+    ) -> str:
+        """
+        Setup runtime dependencies for AL Language Server and return the command to start the server.
+        """
+        # Directory where the AL extension will be installed
+        al_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension")
+
+        # Determine platform-specific executable path within the extension
+        system = platform.system()
+        if system == "Windows":
+            executable_relative_path = os.path.join("extension", "bin", "win32", "Microsoft.Dynamics.Nav.EditorServices.Host.exe")
+        elif system == "Linux":
+            executable_relative_path = os.path.join("extension", "bin", "linux", "Microsoft.Dynamics.Nav.EditorServices.Host")
+        elif system == "Darwin":
+            executable_relative_path = os.path.join("extension", "bin", "darwin", "Microsoft.Dynamics.Nav.EditorServices.Host")
+        else:
+            raise RuntimeError(f"Unsupported platform: {system}")
+
+        executable_path = os.path.join(al_extension_dir, executable_relative_path)
+
+        # Check if the extension is already installed
+        if not os.path.exists(executable_path):
+            logger.log(f"AL Language Server not found at {executable_path}. Downloading from VS Code marketplace...", logging.INFO)
+
+            # AL extension version - using latest stable version
+            AL_VERSION = "latest"
+            url = f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/{AL_VERSION}/vspackage"
+
+            # Try to download the extension
+            if cls._download_al_extension(logger, url, al_extension_dir):
+                logger.log("AL Extension downloaded successfully.", logging.INFO)
+            else:
+                logger.log("Failed to download AL extension, falling back to manual search.", logging.WARNING)
+                # Fall back to the old method of finding the extension
+                return cls._get_language_server_command_fallback(logger)
+
+        # Verify executable exists after download
+        if not os.path.exists(executable_path):
+            logger.log("AL Language Server executable still not found after download. Falling back to manual search.", logging.WARNING)
+            return cls._get_language_server_command_fallback(logger)
+
+        # Make sure executable has proper permissions on Unix-like systems
+        if system in ["Linux", "Darwin"]:
+            import stat
+
+            st = os.stat(executable_path)
+            os.chmod(executable_path, st.st_mode | stat.S_IEXEC)
+
+        logger.log(f"Using AL Language Server executable: {executable_path}", level=5)
+
+        # The AL Language Server uses stdio for LSP communication (no --stdio flag needed)
+        # On Windows, we need to properly quote the path if it contains spaces
+        if system == "Windows" and " " in executable_path:
+            return f'"{executable_path}"'
+        else:
+            return executable_path
+
+    @classmethod
+    def _get_language_server_command_fallback(cls, logger: LanguageServerLogger) -> str:
         """
         Get the command to start the AL language server.
 
@@ -78,7 +198,7 @@ class ALLanguageServer(SolidLanguageServer):
                 logger.log(f"Found AL extension in current directory: {al_extension_path}", level=5)
             else:
                 # Try to find in common VS Code extension locations
-                al_extension_path = self._find_al_extension_in_vscode(logger)
+                al_extension_path = cls._find_al_extension_in_vscode(logger)
 
         if not al_extension_path:
             raise RuntimeError(
@@ -121,7 +241,8 @@ class ALLanguageServer(SolidLanguageServer):
         else:
             return executable
 
-    def _find_al_extension_in_vscode(self, logger: LanguageServerLogger) -> str | None:
+    @classmethod
+    def _find_al_extension_in_vscode(cls, logger: LanguageServerLogger) -> str | None:
         """
         Try to find AL extension in common VS Code extension locations.
 
