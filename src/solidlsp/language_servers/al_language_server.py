@@ -2,13 +2,17 @@
 
 import logging
 import os
+import pathlib
 import platform
+import stat
 import time
 import zipfile
 from pathlib import Path
 
 import requests
+from overrides import override
 
+from solidlsp.language_servers.common import quote_windows_path
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
@@ -142,73 +146,154 @@ class ALLanguageServer(SolidLanguageServer):
         Setup runtime dependencies for AL Language Server and return the command to start the server.
 
         This method handles the complete setup process:
-        1. Determines the correct platform-specific executable path
-        2. Checks if the AL extension is already installed
-        3. Downloads the extension from VS Code marketplace if needed
-        4. Configures executable permissions on Unix systems
-        5. Returns the properly formatted command string
+        1. Checks for existing AL extension installations
+        2. Downloads from VS Code marketplace if not found
+        3. Configures executable permissions on Unix systems
+        4. Returns the properly formatted command string
 
         The AL Language Server executable is located in different paths based on the platform:
-        - Windows: extension/bin/win32/Microsoft.Dynamics.Nav.EditorServices.Host.exe
-        - Linux: extension/bin/linux/Microsoft.Dynamics.Nav.EditorServices.Host
-        - macOS: extension/bin/darwin/Microsoft.Dynamics.Nav.EditorServices.Host
+        - Windows: bin/win32/Microsoft.Dynamics.Nav.EditorServices.Host.exe
+        - Linux: bin/linux/Microsoft.Dynamics.Nav.EditorServices.Host
+        - macOS: bin/darwin/Microsoft.Dynamics.Nav.EditorServices.Host
         """
-        # Directory where the AL extension will be installed
-        # This is typically ~/.serena/ls_resources/al-extension
+        system = platform.system()
+
+        # Find existing extension or download if needed
+        extension_path = cls._find_al_extension(logger, solidlsp_settings)
+        if extension_path is None:
+            logger.log("AL extension not found on disk, attempting to download...", logging.INFO)
+            extension_path = cls._download_and_install_al_extension(logger, solidlsp_settings)
+
+        if extension_path is None:
+            raise RuntimeError(
+                "Failed to locate or download AL Language Server. Please either:\n"
+                "1. Set AL_EXTENSION_PATH environment variable to the AL extension directory\n"
+                "2. Install the AL extension in VS Code (ms-dynamics-smb.al)\n"
+                "3. Ensure internet connection for automatic download"
+            )
+
+        # Build executable path based on platform
+        executable_path = cls._get_executable_path(extension_path, system)
+
+        if not os.path.exists(executable_path):
+            raise RuntimeError(f"AL Language Server executable not found at: {executable_path}")
+
+        # Prepare and return the executable command
+        return cls._prepare_executable(executable_path, system, logger)
+
+    @classmethod
+    def _find_al_extension(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str | None:
+        """
+        Find AL extension in various locations.
+
+        Search order:
+        1. Environment variable (AL_EXTENSION_PATH)
+        2. Default download location (~/.serena/ls_resources/al-extension)
+        3. VS Code installed extensions
+
+        Returns:
+            Path to AL extension directory or None if not found
+
+        """
+        # Check environment variable
+        env_path = os.environ.get("AL_EXTENSION_PATH")
+        if env_path and os.path.exists(env_path):
+            logger.log(f"Found AL extension via AL_EXTENSION_PATH: {env_path}", level=5)
+            return env_path
+        elif env_path:
+            logger.log(f"AL_EXTENSION_PATH set but directory not found: {env_path}", logging.WARNING)
+
+        # Check default download location
+        default_path = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension", "extension")
+        if os.path.exists(default_path):
+            logger.log(f"Found AL extension in default location: {default_path}", level=5)
+            return default_path
+
+        # Search VS Code extensions
+        vscode_path = cls._find_al_extension_in_vscode(logger)
+        if vscode_path:
+            logger.log(f"Found AL extension in VS Code: {vscode_path}", level=5)
+            return vscode_path
+
+        logger.log("AL extension not found in any known location", level=10)
+        return None
+
+    @classmethod
+    def _download_and_install_al_extension(cls, logger: LanguageServerLogger, solidlsp_settings: SolidLSPSettings) -> str | None:
+        """
+        Download and install AL extension from VS Code marketplace.
+
+        Returns:
+            Path to installed extension or None if download failed
+
+        """
         al_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension")
 
-        # Determine platform-specific executable path within the extension
-        # AL provides different binaries for each platform
-        system = platform.system()
+        # AL extension version - using latest stable version
+        AL_VERSION = "latest"
+        url = f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/{AL_VERSION}/vspackage"
+
+        logger.log(f"Downloading AL extension from: {url}", logging.INFO)
+
+        if cls._download_al_extension(logger, url, al_extension_dir):
+            extension_path = os.path.join(al_extension_dir, "extension")
+            if os.path.exists(extension_path):
+                logger.log("AL extension downloaded and installed successfully", logging.INFO)
+                return extension_path
+            else:
+                logger.log(f"Download completed but extension not found at: {extension_path}", logging.ERROR)
+        else:
+            logger.log("Failed to download AL extension from marketplace", logging.ERROR)
+
+        return None
+
+    @classmethod
+    def _get_executable_path(cls, extension_path: str, system: str) -> str:
+        """
+        Build platform-specific executable path.
+
+        Args:
+            extension_path: Path to AL extension directory
+            system: Operating system name
+
+        Returns:
+            Full path to executable
+
+        """
         if system == "Windows":
-            executable_relative_path = os.path.join("extension", "bin", "win32", "Microsoft.Dynamics.Nav.EditorServices.Host.exe")
+            return os.path.join(extension_path, "bin", "win32", "Microsoft.Dynamics.Nav.EditorServices.Host.exe")
         elif system == "Linux":
-            executable_relative_path = os.path.join("extension", "bin", "linux", "Microsoft.Dynamics.Nav.EditorServices.Host")
+            return os.path.join(extension_path, "bin", "linux", "Microsoft.Dynamics.Nav.EditorServices.Host")
         elif system == "Darwin":
-            executable_relative_path = os.path.join("extension", "bin", "darwin", "Microsoft.Dynamics.Nav.EditorServices.Host")
+            return os.path.join(extension_path, "bin", "darwin", "Microsoft.Dynamics.Nav.EditorServices.Host")
         else:
             raise RuntimeError(f"Unsupported platform: {system}")
 
-        executable_path = os.path.join(al_extension_dir, executable_relative_path)
+    @classmethod
+    def _prepare_executable(cls, executable_path: str, system: str, logger: LanguageServerLogger) -> str:
+        """
+        Prepare the executable by setting permissions and handling path quoting.
 
-        # Check if the extension is already installed
-        if not os.path.exists(executable_path):
-            logger.log(f"AL Language Server not found at {executable_path}. Downloading from VS Code marketplace...", logging.INFO)
+        Args:
+            executable_path: Path to the executable
+            system: Operating system name
+            logger: Logger instance
 
-            # AL extension version - using latest stable version
-            AL_VERSION = "latest"
-            url = f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/{AL_VERSION}/vspackage"
+        Returns:
+            Properly formatted command string
 
-            # Try to download the extension
-            if cls._download_al_extension(logger, url, al_extension_dir):
-                logger.log("AL Extension downloaded successfully.", logging.INFO)
-            else:
-                logger.log("Failed to download AL extension, falling back to manual search.", logging.WARNING)
-                # Fall back to the old method of finding the extension
-                return cls._get_language_server_command_fallback(logger)
-
-        # Verify executable exists after download
-        if not os.path.exists(executable_path):
-            logger.log("AL Language Server executable still not found after download. Falling back to manual search.", logging.WARNING)
-            return cls._get_language_server_command_fallback(logger)
-
+        """
         # Make sure executable has proper permissions on Unix-like systems
-        # This is crucial for Linux/macOS where downloaded files may not be executable
         if system in ["Linux", "Darwin"]:
-            import stat
-
             st = os.stat(executable_path)
             os.chmod(executable_path, st.st_mode | stat.S_IEXEC)
+            logger.log(f"Set execute permission on: {executable_path}", level=10)
 
         logger.log(f"Using AL Language Server executable: {executable_path}", level=5)
 
         # The AL Language Server uses stdio for LSP communication by default
-        # Unlike many other language servers, it doesn't require a --stdio flag
-        # On Windows, we need to properly quote the path if it contains spaces to avoid shell issues
-        if system == "Windows" and " " in executable_path:
-            return f'"{executable_path}"'
-        else:
-            return executable_path
+        # Use the utility function to handle Windows path quoting
+        return quote_windows_path(executable_path)
 
     @classmethod
     def _get_language_server_command_fallback(cls, logger: LanguageServerLogger) -> str:
@@ -271,19 +356,14 @@ class ALLanguageServer(SolidLanguageServer):
 
         # Make sure executable has proper permissions on Unix-like systems
         if system in ["Linux", "Darwin"]:
-            import stat
-
             st = os.stat(executable)
             os.chmod(executable, st.st_mode | stat.S_IEXEC)
 
         logger.log(f"Using AL Language Server executable: {executable}", level=5)
 
         # The AL Language Server uses stdio for LSP communication (no --stdio flag needed)
-        # On Windows, we need to properly quote the path if it contains spaces
-        if system == "Windows" and " " in executable:
-            return f'"{executable}"'
-        else:
-            return executable
+        # Use the utility function to handle Windows path quoting
+        return quote_windows_path(executable)
 
     @classmethod
     def _find_al_extension_in_vscode(cls, logger: LanguageServerLogger) -> str | None:
@@ -332,9 +412,6 @@ class ALLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the AL Language Server.
         """
-        import os
-        import pathlib
-
         # Ensure we have an absolute path for URI generation
         repository_path = pathlib.Path(repository_absolute_path).resolve()
         root_uri = repository_path.as_uri()
@@ -399,6 +476,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         return initialize_params
 
+    @override
     def _start_server(self):
         """
         Starts the AL Language Server process and initializes it.
@@ -407,7 +485,6 @@ class ALLanguageServer(SolidLanguageServer):
         before starting the server. The AL server sends various notifications
         during initialization and project loading that need to be handled.
         """
-        import logging
 
         # Set up event handlers
         def do_nothing(params):
@@ -456,6 +533,7 @@ class ALLanguageServer(SolidLanguageServer):
         self.server.send_notification("initialized", {})
         self.logger.log("Sent initialized notification", logging.INFO)
 
+    @override
     def start(self) -> "ALLanguageServer":
         """
         Start the AL Language Server with special initialization.
@@ -484,9 +562,6 @@ class ALLanguageServer(SolidLanguageServer):
         This special initialization sequence is unique to AL and necessary for proper
         symbol resolution and navigation features.
         """
-        import time
-        from pathlib import Path
-
         # Give the server a moment to fully initialize
         time.sleep(1)
 
@@ -589,6 +664,7 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log("Project loaded, waiting for symbol indexing", level=5)
             time.sleep(2)
 
+    @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         """
         Define AL-specific directories to ignore during file scanning.
@@ -619,6 +695,7 @@ class ALLanguageServer(SolidLanguageServer):
         # Check parent class ignore list first, then AL-specific
         return super().is_ignored_dirname(dirname) or dirname in al_ignore_dirs
 
+    @override
     def request_full_symbol_tree(self, within_relative_path: str | None = None, include_body: bool = False) -> list[dict]:
         """
         Override to handle AL's requirement of opening files before requesting symbols.
@@ -642,9 +719,6 @@ class ALLanguageServer(SolidLanguageServer):
             Full symbol tree with all AL symbols from opened files organized by directory
 
         """
-        import os
-        from pathlib import Path
-
         self.logger.log("AL: Starting request_full_symbol_tree with file opening", level=5)
 
         # Determine the root path for scanning
@@ -781,6 +855,7 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log("AL: No symbols found in any files", level=3)
             return []
 
+    @override
     def request_document_symbols(self, relative_file_path: str, include_body: bool = False) -> tuple[list[dict], list[dict]]:
         """
         Override to handle AL's requirement of opening files before requesting symbols.
@@ -802,9 +877,6 @@ class ALLanguageServer(SolidLanguageServer):
             Tuple of (all symbols including nested, root level symbols only)
 
         """
-        import pathlib
-        from pathlib import Path
-
         self.logger.log(f"AL: Requesting document symbols for {relative_file_path}", level=5)
 
         # Convert relative path to absolute, handling both forward and backslashes
@@ -851,7 +923,7 @@ class ALLanguageServer(SolidLanguageServer):
                     if isinstance(response, list):
                         # Response is a list of symbols
                         for symbol in response:
-                            symbol_info = self._convert_lsp_symbol(symbol)
+                            symbol_info = self._convert_lsp_symbol_to_solidlsp(symbol)
                             all_symbols.append(symbol_info)
                             root_symbols.append(symbol_info)
 
@@ -888,8 +960,8 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log(f"AL: Error in request_document_symbols: {e}", level=3)
             return ([], [])
 
-    def _convert_lsp_symbol(self, lsp_symbol: dict) -> dict:
-        """Convert LSP symbol format to Serena format."""
+    def _convert_lsp_symbol_to_solidlsp(self, lsp_symbol: dict) -> dict:
+        """Convert standard LSP symbol format to SolidLSP internal format."""
         # Extract basic info
         name = lsp_symbol.get("name", "")
         kind = lsp_symbol.get("kind", 0)
@@ -910,14 +982,14 @@ class ALLanguageServer(SolidLanguageServer):
 
         # Add children if present
         if lsp_symbol.get("children"):
-            symbol_info["children"] = [self._convert_lsp_symbol(child) for child in lsp_symbol["children"]]
+            symbol_info["children"] = [self._convert_lsp_symbol_to_solidlsp(child) for child in lsp_symbol["children"]]
 
         return symbol_info
 
     def _process_child_symbols(self, children: list, all_symbols: list) -> None:
         """Recursively process child symbols."""
         for child in children:
-            child_info = self._convert_lsp_symbol(child)
+            child_info = self._convert_lsp_symbol_to_solidlsp(child)
             all_symbols.append(child_info)
 
             if "children" in child:
@@ -925,6 +997,7 @@ class ALLanguageServer(SolidLanguageServer):
 
     # ===== Phase 1: Custom AL Command Implementations =====
 
+    @override
     def _send_definition_request(self, definition_params: DefinitionParams) -> Definition | list[LocationLink] | None:
         """
         Override to use AL's custom gotodefinition command.
