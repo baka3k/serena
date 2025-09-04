@@ -23,6 +23,13 @@ class ALLanguageServer(SolidLanguageServer):
 
     This implementation uses the AL Language Server from the VS Code AL extension
     (ms-dynamics-smb.al). The extension must be installed or available locally.
+
+    Key Features:
+    - Automatic download of AL extension from VS Code marketplace if not present
+    - Platform-specific executable detection (Windows/Linux/macOS)
+    - Special initialization sequence required by AL Language Server
+    - Custom AL-specific LSP commands (al/gotodefinition, al/setActiveWorkspace)
+    - File opening requirement before symbol retrieval
     """
 
     def __init__(
@@ -34,11 +41,18 @@ class ALLanguageServer(SolidLanguageServer):
         Args:
             config: Language server configuration
             logger: Logger instance for debugging
-            repository_root_path: Root path of the AL project
+            repository_root_path: Root path of the AL project (must contain app.json)
             solidlsp_settings: Solid LSP settings
+
+        Note:
+            The initialization process will automatically:
+            1. Check for AL extension in the resources directory
+            2. Download it from VS Code marketplace if not found
+            3. Extract and configure the platform-specific executable
 
         """
         # Setup runtime dependencies and get the language server command
+        # This will download the AL extension if needed
         cmd = self._setup_runtime_dependencies(logger, config, solidlsp_settings)
 
         super().__init__(
@@ -55,17 +69,30 @@ class ALLanguageServer(SolidLanguageServer):
         """
         Download and extract the AL extension from VS Code marketplace.
 
+        The VS Code marketplace packages extensions as .vsix files (which are ZIP archives).
+        This method downloads the VSIX file and extracts it to get the language server binaries.
+
+        Args:
+            logger: Logger for tracking download progress
+            url: VS Code marketplace URL for the AL extension
+            target_dir: Directory where the extension will be extracted
+
         Returns:
             True if successful, False otherwise
+
+        Note:
+            The download includes progress tracking and proper user-agent headers
+            to ensure compatibility with the VS Code marketplace.
 
         """
         try:
             logger.log(f"Downloading AL extension from {url}", logging.INFO)
 
-            # Create target directory
+            # Create target directory for the extension
             os.makedirs(target_dir, exist_ok=True)
 
-            # Download with proper headers
+            # Download with proper headers to mimic VS Code marketplace client
+            # These headers are required for the marketplace to serve the VSIX file
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "application/octet-stream, application/vsix, */*",
@@ -74,7 +101,7 @@ class ALLanguageServer(SolidLanguageServer):
             response = requests.get(url, headers=headers, stream=True, timeout=300)
             response.raise_for_status()
 
-            # Save to temporary file
+            # Save to temporary VSIX file (will be deleted after extraction)
             temp_file = os.path.join(target_dir, "al_extension_temp.vsix")
             total_size = int(response.headers.get("content-length", 0))
 
@@ -92,7 +119,8 @@ class ALLanguageServer(SolidLanguageServer):
 
             logger.log("Download complete, extracting...", logging.INFO)
 
-            # Extract VSIX (which is a ZIP file)
+            # Extract VSIX file (VSIX files are just ZIP archives with a different extension)
+            # This will extract the extension folder containing the language server binaries
             with zipfile.ZipFile(temp_file, "r") as zip_ref:
                 zip_ref.extractall(target_dir)
 
@@ -112,11 +140,25 @@ class ALLanguageServer(SolidLanguageServer):
     ) -> str:
         """
         Setup runtime dependencies for AL Language Server and return the command to start the server.
+
+        This method handles the complete setup process:
+        1. Determines the correct platform-specific executable path
+        2. Checks if the AL extension is already installed
+        3. Downloads the extension from VS Code marketplace if needed
+        4. Configures executable permissions on Unix systems
+        5. Returns the properly formatted command string
+
+        The AL Language Server executable is located in different paths based on the platform:
+        - Windows: extension/bin/win32/Microsoft.Dynamics.Nav.EditorServices.Host.exe
+        - Linux: extension/bin/linux/Microsoft.Dynamics.Nav.EditorServices.Host
+        - macOS: extension/bin/darwin/Microsoft.Dynamics.Nav.EditorServices.Host
         """
         # Directory where the AL extension will be installed
+        # This is typically ~/.serena/ls_resources/al-extension
         al_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension")
 
         # Determine platform-specific executable path within the extension
+        # AL provides different binaries for each platform
         system = platform.system()
         if system == "Windows":
             executable_relative_path = os.path.join("extension", "bin", "win32", "Microsoft.Dynamics.Nav.EditorServices.Host.exe")
@@ -151,6 +193,7 @@ class ALLanguageServer(SolidLanguageServer):
             return cls._get_language_server_command_fallback(logger)
 
         # Make sure executable has proper permissions on Unix-like systems
+        # This is crucial for Linux/macOS where downloaded files may not be executable
         if system in ["Linux", "Darwin"]:
             import stat
 
@@ -159,8 +202,9 @@ class ALLanguageServer(SolidLanguageServer):
 
         logger.log(f"Using AL Language Server executable: {executable_path}", level=5)
 
-        # The AL Language Server uses stdio for LSP communication (no --stdio flag needed)
-        # On Windows, we need to properly quote the path if it contains spaces
+        # The AL Language Server uses stdio for LSP communication by default
+        # Unlike many other language servers, it doesn't require a --stdio flag
+        # On Windows, we need to properly quote the path if it contains spaces to avoid shell issues
         if system == "Windows" and " " in executable_path:
             return f'"{executable_path}"'
         else:
@@ -358,6 +402,10 @@ class ALLanguageServer(SolidLanguageServer):
     def _start_server(self):
         """
         Starts the AL Language Server process and initializes it.
+
+        This method sets up custom notification handlers for AL-specific messages
+        before starting the server. The AL server sends various notifications
+        during initialization and project loading that need to be handled.
         """
         import logging
 
@@ -379,10 +427,11 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log("AL LSP: Notification received", logging.DEBUG)
 
         # Register handlers for AL-specific notifications
-        self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_notification("textDocument/publishDiagnostics", publish_diagnostics)
-        self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("al/refreshExplorerObjects", handle_al_notifications)
+        # These notifications are sent by the AL server during initialization and operation
+        self.server.on_notification("window/logMessage", window_log_message)  # Server log messages
+        self.server.on_notification("textDocument/publishDiagnostics", publish_diagnostics)  # Compilation diagnostics
+        self.server.on_notification("$/progress", do_nothing)  # Progress notifications during loading
+        self.server.on_notification("al/refreshExplorerObjects", handle_al_notifications)  # AL-specific object updates
 
         # Start the server process
         self.logger.log("Starting AL Language Server process", logging.INFO)
@@ -427,10 +476,13 @@ class ALLanguageServer(SolidLanguageServer):
         Post-initialization setup for AL Language Server.
 
         The AL server requires additional setup after initialization:
-        1. Set the active workspace
-        2. Send workspace configuration
-        3. Open app.json to trigger project loading
-        4. Wait for project to be loaded
+        1. Set the active workspace - tells AL which project to work with
+        2. Send workspace configuration - provides AL settings and paths
+        3. Open app.json to trigger project loading - AL uses app.json to identify project structure
+        4. Wait for project to be loaded - ensures symbols are indexed before operations
+
+        This special initialization sequence is unique to AL and necessary for proper
+        symbol resolution and navigation features.
         """
         import time
         from pathlib import Path
@@ -439,6 +491,7 @@ class ALLanguageServer(SolidLanguageServer):
         time.sleep(1)
 
         # Send workspace configuration first
+        # This tells AL about assembly paths, package caches, and code analysis settings
         try:
             self.server.send_notification(
                 "workspace/didChangeConfiguration",
@@ -468,6 +521,8 @@ class ALLanguageServer(SolidLanguageServer):
             self.logger.log(f"Failed to send workspace config: {e}", level=3)
 
         # Check if app.json exists and open it
+        # app.json is the AL project manifest file (similar to package.json for Node.js)
+        # Opening it triggers AL to load the project and index all AL files
         app_json_path = Path(self.repository_root_path) / "app.json"
         if app_json_path.exists():
             try:
@@ -487,7 +542,8 @@ class ALLanguageServer(SolidLanguageServer):
             except Exception as e:
                 self.logger.log(f"Failed to open app.json: {e}", level=3)
 
-        # Try to set active workspace (AL-specific request)
+        # Try to set active workspace (AL-specific custom LSP request)
+        # This is important when multiple AL projects are open
         workspace_uri = Path(self.repository_root_path).resolve().as_uri()
         try:
             result = self.server.send_request(
@@ -520,19 +576,25 @@ class ALLanguageServer(SolidLanguageServer):
             # This is a custom AL request, might not be critical
             self.logger.log(f"Failed to set active workspace: {e}", level=3)
 
-        # Wait for project to be loaded using our new method
+        # Wait for project to be loaded using AL's custom load check
+        # The AL server needs time to parse all AL files and build its symbol index
         if not self._wait_for_project_load(timeout=30):
             # Even if not confirmed loaded, give it extra time to index
+            # Some large projects may take longer to fully index
             self.logger.log("Project load not confirmed, waiting additional time for AL workspace indexing", level=5)
             time.sleep(5)
         else:
-            # Even when loaded, give a bit more time for symbol indexing
+            # Even when loaded, give a bit more time for symbol indexing to complete
+            # This ensures all symbols are available for navigation
             self.logger.log("Project loaded, waiting for symbol indexing", level=5)
             time.sleep(2)
 
     def is_ignored_dirname(self, dirname: str) -> bool:
         """
         Define AL-specific directories to ignore during file scanning.
+
+        These directories contain generated files, dependencies, or cache data
+        that should not be analyzed for symbols.
 
         Args:
             dirname: Directory name to check
@@ -542,16 +604,16 @@ class ALLanguageServer(SolidLanguageServer):
 
         """
         al_ignore_dirs = {
-            ".alpackages",  # AL package cache
-            ".alcache",  # AL compiler cache
-            ".altemplates",  # AL templates
-            ".snapshots",  # Test snapshots
-            "out",  # Compiled output
-            ".vscode",  # VS Code settings
-            "Reference",  # Reference assemblies
-            ".netpackages",  # .NET packages
-            "bin",  # Binary output
-            "obj",  # Object files
+            ".alpackages",  # AL package cache - downloaded dependencies
+            ".alcache",  # AL compiler cache - intermediate compilation files
+            ".altemplates",  # AL templates - code generation templates
+            ".snapshots",  # Test snapshots - test result snapshots
+            "out",  # Compiled output - generated .app files
+            ".vscode",  # VS Code settings - editor configuration
+            "Reference",  # Reference assemblies - .NET dependencies
+            ".netpackages",  # .NET packages - NuGet packages for AL
+            "bin",  # Binary output - compiled binaries
+            "obj",  # Object files - intermediate build artifacts
         }
 
         # Check parent class ignore list first, then AL-specific
@@ -563,13 +625,21 @@ class ALLanguageServer(SolidLanguageServer):
 
         The AL Language Server requires files to be explicitly opened via textDocument/didOpen
         before it can provide meaningful symbols. Without this, it only returns directory symbols.
+        This is different from most language servers which can provide symbols for unopened files.
+
+        This method:
+        1. Scans the repository for all AL files (.al and .dal extensions)
+        2. Opens each file with the AL server
+        3. Requests symbols for each file
+        4. Combines all symbols into a hierarchical tree structure
+        5. Closes the files to free resources
 
         Args:
             within_relative_path: Restrict search to this file or directory path
             include_body: Whether to include symbol body content
 
         Returns:
-            Full symbol tree with all AL symbols from opened files
+            Full symbol tree with all AL symbols from opened files organized by directory
 
         """
         import os
@@ -716,12 +786,20 @@ class ALLanguageServer(SolidLanguageServer):
         Override to handle AL's requirement of opening files before requesting symbols.
         Uses direct LSP request to ensure exact URI matching.
 
+        The AL server requires an exact sequence:
+        1. Open the file with textDocument/didOpen
+        2. Wait for the server to process the file
+        3. Request symbols with textDocument/documentSymbol
+        4. Close the file with textDocument/didClose
+
+        URI matching must be exact - any mismatch will result in empty symbols.
+
         Args:
             relative_file_path: Relative path to the file within the repository
             include_body: Whether to include the body of symbols
 
         Returns:
-            Tuple of (all symbols, root level symbols)
+            Tuple of (all symbols including nested, root level symbols only)
 
         """
         import pathlib
@@ -754,12 +832,7 @@ class ALLanguageServer(SolidLanguageServer):
                 "textDocument/didOpen", {"textDocument": {"uri": file_uri, "languageId": "al", "version": 1, "text": content}}
             )
 
-            self.logger.log("AL: File opened, waiting for processing", level=5)
-
-            # Give server time to process the file
-            import time
-
-            time.sleep(0.5)  # Increased wait time
+            self.logger.log("AL: File opened, requesting symbols immediately", level=5)
 
             # Now request symbols using direct LSP request with exact same URI
             self.logger.log(f"AL: Requesting symbols with URI: {file_uri}", level=5)
@@ -857,7 +930,11 @@ class ALLanguageServer(SolidLanguageServer):
         Override to use AL's custom gotodefinition command.
 
         AL Language Server uses 'al/gotodefinition' instead of the standard
-        'textDocument/definition' request.
+        'textDocument/definition' request. This custom command provides better
+        navigation for AL-specific constructs like table extensions, page extensions,
+        and codeunit references.
+
+        If the custom command fails, we fall back to the standard LSP method.
         """
         # Convert standard params to AL format (same structure, different method)
         al_params = {"textDocument": definition_params["textDocument"], "position": definition_params["position"]}
@@ -875,6 +952,11 @@ class ALLanguageServer(SolidLanguageServer):
     def check_project_loaded(self) -> bool:
         """
         Check if AL project closure is fully loaded.
+
+        Uses AL's custom 'al/hasProjectClosureLoadedRequest' to determine if
+        the project and all its dependencies have been fully loaded and indexed.
+        This is important because AL operations may fail or return incomplete
+        results if the project is still loading.
 
         Returns:
             bool: True if project is loaded, False otherwise
@@ -907,8 +989,12 @@ class ALLanguageServer(SolidLanguageServer):
         """
         Wait for project to be fully loaded.
 
+        Polls the AL server repeatedly to check if the project is loaded.
+        This is necessary because AL project loading is asynchronous and can
+        take significant time for large projects with many dependencies.
+
         Args:
-            timeout: Maximum time to wait in seconds
+            timeout: Maximum time to wait in seconds (default 30s)
 
         Returns:
             bool: True if project loaded within timeout, False otherwise
@@ -932,7 +1018,11 @@ class ALLanguageServer(SolidLanguageServer):
         Set the active AL workspace.
 
         This is important when multiple workspaces exist to ensure operations
-        target the correct workspace.
+        target the correct workspace. The AL server can handle multiple projects
+        simultaneously, but only one can be "active" at a time for operations
+        like symbol search and navigation.
+
+        This uses the custom 'al/setActiveWorkspace' LSP command.
 
         Args:
             workspace_uri: URI of workspace to set as active, or None to use repository root
