@@ -96,6 +96,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * Nix (requires nixd installation)
   * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
+  * AL
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).
