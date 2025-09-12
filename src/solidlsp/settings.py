@@ -4,7 +4,8 @@ Defines settings for Solid-LSP
 
 import os
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -19,6 +20,8 @@ class SolidLSPSettings:
     For instance, if this is ".solidlsp" and the project is located at "/home/user/myproject",
     then Solid-LSP will store project-specific data in "/home/user/myproject/.solidlsp".
     """
+    ls_specific_settings: dict[str, Any] = field(default_factory=dict)
+    """Mapping from language server class names to any specifics that the language server may make use of."""
 
     def __post_init__(self):
         os.makedirs(str(self.solidlsp_dir), exist_ok=True)
