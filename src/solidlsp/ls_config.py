@@ -182,6 +182,10 @@ class Language(str, Enum):
 
                 return Gopls
             case self.RUBY:
+                from solidlsp.language_servers.ruby_lsp import RubyLsp
+
+                return RubyLsp
+            case self.RUBY_SOLARGRAPH:
                 from solidlsp.language_servers.solargraph import Solargraph
 
                 return Solargraph
