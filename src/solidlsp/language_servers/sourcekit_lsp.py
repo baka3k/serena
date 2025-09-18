@@ -366,7 +366,10 @@ class SourceKitLSP(SolidLanguageServer):
                 # Fallback if initialization timestamp is missing
                 remaining_delay = 15 if os.getenv("CI") else 5
 
-            self.logger.log(f"Sleeping {remaining_delay:.1f}s before requesting references for the first time (CI needs extra indexing time)", logging.INFO)
+            self.logger.log(
+                f"Sleeping {remaining_delay:.1f}s before requesting references for the first time (CI needs extra indexing time)",
+                logging.INFO,
+            )
             time.sleep(remaining_delay)
             self._did_sleep_before_requesting_references = True
 
