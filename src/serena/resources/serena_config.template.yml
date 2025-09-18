@@ -38,7 +38,27 @@ ls_specific_settings: {}
 # Advanced configuration option allowing to configure language server implementation specific options. Maps the language
 # (same entry as in project.yml) to the options.
 # Have a look at the docstring of the constructors of the LS implementations within solidlsp to see which options are available.
-# No documentation on options means no options are available
+# No documentation on options means no options are available.
+#
+# Example: add ARM64 runtime dependencies for the C# language server
+# ls_specific_settings:
+#   csharp:
+#     runtime_dependencies:
+#       - id: "DotNetRuntime"
+#         platform_id: "linux-arm64"
+#         url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-linux-arm64.tar.gz"
+#         archive_type: "tar.gz"
+#         binary_name: "dotnet"
+#         description: ".NET 9 Runtime for Linux (ARM64)"
+#       - id: "CSharpLanguageServer"
+#         platform_id: "linux-arm64"
+#         package_name: "Microsoft.CodeAnalysis.LanguageServer.linux-arm64"
+#         package_version: "5.0.0-1.25329.6"
+#         archive_type: "nupkg"
+#         binary_name: "Microsoft.CodeAnalysis.LanguageServer.dll"
+#         extract_path: "content/LanguageServer/linux-arm64"
+#         description: "Microsoft.CodeAnalysis.LanguageServer for Linux (ARM64)"
+#     dotnet_runtime_url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-linux-arm64.tar.gz"
 
 tool_timeout: 240
 # timeout, in seconds, after which tool executions are terminated

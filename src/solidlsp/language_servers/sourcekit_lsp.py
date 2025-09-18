@@ -62,6 +62,7 @@ class SourceKitLSP(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.request_id = 0
         self._did_sleep_before_requesting_references = False
+        self._initialization_timestamp = None
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
@@ -345,6 +346,9 @@ class SourceKitLSP(SolidLanguageServer):
         self.server_ready.set()
         self.server_ready.wait()
 
+        # Mark initialization timestamp for smarter delay calculation
+        self._initialization_timestamp = time.time()
+
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
         # SourceKit LSP needs a short initialization period after startup
@@ -352,7 +356,17 @@ class SourceKitLSP(SolidLanguageServer):
         # prevents race conditions where references might not be available yet.
         # Unfortunately, sourcekit doesn't send a signal when it's really ready
         if not self._did_sleep_before_requesting_references:
-            self.logger.log("Sleeping 5s before requesting references for the first time", logging.DEBUG)
-            time.sleep(5)
+            # Calculate minimum delay based on how much time has passed since initialization
+            if self._initialization_timestamp:
+                elapsed = time.time() - self._initialization_timestamp
+                # Base delay: 5s local, 10s CI, minus elapsed time (minimum 1s)
+                base_delay = 10 if os.getenv("CI") else 5
+                remaining_delay = max(1, base_delay - elapsed)
+            else:
+                # Fallback if initialization timestamp is missing
+                remaining_delay = 10 if os.getenv("CI") else 5
+
+            self.logger.log(f"Sleeping {remaining_delay:.1f}s before requesting references for the first time", logging.DEBUG)
+            time.sleep(remaining_delay)
             self._did_sleep_before_requesting_references = True
         return super().request_references(relative_file_path, line, column)

@@ -109,6 +109,14 @@ RUNTIME_DEPENDENCIES = [
     ),
     RuntimeDependency(
         id="DotNetRuntime",
+        description=".NET 9 Runtime for Linux (ARM64)",
+        url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-linux-arm64.tar.gz",
+        platform_id="linux-arm64",
+        archive_type="tar.gz",
+        binary_name="dotnet",
+    ),
+    RuntimeDependency(
+        id="DotNetRuntime",
         description=".NET 9 Runtime for macOS (x64)",
         url="https://builds.dotnet.microsoft.com/dotnet/Runtime/9.0.6/dotnet-runtime-9.0.6-osx-x64.tar.gz",
         platform_id="osx-x64",
@@ -176,7 +184,8 @@ class CSharpLanguageServer(SolidLanguageServer):
     This is the official Roslyn-based language server from Microsoft.
 
     You can pass the following entries in ls_specific_settings["csharp"]:
-        - dotnet_runtime_url: will override the URL from RUNTIME_DEPENDENCIES
+        - dotnet_runtime_url: overrides the .NET runtime download URL
+        - runtime_dependencies: list of dependency definitions merged with RUNTIME_DEPENDENCIES
     """
 
     def __init__(
@@ -230,7 +239,62 @@ class CSharpLanguageServer(SolidLanguageServer):
         Returns a tuple of (dotnet_path, language_server_dll_path).
         """
         runtime_id = CSharpLanguageServer._get_runtime_id()
-        lang_server_dep, dotnet_runtime_dep = CSharpLanguageServer._get_runtime_dependencies(runtime_id)
+
+        from solidlsp.runtime_config import RuntimeDependencyLoader
+
+        language_enum = cls.get_language_enum_instance()
+        ls_specific_settings = solidlsp_settings.ls_specific_settings or {}
+        language_specific_config = ls_specific_settings.get(language_enum)
+        if language_specific_config is None:
+            language_specific_config = ls_specific_settings.get(str(language_enum))
+
+        runtime_overrides = None
+        if isinstance(language_specific_config, dict):
+            runtime_overrides = cast(list[dict[str, object]] | None, language_specific_config.get("runtime_dependencies"))
+
+        logger.log("Resolving runtime dependencies", logging.DEBUG)
+        if language_specific_config is not None:
+            logger.log(
+                f"Language-specific config for {language_enum}: {language_specific_config}",
+                logging.DEBUG,
+            )
+
+        all_dependencies = RuntimeDependencyLoader.load_dependencies(
+            base_dependencies=RUNTIME_DEPENDENCIES,
+            override_entries=runtime_overrides,
+        )
+
+        logger.log(
+            f"Available runtime dependencies: {[(dep.id, dep.platform_id) for dep in all_dependencies]}",
+            logging.DEBUG,
+        )
+
+        # Find the dependencies for our platform
+        lang_server_dep = None
+        dotnet_runtime_dep = None
+
+        for dep in all_dependencies:
+            logger.log(
+                f"Inspecting dependency {dep.id} for platform {dep.platform_id}",
+                logging.DEBUG,
+            )
+            if dep.id == "CSharpLanguageServer" and dep.platform_id == runtime_id:
+                lang_server_dep = dep
+            elif dep.id == "DotNetRuntime" and dep.platform_id == runtime_id:
+                dotnet_runtime_dep = dep
+
+        if not lang_server_dep:
+            logger.log(
+                f"No C# language server dependency matched runtime {runtime_id}",
+                logging.ERROR,
+            )
+            raise SolidLSPException(f"No C# language server dependency found for platform {runtime_id}")
+        if not dotnet_runtime_dep:
+            logger.log(
+                f"No .NET runtime dependency matched runtime {runtime_id}",
+                logging.ERROR,
+            )
+            raise SolidLSPException(f"No .NET runtime dependency found for platform {runtime_id}")
         dotnet_path = CSharpLanguageServer._ensure_dotnet_runtime(logger, dotnet_runtime_dep, solidlsp_settings)
         server_dll_path = CSharpLanguageServer._ensure_language_server(logger, lang_server_dep, solidlsp_settings)
 
@@ -250,25 +314,6 @@ class CSharpLanguageServer(SolidLanguageServer):
             return "linux-x64" if machine in ["x86_64", "amd64"] else "linux-arm64"
         else:
             raise SolidLSPException(f"Unsupported platform: {system} {machine}")
-
-    @staticmethod
-    def _get_runtime_dependencies(runtime_id: str) -> tuple[RuntimeDependency, RuntimeDependency]:
-        """Get the language server and .NET runtime dependencies for the platform."""
-        lang_server_dep = None
-        dotnet_runtime_dep = None
-
-        for dep in RUNTIME_DEPENDENCIES:
-            if dep.id == "CSharpLanguageServer" and dep.platform_id == runtime_id:
-                lang_server_dep = dep
-            elif dep.id == "DotNetRuntime" and dep.platform_id == runtime_id:
-                dotnet_runtime_dep = dep
-
-        if not lang_server_dep:
-            raise SolidLSPException(f"No C# language server dependency found for platform {runtime_id}")
-        if not dotnet_runtime_dep:
-            raise SolidLSPException(f"No .NET runtime dependency found for platform {runtime_id}")
-
-        return lang_server_dep, dotnet_runtime_dep
 
     @classmethod
     def _ensure_dotnet_runtime(
