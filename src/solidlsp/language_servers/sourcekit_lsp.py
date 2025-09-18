@@ -351,22 +351,32 @@ class SourceKitLSP(SolidLanguageServer):
 
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
-        # SourceKit LSP needs a short initialization period after startup
+        # SourceKit LSP needs initialization + indexing time after startup
         # before it can provide accurate reference information. This sleep
         # prevents race conditions where references might not be available yet.
-        # Unfortunately, sourcekit doesn't send a signal when it's really ready
+        # CI environments need extra time for project indexing and cross-file analysis
         if not self._did_sleep_before_requesting_references:
             # Calculate minimum delay based on how much time has passed since initialization
             if self._initialization_timestamp:
                 elapsed = time.time() - self._initialization_timestamp
-                # Base delay: 5s local, 10s CI, minus elapsed time (minimum 1s)
-                base_delay = 10 if os.getenv("CI") else 5
-                remaining_delay = max(1, base_delay - elapsed)
+                # Increased CI delay for project indexing: 15s CI, 5s local
+                base_delay = 15 if os.getenv("CI") else 5
+                remaining_delay = max(2, base_delay - elapsed)
             else:
                 # Fallback if initialization timestamp is missing
-                remaining_delay = 10 if os.getenv("CI") else 5
+                remaining_delay = 15 if os.getenv("CI") else 5
 
-            self.logger.log(f"Sleeping {remaining_delay:.1f}s before requesting references for the first time", logging.DEBUG)
+            self.logger.log(f"Sleeping {remaining_delay:.1f}s before requesting references for the first time (CI needs extra indexing time)", logging.INFO)
             time.sleep(remaining_delay)
             self._did_sleep_before_requesting_references = True
-        return super().request_references(relative_file_path, line, column)
+
+        # Get references with retry logic for CI stability
+        references = super().request_references(relative_file_path, line, column)
+
+        # In CI, if no references found, retry once after additional delay
+        if os.getenv("CI") and not references:
+            self.logger.log("No references found in CI - retrying after additional 5s delay", logging.INFO)
+            time.sleep(5)
+            references = super().request_references(relative_file_path, line, column)
+
+        return references
