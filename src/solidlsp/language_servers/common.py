@@ -5,7 +5,6 @@ import os
 import platform
 import subprocess
 from collections.abc import Iterable, Mapping, Sequence
-from copy import copy
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
@@ -56,9 +55,7 @@ class RuntimeDependencyCollection:
                 new_runtime_dep = RuntimeDependency(**dep_values_override)
                 self._id_and_platform_id_to_dep[override_key] = new_runtime_dep
             else:
-                updated_dep = copy(base_dep)
-                replace(updated_dep, **dep_values_override)
-                self._id_and_platform_id_to_dep[override_key] = updated_dep
+                self._id_and_platform_id_to_dep[override_key] = replace(base_dep, **dep_values_override)
 
     def get_dependencies_for_platform(self, platform_id: str) -> list[RuntimeDependency]:
         return [d for d in self._id_and_platform_id_to_dep.values() if d.platform_id in (platform_id, "any", "platform-agnostic", None)]
