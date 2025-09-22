@@ -5,7 +5,10 @@ Defines settings for Solid-LSP
 import os
 import pathlib
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from solidlsp.ls_config import Language
 
 
 @dataclass
@@ -20,8 +23,12 @@ class SolidLSPSettings:
     For instance, if this is ".solidlsp" and the project is located at "/home/user/myproject",
     then Solid-LSP will store project-specific data in "/home/user/myproject/.solidlsp".
     """
-    ls_specific_settings: dict[str, Any] = field(default_factory=dict)
-    """Mapping from language server class names to any specifics that the language server may make use of."""
+    ls_specific_settings: dict["Language", Any] = field(default_factory=dict)
+    """
+    Advanced configuration option allowing to configure language server implementation specific options.
+    Have a look at the docstring of the constructors of the corresponding LS implementations within solidlsp to see which options are available.
+    No documentation on options means no options are available.
+    """
 
     def __post_init__(self):
         os.makedirs(str(self.solidlsp_dir), exist_ok=True)
