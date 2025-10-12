@@ -96,6 +96,7 @@ With Serena, we provide direct, out-of-the-box support for:
   * Nix (requires nixd installation)
   * Elixir (requires installation of NextLS and Elixir; **Windows not supported**)
   * Erlang (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
+  * Perl (requires installation of Perl::LanguageServer)
   * AL
   * Markdown (automatically downloads marksman if not installed, experimental, must be explicitly specified via `--language markdown` when generating project config - primarily useful for documentation-heavy projects)
 
