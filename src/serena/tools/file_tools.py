@@ -339,9 +339,11 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: optional glob pattern specifying files to include in the search.
             Matches against relative file paths from the project root (e.g., "*.py", "src/**/*.ts").
+            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
             Only matches files, not directories. If left empty, all non-ignored files will be included.
         :param paths_exclude_glob: optional glob pattern specifying files to exclude from the search.
             Matches against relative file paths from the project root (e.g., "*test*", "**/*_generated.py").
+            Supports standard glob patterns (*, ?, [seq], **, etc.) and brace expansion {a,b,c}.
             Takes precedence over paths_include_glob. Only matches files, not directories. If left empty, no files are excluded.
         :param relative_path: only subpaths of this path (relative to the repo root) will be analyzed. If a path to a single
             file is passed, only that will be searched. The path must exist, otherwise a `FileNotFoundError` is raised.
