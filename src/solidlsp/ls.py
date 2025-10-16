@@ -1626,6 +1626,52 @@ class SolidLanguageServer(ABC):
 
         return ret
 
+    def request_rename_symbol_edit(
+        self,
+        relative_file_path: str,
+        line: int,
+        column: int,
+        new_name: str,
+    ) -> ls_types.WorkspaceEdit | None:
+        """
+        Retrieve a WorkspaceEdit for renaming the symbol at the given location to the new name.
+        Does not apply the edit, just retrieves it. In order to actually rename the symbol, call apply_workspace_edit.
+
+        :param relative_file_path: The relative path to the file containing the symbol
+        :param line: The 0-indexed line number of the symbol
+        :param column: The 0-indexed column number of the symbol
+        :param new_name: The new name for the symbol
+        :return: A WorkspaceEdit containing the changes needed to rename the symbol, or None if rename is not supported
+        """
+        params = ls_types.RenameParams(
+            textDocument=ls_types.TextDocumentIdentifier(
+                uri=pathlib.Path(os.path.join(self.repository_root_path, relative_file_path)).as_uri()
+            ),
+            position=ls_types.Position(line=line, character=column),
+            newName=new_name,
+        )
+
+        return self.server.send.rename(params)
+
+    def apply_text_edits_to_file(self, relative_path: str, edits: list[ls_types.TextEdit]) -> None:
+        """
+        Apply a list of text edits to a file.
+
+        :param relative_path: The relative path of the file to edit
+        :param edits: List of TextEdit dictionaries to apply
+        """
+        with self.open_file(relative_path):
+            # Sort edits by position (latest first) to avoid position shifts
+            sorted_edits = sorted(edits, key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]), reverse=True)
+
+            for edit in sorted_edits:
+                start_pos = ls_types.Position(line=edit["range"]["start"]["line"], character=edit["range"]["start"]["character"])
+                end_pos = ls_types.Position(line=edit["range"]["end"]["line"], character=edit["range"]["end"]["character"])
+
+                # Delete the old text and insert the new text
+                self.delete_text_between_positions(relative_path, start_pos, end_pos)
+                self.insert_text_at_position(relative_path, start_pos["line"], start_pos["character"], edit["newText"])
+
     def start(self) -> "SolidLanguageServer":
         """
         Starts the language server process and connects to it. Call shutdown when ready.

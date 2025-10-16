@@ -82,6 +82,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
     """
 
+    # noinspection PyDefaultArgument
     def apply(
         self,
         name_path: str,
@@ -165,6 +166,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
     Finds symbols that reference the symbol at the given location (optionally filtered by type).
     """
 
+    # noinspection PyDefaultArgument
     def apply(
         self,
         name_path: str,
@@ -293,3 +295,29 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
         code_editor = self.create_code_editor()
         code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
+
+
+class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
+    """
+    Renames a symbol throughout the codebase using language server refactoring capabilities.
+    """
+
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        new_name: str,
+    ) -> str:
+        """
+        Renames the symbol with the given `name_path` to `new_name` throughout the entire codebase.
+        Note: for languages with method overloading, like Java, name_path may have to include a method's
+        signature to uniquely identify a method.
+
+        :param name_path: name path of the symbol to rename (definitions in the `find_symbol` tool apply)
+        :param relative_path: the relative path to the file containing the symbol to rename
+        :param new_name: the new name for the symbol
+        :return: result summary indicating success or failure
+        """
+        code_editor = self.create_code_editor()
+        modified_files = code_editor.rename_symbol(name_path, relative_file_path=relative_path, new_name=new_name)
+        return f"Successfully renamed '{name_path}' to '{new_name}' in {len(modified_files)} file(s)"
