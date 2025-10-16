@@ -165,7 +165,7 @@ class FileUtils:
     """
 
     @staticmethod
-    def read_file(logger: LanguageServerLogger, file_path: str) -> str:
+    def read_file(logger: LanguageServerLogger, file_path: str, encoding: str) -> str:
         """
         Reads the file at the given path and returns the contents as a string.
         """
@@ -173,10 +173,10 @@ class FileUtils:
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
             raise SolidLSPException(f"File read '{file_path}' failed: File does not exist.")
         try:
-            with open(file_path, encoding="utf-8") as inp_file:
+            with open(file_path, encoding=encoding) as inp_file:
                 return inp_file.read()
         except Exception as exc:
-            logger.log(f"File read '{file_path}' failed to read with encoding 'utf-8': {exc}", logging.ERROR)
+            logger.log(f"File read '{file_path}' failed to read with encoding '{encoding}': {exc}", logging.ERROR)
             raise SolidLSPException("File read failed.") from None
 
     @staticmethod

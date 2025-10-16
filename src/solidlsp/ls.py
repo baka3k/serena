@@ -176,6 +176,7 @@ class SolidLanguageServer(ABC):
                     as opposed to HTTP, TCP modes supported by some language servers.
         """
         self._solidlsp_settings = solidlsp_settings
+        self._encoding = config.encoding
         self.logger = logger
         self.repository_root_path: str = repository_root_path
         self.logger.log(
@@ -391,7 +392,7 @@ class SolidLanguageServer(ABC):
             yield self.open_file_buffers[uri]
             self.open_file_buffers[uri].ref_count -= 1
         else:
-            contents = FileUtils.read_file(self.logger, absolute_file_path)
+            contents = FileUtils.read_file(self.logger, absolute_file_path, self._encoding)
 
             version = 0
             self.open_file_buffers[uri] = LSPFileBuffer(uri, contents, version, self.language_id, 1)
@@ -1408,7 +1409,7 @@ class SolidLanguageServer(ABC):
         # checking if the line is empty, unfortunately ugly and duplicating code, but I don't want to refactor
         with self.open_file(relative_file_path):
             absolute_file_path = str(PurePath(self.repository_root_path, relative_file_path))
-            content = FileUtils.read_file(self.logger, absolute_file_path)
+            content = FileUtils.read_file(self.logger, absolute_file_path, self._encoding)
             if content.split("\n")[line].strip() == "":
                 self.logger.log(
                     f"Passing empty lines to request_container_symbol is currently not supported, {relative_file_path=}, {line=}",

@@ -9,6 +9,8 @@ from typing import Any, Self
 
 from joblib import Parallel, delayed
 
+from serena.constants import DEFAULT_SOURCE_FILE_ENCODING
+
 log = logging.getLogger(__name__)
 
 
@@ -236,8 +238,8 @@ def search_text(
 
 
 def default_file_reader(file_path: str) -> str:
-    """Reads using utf-8 encoding."""
-    with open(file_path, encoding="utf-8") as f:
+    """Reads using the default encoding."""
+    with open(file_path, encoding=DEFAULT_SOURCE_FILE_ENCODING) as f:
         return f.read()
 
 
