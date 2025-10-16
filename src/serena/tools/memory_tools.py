@@ -13,6 +13,7 @@ class WriteMemoryTool(Tool):
         Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful.
         """
+        # NOTE: utf-8 encoding is configured in the MemoriesManager
         if max_answer_chars == -1:
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if len(content) > max_answer_chars:

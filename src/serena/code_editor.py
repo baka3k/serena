@@ -12,7 +12,7 @@ from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_types import extract_text_edits
 from solidlsp.ls_utils import PathUtils, TextUtils
 
-from .constants import DEFAULT_ENCODING
+from .constants import DEFAULT_SOURCE_FILE_ENCODING
 from .project import Project
 from .tools.jetbrains_plugin_client import JetBrainsPluginClient
 
@@ -30,7 +30,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         self.agent = agent
 
         # set encoding based on active project, if available
-        encoding = DEFAULT_ENCODING
+        encoding = DEFAULT_SOURCE_FILE_ENCODING
         if agent is not None:
             project = agent.get_active_project()
             if project is not None:
