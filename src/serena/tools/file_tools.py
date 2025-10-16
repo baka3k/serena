@@ -59,7 +59,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         Write a new file or overwrite an existing file.
 
         :param relative_path: the relative path to the file to create
-        :param content: the (utf-8-encoded) content to write to the file
+        :param content: the (appropriately encoded) content to write to the file
         :return: a message indicating success or failure
         """
         project_root = self.get_project_root()
@@ -74,7 +74,7 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
             ), f"Cannot create file outside of the project directory, got {relative_path=}"
 
         abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding="utf-8")
+        abs_path.write_text(content, encoding=self.project.project_config.encoding)
         answer = f"File created: {relative_path}."
         if will_overwrite_existing:
             answer += " Overwrote existing file."
@@ -390,6 +390,7 @@ class SearchForPatternTool(Tool):
             matches = search_files(
                 rel_paths_to_search,
                 substring_pattern,
+                file_reader=self.project.read_file,
                 root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,

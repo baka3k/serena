@@ -10,7 +10,7 @@ class WriteMemoryTool(Tool):
 
     def apply(self, memory_name: str, content: str, max_answer_chars: int = -1) -> str:
         """
-        Write some information about this project that can be useful for future tasks to a memory in md format.
+        Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful.
         """
         if max_answer_chars == -1:

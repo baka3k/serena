@@ -12,6 +12,7 @@ from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_types import extract_text_edits
 from solidlsp.ls_utils import PathUtils, TextUtils
 
+from .constants import DEFAULT_ENCODING
 from .project import Project
 from .tools.jetbrains_plugin_client import JetBrainsPluginClient
 
@@ -27,6 +28,14 @@ class CodeEditor(Generic[TSymbol], ABC):
     def __init__(self, project_root: str, agent: Optional["SerenaAgent"] = None) -> None:
         self.project_root = project_root
         self.agent = agent
+
+        # set encoding based on active project, if available
+        encoding = DEFAULT_ENCODING
+        if agent is not None:
+            project = agent.get_active_project()
+            if project is not None:
+                encoding = agent.get_active_project().project_config.encoding
+        self.encoding = encoding
 
     class EditedFile(ABC):
         @abstractmethod
@@ -59,7 +68,7 @@ class CodeEditor(Generic[TSymbol], ABC):
             yield edited_file
             # save the file
             abs_path = os.path.join(self.project_root, relative_path)
-            with open(abs_path, "w", encoding="utf-8") as f:
+            with open(abs_path, "w", encoding=self.encoding) as f:
                 f.write(edited_file.get_contents())
 
     @abstractmethod

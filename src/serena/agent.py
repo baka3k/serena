@@ -47,6 +47,7 @@ class MemoriesManager:
     def __init__(self, project_root: str):
         self._memory_dir = Path(get_serena_managed_in_project_dir(project_root)) / "memories"
         self._memory_dir.mkdir(parents=True, exist_ok=True)
+        self._encoding = "utf-8"
 
     def _get_memory_file_path(self, name: str) -> Path:
         # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
@@ -58,12 +59,12 @@ class MemoriesManager:
         memory_file_path = self._get_memory_file_path(name)
         if not memory_file_path.exists():
             return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
-        with open(memory_file_path, encoding="utf-8") as f:
+        with open(memory_file_path, encoding=self._encoding) as f:
             return f.read()
 
     def save_memory(self, name: str, content: str) -> str:
         memory_file_path = self._get_memory_file_path(name)
-        with open(memory_file_path, "w", encoding="utf-8") as f:
+        with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(content)
         return f"Memory {name} written."
 
