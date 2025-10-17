@@ -34,7 +34,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         if agent is not None:
             project = agent.get_active_project()
             if project is not None:
-                encoding = agent.get_active_project().project_config.encoding
+                encoding = project.project_config.encoding
         self.encoding = encoding
 
     class EditedFile(ABC):
@@ -292,7 +292,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             relative_path = os.path.relpath(file_path, self._lang_server.repository_root_path)
             modified_relative_paths.append(relative_path)
             with self._edited_file_context(relative_path) as edited_file:
-                edited_file = cast(self.EditedFile, edited_file)
+                edited_file = cast(LanguageServerCodeEditor.EditedFile, edited_file)
                 edited_file.apply_text_edits(edits)
         return modified_relative_paths
 
