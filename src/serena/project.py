@@ -13,6 +13,7 @@ from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_utils import FileUtils
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -138,9 +139,8 @@ class Project:
         :return: the content of the file
         """
         abs_path = Path(self.project_root) / relative_path
-        if not abs_path.exists():
-            raise FileNotFoundError(f"File not found: {abs_path}")
-        return abs_path.read_text(encoding=self.project_config.encoding)
+        ls_logger = LanguageServerLogger(log_level=log.level)
+        return FileUtils.read_file(ls_logger, str(abs_path), self.project_config.encoding)
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """

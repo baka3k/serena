@@ -13,6 +13,7 @@ import zipfile
 from enum import Enum
 from pathlib import Path, PurePath
 
+import charset_normalizer
 import requests
 
 from solidlsp.ls_exceptions import SolidLSPException
@@ -173,8 +174,19 @@ class FileUtils:
             logger.log(f"File read '{file_path}' failed: File does not exist.", logging.ERROR)
             raise SolidLSPException(f"File read '{file_path}' failed: File does not exist.")
         try:
-            with open(file_path, encoding=encoding) as inp_file:
-                return inp_file.read()
+            try:
+                with open(file_path, encoding=encoding) as inp_file:
+                    return inp_file.read()
+            except UnicodeDecodeError as ude:
+                results = charset_normalizer.from_path(file_path)
+                match = results.best()
+                if match:
+                    logger.log(
+                        f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead",
+                        logging.WARNING,
+                    )
+                    return match.raw.decode(match.encoding)
+                raise ude
         except Exception as exc:
             logger.log(f"File read '{file_path}' failed to read with encoding '{encoding}': {exc}", logging.ERROR)
             raise SolidLSPException("File read failed.") from None
