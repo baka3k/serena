@@ -90,7 +90,7 @@ class SerenaAgent:
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
-        if Logger.root.level > serena_log_level:
+        if Logger.root.level != serena_log_level:
             log.info(f"Changing the root logger level to {serena_log_level}")
             Logger.root.setLevel(serena_log_level)
 
