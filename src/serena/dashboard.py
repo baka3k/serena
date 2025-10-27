@@ -39,6 +39,18 @@ class ResponseToolStats(BaseModel):
     stats: dict[str, dict[str, int]]
 
 
+class ResponseConfigOverview(BaseModel):
+    active_project: dict[str, str | None]
+    context: dict[str, str]
+    modes: list[dict[str, str]]
+    active_tools: list[str]
+    tool_stats_summary: dict[str, dict[str, int]]
+    registered_projects: list[dict[str, str | bool]]
+    available_tools: list[dict[str, str | bool]]
+    available_modes: list[dict[str, str | bool]]
+    available_contexts: list[dict[str, str | bool]]
+
+
 class SerenaDashboardAPI:
     log = logging.getLogger(__qualname__)
 
@@ -104,6 +116,11 @@ class SerenaDashboardAPI:
             estimator_name = self._tool_usage_stats.token_estimator_name if self._tool_usage_stats else "unknown"
             return {"token_count_estimator_name": estimator_name}
 
+        @self._app.route("/get_config_overview", methods=["GET"])
+        def get_config_overview() -> dict[str, Any]:
+            result = self._get_config_overview()
+            return result.model_dump()
+
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
             self._shutdown()
@@ -128,6 +145,95 @@ class SerenaDashboardAPI:
     def _clear_tool_stats(self) -> None:
         if self._tool_usage_stats is not None:
             self._tool_usage_stats.clear()
+
+    def _get_config_overview(self) -> ResponseConfigOverview:
+        from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
+
+        # Get active project info
+        project = self._agent.get_active_project()
+        active_project_name = project.project_name if project else None
+        project_info = {
+            "name": active_project_name,
+            "language": project.project_config.language.value if project else None,
+        }
+
+        # Get context info
+        context = self._agent.get_context()
+        context_info = {
+            "name": context.name,
+            "description": context.description,
+        }
+
+        # Get active modes
+        modes = self._agent.get_active_modes()
+        modes_info = [{"name": mode.name, "description": mode.description} for mode in modes]
+        active_mode_names = [mode.name for mode in modes]
+
+        # Get active tools
+        active_tools = self._agent.get_active_tool_names()
+
+        # Get registered projects
+        registered_projects: list[dict[str, str | bool]] = []
+        for proj in self._agent.serena_config.projects:
+            registered_projects.append(
+                {
+                    "name": proj.project_name,
+                    "path": str(proj.project_root),
+                    "is_active": proj.project_name == active_project_name,
+                }
+            )
+
+        # Get all available tools (excluding active ones)
+        all_tool_names = sorted([tool.get_name_from_cls() for tool in self._agent._all_tools.values()])
+        available_tools: list[dict[str, str | bool]] = []
+        for tool_name in all_tool_names:
+            if tool_name not in active_tools:
+                available_tools.append(
+                    {
+                        "name": tool_name,
+                        "is_active": False,
+                    }
+                )
+
+        # Get all available modes
+        all_mode_names = SerenaAgentMode.list_registered_mode_names()
+        available_modes: list[dict[str, str | bool]] = []
+        for mode_name in all_mode_names:
+            available_modes.append(
+                {
+                    "name": mode_name,
+                    "is_active": mode_name in active_mode_names,
+                }
+            )
+
+        # Get all available contexts
+        all_context_names = SerenaAgentContext.list_registered_context_names()
+        available_contexts: list[dict[str, str | bool]] = []
+        for context_name in all_context_names:
+            available_contexts.append(
+                {
+                    "name": context_name,
+                    "is_active": context_name == context.name,
+                }
+            )
+
+        # Get basic tool stats (just num_calls for overview)
+        tool_stats_summary = {}
+        if self._tool_usage_stats is not None:
+            full_stats = self._tool_usage_stats.get_tool_stats_dict()
+            tool_stats_summary = {name: {"num_calls": stats["num_times_called"]} for name, stats in full_stats.items()}
+
+        return ResponseConfigOverview(
+            active_project=project_info,
+            context=context_info,
+            modes=modes_info,
+            active_tools=active_tools,
+            tool_stats_summary=tool_stats_summary,
+            registered_projects=registered_projects,
+            available_tools=available_tools,
+            available_modes=available_modes,
+            available_contexts=available_contexts,
+        )
 
     def _shutdown(self) -> None:
         log.info("Shutting down Serena")

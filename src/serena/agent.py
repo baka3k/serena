@@ -127,25 +127,9 @@ class SerenaAgent:
         if self._gui_log_viewer is not None:
             self._gui_log_viewer.set_tool_names(tool_names)
 
-        self._tool_usage_stats: ToolUsageStats | None = None
-        if self.serena_config.record_tool_usage_stats:
-            token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
-            log.info(f"Tool usage statistics recording is enabled with token count estimator: {token_count_estimator.name}.")
-            self._tool_usage_stats = ToolUsageStats(token_count_estimator)
-
-        # start the dashboard (web frontend), registering its log handler
-        if self.serena_config.web_dashboard:
-            self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
-            ).run_in_thread()
-            dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
-            log.info("Serena web dashboard started at %s", dashboard_url)
-            if self.serena_config.web_dashboard_open_on_launch:
-                # open the dashboard URL in the default web browser (using a separate process to control
-                # output redirection)
-                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
-                process.start()
-                process.join(timeout=1)
+        token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
+        log.info(f"Will record tool usage statistics with token count estimator: {token_count_estimator.name}.")
+        self._tool_usage_stats = ToolUsageStats(token_count_estimator)
 
         # log fundamental information
         log.info(f"Starting Serena server (version={serena_version()}, process id={os.getpid()}, parent process id={os.getppid()})")
@@ -192,6 +176,22 @@ class SerenaAgent:
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
 
+        # start the dashboard (web frontend), registering its log handler
+        # should be the last thing to happen in the initialization since the dashboard
+        # may access various parts of the agent
+        if self.serena_config.web_dashboard:
+            self._dashboard_thread, port = SerenaDashboardAPI(
+                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
+            ).run_in_thread()
+            dashboard_url = f"http://127.0.0.1:{port}/dashboard/index.html"
+            log.info("Serena web dashboard started at %s", dashboard_url)
+            if self.serena_config.web_dashboard_open_on_launch:
+                # open the dashboard URL in the default web browser (using a separate process to control
+                # output redirection)
+                process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
+                process.start()
+                process.join(timeout=1)
+
     def get_context(self) -> SerenaAgentContext:
         return self._context
 
@@ -234,18 +234,15 @@ class SerenaAgent:
                 tool_inclusion_definitions.append(project.project_config)
         return tool_inclusion_definitions
 
-    def record_tool_usage_if_enabled(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
+    def record_tool_usage(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
         """
         Record the usage of a tool with the given input and output strings if tool usage statistics recording is enabled.
         """
         tool_name = tool.get_name()
-        if self._tool_usage_stats is not None:
-            input_str = str(input_kwargs)
-            output_str = str(tool_result)
-            log.debug(f"Recording tool usage for tool '{tool_name}'")
-            self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
-        else:
-            log.debug(f"Tool usage statistics recording is disabled, not recording usage of '{tool_name}'.")
+        input_str = str(input_kwargs)
+        output_str = str(tool_result)
+        log.debug(f"Recording tool usage for tool '{tool_name}'")
+        self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
 
     @staticmethod
     def _open_dashboard(url: str) -> None:

@@ -340,10 +340,8 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
     """
     whether to apply JetBrains mode
     """
-    record_tool_usage_stats: bool = False
-    """Whether to record tool usage statistics, they will be shown in the web dashboard if recording is active. 
-    """
-    token_count_estimator: str = RegisteredTokenCountEstimator.TIKTOKEN_GPT4O.name
+
+    token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name
     """Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
     See the `RegisteredTokenCountEstimator` enum for available options.
     
@@ -457,7 +455,6 @@ class SerenaConfig(ToolInclusionDefinition, ToStringMixin):
         instance.excluded_tools = loaded_commented_yaml.get("excluded_tools", [])
         instance.included_optional_tools = loaded_commented_yaml.get("included_optional_tools", [])
         instance.jetbrains = loaded_commented_yaml.get("jetbrains", False)
-        instance.record_tool_usage_stats = loaded_commented_yaml.get("record_tool_usage_stats", False)
         instance.token_count_estimator = loaded_commented_yaml.get(
             "token_count_estimator", RegisteredTokenCountEstimator.TIKTOKEN_GPT4O.name
         )

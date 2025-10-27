@@ -30,7 +30,7 @@ class LogMessage {
     }
 
     escapeHtml (convertString) {
-        if (typeof convertString !== 'string') return convertString; 
+        if (typeof convertString !== 'string') return convertString;
 
         const patterns = {
             '<'  : '&lt;',
@@ -49,47 +49,322 @@ class Dashboard {
     constructor() {
         let self = this;
 
+        // Page state
+        this.currentPage = 'overview';
+        this.configData = null;
+
+        // Tool names and stats
         this.toolNames = [];
         this.currentMaxIdx = -1;
         this.pollInterval = null;
+        this.configPollInterval = null;
         this.failureCount = 0;
+
+        // jQuery elements
         this.$logContainer = $('#log-container');
         this.$errorContainer = $('#error-container');
         this.$loadButton = $('#load-logs');
-        this.$shutdownButton = $('#shutdown');
-        this.$toggleStats = $('#toggle-stats');
-        this.$statsSection = $('#stats-section');
-        this.$refreshStats = $('#refresh-stats');
-        this.$clearStats = $('#clear-stats');
+        this.$menuToggle = $('#menu-toggle');
+        this.$menuDropdown = $('#menu-dropdown');
+        this.$menuShutdown = $('#menu-shutdown');
         this.$themeToggle = $('#theme-toggle');
         this.$themeIcon = $('#theme-icon');
         this.$themeText = $('#theme-text');
+        this.$configDisplay = $('#config-display');
+        this.$basicStatsDisplay = $('#basic-stats-display');
+        this.$statsSection = $('#stats-section');
+        this.$refreshStats = $('#refresh-stats');
+        this.$clearStats = $('#clear-stats');
+        this.$projectsDisplay = $('#projects-display');
+        this.$projectsHeader = $('#projects-header');
+        this.$availableToolsDisplay = $('#available-tools-display');
+        this.$availableModesDisplay = $('#available-modes-display');
+        this.$availableContextsDisplay = $('#available-contexts-display');
 
+        // Chart references
         this.countChart = null;
         this.tokensChart = null;
         this.inputChart = null;
         this.outputChart = null;
 
-        // register event handlers
+        // Register event handlers
         this.$loadButton.click(this.loadLogs.bind(this));
-        this.$shutdownButton.click(this.shutdown.bind(this));
-        this.$toggleStats.click(this.toggleStats.bind(this));
+        this.$menuShutdown.click(this.shutdown.bind(this));
+        this.$menuToggle.click(this.toggleMenu.bind(this));
+        this.$themeToggle.click(this.toggleTheme.bind(this));
         this.$refreshStats.click(this.loadStats.bind(this));
         this.$clearStats.click(this.clearStats.bind(this));
-        this.$themeToggle.click(this.toggleTheme.bind(this));
 
-        // initialize theme
+        // Page navigation
+        $('[data-page]').click(function(e) {
+            e.preventDefault();
+            const page = $(this).data('page');
+            self.navigateToPage(page);
+        });
+
+        // Close menu when clicking outside
+        $(document).click(function(e) {
+            if (!$(e.target).closest('.header-nav').length) {
+                self.$menuDropdown.hide();
+            }
+        });
+
+        // Collapsible sections
+        $('.collapsible-header').click(function() {
+            const $header = $(this);
+            const $content = $header.next('.collapsible-content');
+            const $icon = $header.find('.toggle-icon');
+
+            $content.slideToggle(300);
+            $icon.toggleClass('expanded');
+        });
+
+        // Initialize theme
         this.initializeTheme();
 
-        // initialize the application
+        // Initialize the application
         this.loadToolNames().then(function() {
-            // Load logs on page load after tool names are loaded
-            self.loadLogs();
+            // Start on overview page
+            self.loadConfigOverview();
+            self.startConfigPolling();
         });
     }
 
+    toggleMenu() {
+        this.$menuDropdown.toggle();
+    }
+
+    navigateToPage(page) {
+        // Hide menu
+        this.$menuDropdown.hide();
+
+        // Hide all pages
+        $('.page-view').hide();
+
+        // Show selected page
+        $('#page-' + page).show();
+
+        // Update menu active state
+        $('[data-page]').removeClass('active');
+        $('[data-page="' + page + '"]').addClass('active');
+
+        // Update current page
+        this.currentPage = page;
+
+        // Stop all polling
+        this.stopPolling();
+
+        // Start appropriate polling for the page
+        if (page === 'overview') {
+            this.loadConfigOverview();
+            this.startConfigPolling();
+        } else if (page === 'logs') {
+            this.loadLogs();
+        } else if (page === 'stats') {
+            this.loadStats();
+        }
+    }
+
+    stopPolling() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
+        if (this.configPollInterval) {
+            clearInterval(this.configPollInterval);
+            this.configPollInterval = null;
+        }
+    }
+
+    // ===== Config Overview Methods =====
+
+    loadConfigOverview() {
+        let self = this;
+        $.ajax({
+            url: '/get_config_overview',
+            type: 'GET',
+            success: function(response) {
+                self.configData = response;
+                self.displayConfig(response);
+                self.displayBasicStats(response.tool_stats_summary);
+                self.displayProjects(response.registered_projects);
+                self.displayAvailableTools(response.available_tools);
+                self.displayAvailableModes(response.available_modes);
+                self.displayAvailableContexts(response.available_contexts);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading config overview:', error);
+                self.$configDisplay.html('<div class="error-message">Error loading configuration</div>');
+                self.$basicStatsDisplay.html('<div class="error-message">Error loading stats</div>');
+                self.$projectsDisplay.html('<div class="error-message">Error loading projects</div>');
+                self.$availableToolsDisplay.html('<div class="error-message">Error loading tools</div>');
+                self.$availableModesDisplay.html('<div class="error-message">Error loading modes</div>');
+                self.$availableContextsDisplay.html('<div class="error-message">Error loading contexts</div>');
+            }
+        });
+    }
+
+    startConfigPolling() {
+        // Poll every 2 seconds for config updates
+        this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 2000);
+    }
+
+    displayConfig(config) {
+        // Check if tools section is currently expanded
+        const $existingContent = $('#tools-content');
+        const wasExpanded = $existingContent.is(':visible');
+
+        let html = '<div class="config-grid">';
+
+        // Project info
+        html += '<div class="config-label">Active Project:</div>';
+        html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
+
+        html += '<div class="config-label">Language:</div>';
+        html += '<div class="config-value">' + (config.active_project.language || 'N/A') + '</div>';
+
+        // Context info
+        html += '<div class="config-label">Context:</div>';
+        html += '<div class="config-value">' + config.context.name + '</div>';
+
+        // Modes info
+        html += '<div class="config-label">Active Modes:</div>';
+        html += '<div class="config-value">';
+        if (config.modes.length > 0) {
+            html += '<ul class="config-list">';
+            config.modes.forEach(function(mode) {
+                html += '<li>' + mode.name + '</li>';
+            });
+            html += '</ul>';
+        } else {
+            html += 'None';
+        }
+        html += '</div>';
+
+        html += '</div>';
+
+        // Active tools - collapsible
+        html += '<div style="margin-top: 20px;">';
+        html += '<h3 class="collapsible-header" id="tools-header" style="font-size: 16px; margin: 0;">';
+        html += '<span>Active Tools (' + config.active_tools.length + ')</span>';
+        html += '<span class="toggle-icon' + (wasExpanded ? ' expanded' : '') + '">▼</span>';
+        html += '</h3>';
+        html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+        config.active_tools.forEach(function(tool) {
+            html += '<div class="tool-item" title="' + tool + '">' + tool + '</div>';
+        });
+        html += '</div>';
+        html += '</div>';
+
+        this.$configDisplay.html(html);
+
+        // Re-attach collapsible handler for the newly created tools header
+        $('#tools-header').click(function() {
+            const $header = $(this);
+            const $content = $('#tools-content');
+            const $icon = $header.find('.toggle-icon');
+
+            $content.slideToggle(300);
+            $icon.toggleClass('expanded');
+        });
+    }
+
+    displayBasicStats(stats) {
+        if (Object.keys(stats).length === 0) {
+            this.$basicStatsDisplay.html('<div class="no-stats-message">No tool usage stats collected yet.</div>');
+            return;
+        }
+
+        // Sort tools by call count (descending)
+        const sortedTools = Object.keys(stats).sort((a, b) => {
+            return stats[b].num_calls - stats[a].num_calls;
+        });
+
+        const maxCalls = Math.max(...sortedTools.map(tool => stats[tool].num_calls));
+
+        let html = '';
+        sortedTools.forEach(function(toolName) {
+            const count = stats[toolName].num_calls;
+            const percentage = maxCalls > 0 ? (count / maxCalls * 100) : 0;
+
+            html += '<div class="stat-bar-container">';
+            html += '<div class="stat-tool-name" title="' + toolName + '">' + toolName + '</div>';
+            html += '<div class="bar-wrapper">';
+            html += '<div class="bar" style="width: ' + percentage + '%"></div>';
+            html += '</div>';
+            html += '<div class="stat-count">' + count + '</div>';
+            html += '</div>';
+        });
+
+        this.$basicStatsDisplay.html(html);
+    }
+
+    displayProjects(projects) {
+        if (!projects || projects.length === 0) {
+            this.$projectsDisplay.html('<div class="no-stats-message">No projects registered.</div>');
+            return;
+        }
+
+        let html = '';
+        projects.forEach(function(project) {
+            const activeClass = project.is_active ? ' active' : '';
+            html += '<div class="project-item' + activeClass + '">';
+            html += '<div class="project-name" title="' + project.name + '">' + project.name + '</div>';
+            html += '<div class="project-path" title="' + project.path + '">' + project.path + '</div>';
+            html += '</div>';
+        });
+
+        this.$projectsDisplay.html(html);
+    }
+
+    displayAvailableTools(tools) {
+        if (!tools || tools.length === 0) {
+            this.$availableToolsDisplay.html('<div class="no-stats-message">All tools are active.</div>');
+            return;
+        }
+
+        let html = '';
+        tools.forEach(function(tool) {
+            html += '<div class="info-item" title="' + tool.name + '">' + tool.name + '</div>';
+        });
+
+        this.$availableToolsDisplay.html(html);
+    }
+
+    displayAvailableModes(modes) {
+        if (!modes || modes.length === 0) {
+            this.$availableModesDisplay.html('<div class="no-stats-message">No modes available.</div>');
+            return;
+        }
+
+        let html = '';
+        modes.forEach(function(mode) {
+            const activeClass = mode.is_active ? ' active' : '';
+            html += '<div class="info-item' + activeClass + '" title="' + mode.name + '">' + mode.name + '</div>';
+        });
+
+        this.$availableModesDisplay.html(html);
+    }
+
+    displayAvailableContexts(contexts) {
+        if (!contexts || contexts.length === 0) {
+            this.$availableContextsDisplay.html('<div class="no-stats-message">No contexts available.</div>');
+            return;
+        }
+
+        let html = '';
+        contexts.forEach(function(context) {
+            const activeClass = context.is_active ? ' active' : '';
+            html += '<div class="info-item' + activeClass + '" title="' + context.name + '">' + context.name + '</div>';
+        });
+
+        this.$availableContextsDisplay.html(html);
+    }
+
+    // ===== Logs Methods =====
+
     displayLogMessage(message) {
-        $('#log-container').append(new LogMessage(message, this.toolNames).$elem);
+        this.$logContainer.append(new LogMessage(message, this.toolNames).$elem);
     }
 
     loadToolNames() {
@@ -227,16 +502,7 @@ class Dashboard {
         this.pollInterval = setInterval(this.pollForNewLogs.bind(this), 1000);
     }
 
-    toggleStats() {
-        if (this.$statsSection.is(':visible')) {
-            this.$statsSection.hide();
-            this.$toggleStats.text('Show Stats');
-        } else {
-            this.$statsSection.show();
-            this.$toggleStats.text('Hide Stats');
-            this.loadStats();
-        }
-    }
+    // ===== Stats Methods =====
 
     loadStats() {
         let self = this;
@@ -251,7 +517,6 @@ class Dashboard {
             console.error('Error loading stats or estimator name');
         });
     }
-
 
     clearStats() {
         let self = this;
@@ -292,12 +557,12 @@ class Dashboard {
         const inputTokens = names.map(n => stats[n].input_tokens);
         const outputTokens = names.map(n => stats[n].output_tokens);
         const totalTokens = names.map(n => stats[n].input_tokens + stats[n].output_tokens);
-        
+
         // Calculate totals for summary table
         const totalCalls = counts.reduce((sum, count) => sum + count, 0);
         const totalInputTokens = inputTokens.reduce((sum, tokens) => sum + tokens, 0);
         const totalOutputTokens = outputTokens.reduce((sum, tokens) => sum + tokens, 0);
-        
+
         // Generate consistent colors for tools
         const colors = this.generateColors(names.length);
 
@@ -325,16 +590,16 @@ class Dashboard {
         // Tool calls pie chart
         this.countChart = new Chart(countCtx, {
             type: 'pie',
-            data: { 
-                labels: names, 
-                datasets: [{ 
+            data: {
+                labels: names,
+                datasets: [{
                     data: counts,
                     backgroundColor: colors
-                }] 
+                }]
             },
             options: {
                 plugins: {
-                    legend: { 
+                    legend: {
                         display: true,
                         labels: {
                             color: textColor
@@ -353,16 +618,16 @@ class Dashboard {
         // Input tokens pie chart
         this.inputChart = new Chart(inputCtx, {
             type: 'pie',
-            data: { 
-                labels: names, 
-                datasets: [{ 
+            data: {
+                labels: names,
+                datasets: [{
                     data: inputTokens,
                     backgroundColor: colors
-                }] 
+                }]
             },
             options: {
                 plugins: {
-                    legend: { 
+                    legend: {
                         display: true,
                         labels: {
                             color: textColor
@@ -381,16 +646,16 @@ class Dashboard {
         // Output tokens pie chart
         this.outputChart = new Chart(outputCtx, {
             type: 'pie',
-            data: { 
-                labels: names, 
-                datasets: [{ 
+            data: {
+                labels: names,
+                datasets: [{
                     data: outputTokens,
                     backgroundColor: colors
-                }] 
+                }]
             },
             options: {
                 plugins: {
-                    legend: { 
+                    legend: {
                         display: true,
                         labels: {
                             color: textColor
@@ -409,11 +674,11 @@ class Dashboard {
         // Combined input/output tokens bar chart
         this.tokensChart = new Chart(tokensCtx, {
             type: 'bar',
-            data: { 
-                labels: names, 
+            data: {
+                labels: names,
                 datasets: [
-                    { 
-                        label: 'Input Tokens', 
+                    {
+                        label: 'Input Tokens',
                         data: inputTokens,
                         backgroundColor: colors.map(color => color + '80'), // Semi-transparent
                         borderColor: colors,
@@ -421,8 +686,8 @@ class Dashboard {
                         borderSkipped: false,
                         yAxisID: 'y'
                     },
-                    { 
-                        label: 'Output Tokens', 
+                    {
+                        label: 'Output Tokens',
                         data: outputTokens,
                         backgroundColor: colors,
                         yAxisID: 'y1'
@@ -452,8 +717,8 @@ class Dashboard {
                         display: true,
                         position: 'left',
                         beginAtZero: true,
-                        title: { 
-                            display: true, 
+                        title: {
+                            display: true,
                             text: 'Input Tokens',
                             color: textColor
                         },
@@ -469,15 +734,15 @@ class Dashboard {
                         display: true,
                         position: 'right',
                         beginAtZero: true,
-                        title: { 
-                            display: true, 
+                        title: {
+                            display: true,
                             text: 'Output Tokens',
                             color: textColor
                         },
                         ticks: {
                             color: textColor
                         },
-                        grid: { 
+                        grid: {
                             drawOnChartArea: false,
                             color: gridColor
                         }
@@ -508,10 +773,12 @@ class Dashboard {
         $('#stats-summary').html(tableHtml);
     }
 
+    // ===== Theme Methods =====
+
     initializeTheme() {
         // Check if user has manually set a theme preference
         const savedTheme = localStorage.getItem('serena-theme');
-        
+
         if (savedTheme) {
             // User has manually set a preference, use it
             this.setTheme(savedTheme);
@@ -519,7 +786,7 @@ class Dashboard {
             // No manual preference, detect system color scheme
             this.detectSystemTheme();
         }
-        
+
         // Listen for system theme changes
         this.setupSystemThemeListener();
     }
@@ -534,7 +801,7 @@ class Dashboard {
     setupSystemThemeListener() {
         // Listen for changes in system color scheme
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        
+
         const handleSystemThemeChange = (e) => {
             // Only auto-switch if user hasn't manually set a preference
             const savedTheme = localStorage.getItem('serena-theme');
@@ -543,7 +810,7 @@ class Dashboard {
                 this.setTheme(newTheme);
             }
         };
-        
+
         // Add listener for system theme changes
         if (mediaQuery.addEventListener) {
             mediaQuery.addEventListener('change', handleSystemThemeChange);
@@ -556,7 +823,7 @@ class Dashboard {
     toggleTheme() {
         const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
         const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-        
+
         // When user manually toggles, save their preference
         localStorage.setItem('serena-theme', newTheme);
         this.setTheme(newTheme);
@@ -565,8 +832,8 @@ class Dashboard {
     setTheme(theme) {
         // Set the theme on the document element
         document.documentElement.setAttribute('data-theme', theme);
-        
-        // Update the toggle button
+
+        // Update the theme toggle button
         if (theme === 'dark') {
             this.$themeIcon.text('☀️');
             this.$themeText.text('Light');
@@ -574,13 +841,13 @@ class Dashboard {
             this.$themeIcon.text('🌙');
             this.$themeText.text('Dark');
         }
-        
+
         // Update the logo based on theme
         this.updateLogo(theme);
-        
+
         // Save to localStorage
         localStorage.setItem('serena-theme', theme);
-        
+
         // Update charts if they exist
         this.updateChartsTheme();
     }
@@ -600,42 +867,46 @@ class Dashboard {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const textColor = isDark ? '#ffffff' : '#000000';
         const gridColor = isDark ? '#444' : '#ddd';
-        
-        // Update existing charts
-        if (this.countChart) {
-            this.countChart.options.scales.x.ticks.color = textColor;
-            this.countChart.options.scales.y.ticks.color = textColor;
-            this.countChart.options.scales.x.grid.color = gridColor;
-            this.countChart.options.scales.y.grid.color = gridColor;
+
+        // Update existing charts if they exist and have the scales property
+        if (this.countChart && this.countChart.options.plugins) {
+            if (this.countChart.options.plugins.legend) {
+                this.countChart.options.plugins.legend.labels.color = textColor;
+            }
             this.countChart.update();
         }
-        
-        if (this.inputChart) {
-            this.inputChart.options.scales.x.ticks.color = textColor;
-            this.inputChart.options.scales.y.ticks.color = textColor;
-            this.inputChart.options.scales.x.grid.color = gridColor;
-            this.inputChart.options.scales.y.grid.color = gridColor;
+
+        if (this.inputChart && this.inputChart.options.plugins) {
+            if (this.inputChart.options.plugins.legend) {
+                this.inputChart.options.plugins.legend.labels.color = textColor;
+            }
             this.inputChart.update();
         }
-        
-        if (this.outputChart) {
-            this.outputChart.options.scales.x.ticks.color = textColor;
-            this.outputChart.options.scales.y.ticks.color = textColor;
-            this.outputChart.options.scales.x.grid.color = gridColor;
-            this.outputChart.options.scales.y.grid.color = gridColor;
+
+        if (this.outputChart && this.outputChart.options.plugins) {
+            if (this.outputChart.options.plugins.legend) {
+                this.outputChart.options.plugins.legend.labels.color = textColor;
+            }
             this.outputChart.update();
         }
-        
-        if (this.tokensChart) {
+
+        if (this.tokensChart && this.tokensChart.options.scales) {
             this.tokensChart.options.scales.x.ticks.color = textColor;
             this.tokensChart.options.scales.y.ticks.color = textColor;
             this.tokensChart.options.scales.y1.ticks.color = textColor;
             this.tokensChart.options.scales.x.grid.color = gridColor;
             this.tokensChart.options.scales.y.grid.color = gridColor;
             this.tokensChart.options.scales.y1.grid.color = gridColor;
+            this.tokensChart.options.scales.y.title.color = textColor;
+            this.tokensChart.options.scales.y1.title.color = textColor;
+            if (this.tokensChart.options.plugins && this.tokensChart.options.plugins.legend) {
+                this.tokensChart.options.plugins.legend.labels.color = textColor;
+            }
             this.tokensChart.update();
         }
     }
+
+    // ===== Shutdown Method =====
 
     shutdown() {
         const self = this;
@@ -658,5 +929,8 @@ class Dashboard {
         } else {
             console.log("Shutdown cancelled");
         }
+
+        // Close menu
+        self.$menuDropdown.hide();
     }
 }

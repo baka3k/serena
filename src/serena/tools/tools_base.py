@@ -260,7 +260,7 @@ class Tool(Component):
                         raise
 
                 # record tool usage
-                self.agent.record_tool_usage_if_enabled(kwargs, result, self)
+                self.agent.record_tool_usage(kwargs, result, self)
 
             except Exception as e:
                 if not catch_exceptions:
