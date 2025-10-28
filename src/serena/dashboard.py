@@ -156,6 +156,7 @@ class SerenaDashboardAPI:
         project_info = {
             "name": active_project_name,
             "language": project.project_config.language.value if project else None,
+            "path": str(project.project_root) if project else None,
         }
 
         # Get context info

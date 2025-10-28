@@ -229,7 +229,12 @@ class Dashboard {
 
         // Project info
         html += '<div class="config-label">Active Project:</div>';
-        html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
+        if (config.active_project.name && config.active_project.path) {
+            const configPath = config.active_project.path + '/.serena/project.yml';
+            html += '<div class="config-value"><span title="Project configuration in ' + configPath + '">' + config.active_project.name + '</span></div>';
+        } else {
+            html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
+        }
 
         html += '<div class="config-label">Language:</div>';
         html += '<div class="config-value">' + (config.active_project.language || 'N/A') + '</div>';
@@ -251,6 +256,12 @@ class Dashboard {
         }
         html += '</div>';
 
+        html += '</div>';
+
+        // Configuration help link
+        html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
+        html += '<span style="color: var(--text-muted);">📖</span>';
+        html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
         html += '</div>';
 
         // Active tools - collapsible
