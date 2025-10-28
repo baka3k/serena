@@ -89,7 +89,10 @@ class Dashboard {
 
         // Register event handlers
         this.$loadButton.click(this.loadLogs.bind(this));
-        this.$menuShutdown.click(this.shutdown.bind(this));
+        this.$menuShutdown.click(function(e) {
+            e.preventDefault();
+            self.shutdown();
+        });
         this.$menuToggle.click(this.toggleMenu.bind(this));
         this.$themeToggle.click(this.toggleTheme.bind(this));
         this.$refreshStats.click(this.loadStats.bind(this));
@@ -184,6 +187,7 @@ class Dashboard {
             url: '/get_config_overview',
             type: 'GET',
             success: function(response) {
+                self.failureCount = 0;
                 self.configData = response;
                 self.displayConfig(response);
                 self.displayBasicStats(response.tool_stats_summary);
@@ -194,6 +198,11 @@ class Dashboard {
             },
             error: function(xhr, status, error) {
                 console.error('Error loading config overview:', error);
+                self.failureCount++;
+                if (self.failureCount >= 3) {
+                    console.log('Server appears to be down, closing tab');
+                    window.close();
+                }
                 self.$configDisplay.html('<div class="error-message">Error loading configuration</div>');
                 self.$basicStatsDisplay.html('<div class="error-message">Error loading stats</div>');
                 self.$projectsDisplay.html('<div class="error-message">Error loading projects</div>');
@@ -210,32 +219,38 @@ class Dashboard {
     }
 
     displayConfig(config) {
-        // Check if tools section is currently expanded
-        const $existingContent = $('#tools-content');
-        const wasExpanded = $existingContent.is(':visible');
+        // Check if tools and memories sections are currently expanded
+        const $existingToolsContent = $('#tools-content');
+        const $existingMemoriesContent = $('#memories-content');
+        const wasToolsExpanded = $existingToolsContent.is(':visible');
+        const wasMemoriesExpanded = $existingMemoriesContent.is(':visible');
 
         let html = '<div class="config-grid">';
 
         // Project info
         html += '<div class="config-label">Active Project:</div>';
-        html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
+        if (config.active_project.name && config.active_project.path) {
+            const configPath = config.active_project.path + '/.serena/project.yml';
+            html += '<div class="config-value"><span title="Project configuration in ' + configPath + '">' + config.active_project.name + '</span></div>';
+        } else {
+            html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
+        }
 
         html += '<div class="config-label">Language:</div>';
         html += '<div class="config-value">' + (config.active_project.language || 'N/A') + '</div>';
 
         // Context info
         html += '<div class="config-label">Context:</div>';
-        html += '<div class="config-value">' + config.context.name + '</div>';
+        html += '<div class="config-value"><span title="' + config.context.path + '">' + config.context.name + '</span></div>';
 
         // Modes info
         html += '<div class="config-label">Active Modes:</div>';
         html += '<div class="config-value">';
         if (config.modes.length > 0) {
-            html += '<ul class="config-list">';
-            config.modes.forEach(function(mode) {
-                html += '<li>' + mode.name + '</li>';
+            const modeSpans = config.modes.map(function(mode) {
+                return '<span title="' + mode.path + '">' + mode.name + '</span>';
             });
-            html += '</ul>';
+            html += modeSpans.join(', ');
         } else {
             html += 'None';
         }
@@ -243,18 +258,39 @@ class Dashboard {
 
         html += '</div>';
 
+        // Configuration help link
+        html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
+        html += '<span style="color: var(--text-muted);">📖</span>';
+        html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
+        html += '</div>';
+
         // Active tools - collapsible
         html += '<div style="margin-top: 20px;">';
         html += '<h3 class="collapsible-header" id="tools-header" style="font-size: 16px; margin: 0;">';
         html += '<span>Active Tools (' + config.active_tools.length + ')</span>';
-        html += '<span class="toggle-icon' + (wasExpanded ? ' expanded' : '') + '">▼</span>';
+        html += '<span class="toggle-icon' + (wasToolsExpanded ? ' expanded' : '') + '">▼</span>';
         html += '</h3>';
-        html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+        html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasToolsExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
         config.active_tools.forEach(function(tool) {
             html += '<div class="tool-item" title="' + tool + '">' + tool + '</div>';
         });
         html += '</div>';
         html += '</div>';
+
+        // Available memories - collapsible (only show if memories exist)
+        if (config.available_memories && config.available_memories.length > 0) {
+            html += '<div style="margin-top: 20px;">';
+            html += '<h3 class="collapsible-header" id="memories-header" style="font-size: 16px; margin: 0;">';
+            html += '<span>Available Memories (' + config.available_memories.length + ')</span>';
+            html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
+            html += '</h3>';
+            html += '<div class="collapsible-content tools-grid" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+            config.available_memories.forEach(function(memory) {
+                html += '<div class="tool-item" title="' + memory + '">' + memory + '</div>';
+            });
+            html += '</div>';
+            html += '</div>';
+        }
 
         this.$configDisplay.html(html);
 
@@ -262,6 +298,16 @@ class Dashboard {
         $('#tools-header').click(function() {
             const $header = $(this);
             const $content = $('#tools-content');
+            const $icon = $header.find('.toggle-icon');
+
+            $content.slideToggle(300);
+            $icon.toggleClass('expanded');
+        });
+
+        // Re-attach collapsible handler for the newly created memories header
+        $('#memories-header').click(function() {
+            const $header = $(this);
+            const $content = $('#memories-content');
             const $icon = $header.find('.toggle-icon');
 
             $content.slideToggle(300);
@@ -340,7 +386,7 @@ class Dashboard {
         let html = '';
         modes.forEach(function(mode) {
             const activeClass = mode.is_active ? ' active' : '';
-            html += '<div class="info-item' + activeClass + '" title="' + mode.name + '">' + mode.name + '</div>';
+            html += '<div class="info-item' + activeClass + '" title="' + mode.path + '">' + mode.name + '</div>';
         });
 
         this.$availableModesDisplay.html(html);
@@ -355,7 +401,7 @@ class Dashboard {
         let html = '';
         contexts.forEach(function(context) {
             const activeClass = context.is_active ? ' active' : '';
-            html += '<div class="info-item' + activeClass + '" title="' + context.name + '">' + context.name + '</div>';
+            html += '<div class="info-item' + activeClass + '" title="' + context.path + '">' + context.name + '</div>';
         });
 
         this.$availableContextsDisplay.html(html);
