@@ -49,6 +49,7 @@ class ResponseConfigOverview(BaseModel):
     available_tools: list[dict[str, str | bool]]
     available_modes: list[dict[str, str | bool]]
     available_contexts: list[dict[str, str | bool]]
+    available_memories: list[str] | None
 
 
 class SerenaDashboardAPI:
@@ -162,11 +163,12 @@ class SerenaDashboardAPI:
         context_info = {
             "name": context.name,
             "description": context.description,
+            "path": SerenaAgentContext.get_path(context.name),
         }
 
         # Get active modes
         modes = self._agent.get_active_modes()
-        modes_info = [{"name": mode.name, "description": mode.description} for mode in modes]
+        modes_info = [{"name": mode.name, "description": mode.description, "path": SerenaAgentMode.get_path(mode.name)} for mode in modes]
         active_mode_names = [mode.name for mode in modes]
 
         # Get active tools
@@ -203,6 +205,7 @@ class SerenaDashboardAPI:
                 {
                     "name": mode_name,
                     "is_active": mode_name in active_mode_names,
+                    "path": SerenaAgentMode.get_path(mode_name),
                 }
             )
 
@@ -214,6 +217,7 @@ class SerenaDashboardAPI:
                 {
                     "name": context_name,
                     "is_active": context_name == context.name,
+                    "path": SerenaAgentContext.get_path(context_name),
                 }
             )
 
@@ -222,6 +226,11 @@ class SerenaDashboardAPI:
         if self._tool_usage_stats is not None:
             full_stats = self._tool_usage_stats.get_tool_stats_dict()
             tool_stats_summary = {name: {"num_calls": stats["num_times_called"]} for name, stats in full_stats.items()}
+
+        # Get available memories if ReadMemoryTool is active
+        available_memories = None
+        if self._agent.tool_is_active("read_memory") and project is not None:
+            available_memories = project.memories_manager.list_memories()
 
         return ResponseConfigOverview(
             active_project=project_info,
@@ -233,6 +242,7 @@ class SerenaDashboardAPI:
             available_tools=available_tools,
             available_modes=available_modes,
             available_contexts=available_contexts,
+            available_memories=available_memories,
         )
 
     def _shutdown(self) -> None:

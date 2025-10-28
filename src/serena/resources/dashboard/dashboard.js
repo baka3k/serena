@@ -210,9 +210,11 @@ class Dashboard {
     }
 
     displayConfig(config) {
-        // Check if tools section is currently expanded
-        const $existingContent = $('#tools-content');
-        const wasExpanded = $existingContent.is(':visible');
+        // Check if tools and memories sections are currently expanded
+        const $existingToolsContent = $('#tools-content');
+        const $existingMemoriesContent = $('#memories-content');
+        const wasToolsExpanded = $existingToolsContent.is(':visible');
+        const wasMemoriesExpanded = $existingMemoriesContent.is(':visible');
 
         let html = '<div class="config-grid">';
 
@@ -225,17 +227,16 @@ class Dashboard {
 
         // Context info
         html += '<div class="config-label">Context:</div>';
-        html += '<div class="config-value">' + config.context.name + '</div>';
+        html += '<div class="config-value"><span title="' + config.context.path + '">' + config.context.name + '</span></div>';
 
         // Modes info
         html += '<div class="config-label">Active Modes:</div>';
         html += '<div class="config-value">';
         if (config.modes.length > 0) {
-            html += '<ul class="config-list">';
-            config.modes.forEach(function(mode) {
-                html += '<li>' + mode.name + '</li>';
+            const modeSpans = config.modes.map(function(mode) {
+                return '<span title="' + mode.path + '">' + mode.name + '</span>';
             });
-            html += '</ul>';
+            html += modeSpans.join(', ');
         } else {
             html += 'None';
         }
@@ -247,14 +248,29 @@ class Dashboard {
         html += '<div style="margin-top: 20px;">';
         html += '<h3 class="collapsible-header" id="tools-header" style="font-size: 16px; margin: 0;">';
         html += '<span>Active Tools (' + config.active_tools.length + ')</span>';
-        html += '<span class="toggle-icon' + (wasExpanded ? ' expanded' : '') + '">▼</span>';
+        html += '<span class="toggle-icon' + (wasToolsExpanded ? ' expanded' : '') + '">▼</span>';
         html += '</h3>';
-        html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+        html += '<div class="collapsible-content tools-grid" id="tools-content" style="' + (wasToolsExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
         config.active_tools.forEach(function(tool) {
             html += '<div class="tool-item" title="' + tool + '">' + tool + '</div>';
         });
         html += '</div>';
         html += '</div>';
+
+        // Available memories - collapsible (only show if memories exist)
+        if (config.available_memories && config.available_memories.length > 0) {
+            html += '<div style="margin-top: 20px;">';
+            html += '<h3 class="collapsible-header" id="memories-header" style="font-size: 16px; margin: 0;">';
+            html += '<span>Available Memories (' + config.available_memories.length + ')</span>';
+            html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
+            html += '</h3>';
+            html += '<div class="collapsible-content tools-grid" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+            config.available_memories.forEach(function(memory) {
+                html += '<div class="tool-item" title="' + memory + '">' + memory + '</div>';
+            });
+            html += '</div>';
+            html += '</div>';
+        }
 
         this.$configDisplay.html(html);
 
@@ -262,6 +278,16 @@ class Dashboard {
         $('#tools-header').click(function() {
             const $header = $(this);
             const $content = $('#tools-content');
+            const $icon = $header.find('.toggle-icon');
+
+            $content.slideToggle(300);
+            $icon.toggleClass('expanded');
+        });
+
+        // Re-attach collapsible handler for the newly created memories header
+        $('#memories-header').click(function() {
+            const $header = $(this);
+            const $content = $('#memories-content');
             const $icon = $header.find('.toggle-icon');
 
             $content.slideToggle(300);
@@ -340,7 +366,7 @@ class Dashboard {
         let html = '';
         modes.forEach(function(mode) {
             const activeClass = mode.is_active ? ' active' : '';
-            html += '<div class="info-item' + activeClass + '" title="' + mode.name + '">' + mode.name + '</div>';
+            html += '<div class="info-item' + activeClass + '" title="' + mode.path + '">' + mode.name + '</div>';
         });
 
         this.$availableModesDisplay.html(html);
@@ -355,7 +381,7 @@ class Dashboard {
         let html = '';
         contexts.forEach(function(context) {
             const activeClass = context.is_active ? ' active' : '';
-            html += '<div class="info-item' + activeClass + '" title="' + context.name + '">' + context.name + '</div>';
+            html += '<div class="info-item' + activeClass + '" title="' + context.path + '">' + context.name + '</div>';
         });
 
         this.$availableContextsDisplay.html(html);
