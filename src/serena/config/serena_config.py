@@ -176,7 +176,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def autogenerate(
-        cls, project_root: str | Path, project_name: str | None = None, project_language: Language | None = None, save_to_disk: bool = True
+        cls, project_root: str | Path, project_name: str | None = None, languages: list[Language] | None = None, save_to_disk: bool = True
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
@@ -184,7 +184,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         :param project_root: the path to the project root
         :param project_name: the name of the project; if None, the name of the project will be the name of the directory
             containing the project
-        :param project_language: the programming language of the project; if None, it will be determined automatically
+        :param languages: the languages of the project; if None, they will be determined automatically
         :param save_to_disk: whether to save the project configuration to disk
         :return: the project configuration
         """
@@ -193,7 +193,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             raise FileNotFoundError(f"Project root not found: {project_root}")
         with LogTime("Project configuration auto-generation", logger=log):
             project_name = project_name or project_root.name
-            if project_language is None:
+            if languages is None:
                 language_composition = determine_programming_language_composition(str(project_root))
                 if len(language_composition) == 0:
                     raise ValueError(
@@ -208,11 +208,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                     )
                 # find the language with the highest percentage
                 dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
+                languages_to_use = [dominant_language]
             else:
-                dominant_language = project_language.value
+                languages_to_use = [lang.value for lang in languages]
             config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
             config_with_comments["project_name"] = project_name
-            config_with_comments["languages"] = [dominant_language]
+            config_with_comments["languages"] = languages_to_use
             if save_to_disk:
                 save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
             return cls._from_dict(config_with_comments)

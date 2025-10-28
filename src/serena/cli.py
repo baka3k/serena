@@ -416,19 +416,22 @@ class ProjectCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command("generate-yml", help="Generate a project.yml file.")
     @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
-    @click.option("--language", type=str, default=None, help="Programming language; inferred if not specified.")
-    def generate_yml(project_path: str, language: str | None = None) -> None:
+    @click.option(
+        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
+    )
+    def generate_yml(project_path: str, language: tuple[str, ...]) -> None:
         yml_path = os.path.join(project_path, ProjectConfig.rel_path_to_project_yml())
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
-        lang_inst = None
+        languages: list[Language] = []
         if language:
-            try:
-                lang_inst = Language[language.upper()]
-            except KeyError:
-                all_langs = [l.name.lower() for l in Language.iter_all(include_experimental=True)]
-                raise ValueError(f"Unknown language '{language}'. Supported: {all_langs}")
-        generated_conf = ProjectConfig.autogenerate(project_root=project_path, project_language=lang_inst)
+            for lang in language:
+                try:
+                    languages.append(Language(lang.lower()))
+                except ValueError:
+                    all_langs = [l.value for l in Language]
+                    raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
+        generated_conf = ProjectConfig.autogenerate(project_root=project_path, languages=languages if languages else None)
         print(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
 
     @staticmethod
