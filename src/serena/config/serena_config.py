@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import dataclasses
 import os
 import shutil
 from collections.abc import Iterable
@@ -257,6 +258,14 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             initial_prompt=data.get("initial_prompt", ""),
             encoding=data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING),
         )
+
+    def to_yaml_dict(self) -> dict:
+        """
+        :return: a yaml-serializable dictionary representation of this configuration
+        """
+        d = dataclasses.asdict(self)
+        d["languages"] = [lang.value for lang in self.languages]
+        return d
 
     @classmethod
     def load(cls, project_root: Path | str, autogenerate: bool = False) -> Self:
