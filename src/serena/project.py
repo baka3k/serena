@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.ls_manager import LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
 from solidlsp import SolidLanguageServer
@@ -101,10 +103,6 @@ class Project(ToStringMixin):
     def project_name(self) -> str:
         return self.project_config.project_name
 
-    @property
-    def language(self) -> Language:
-        return self.project_config.language
-
     @classmethod
     def load(cls, project_root: str | Path, autogenerate: bool = True) -> "Project":
         project_root = Path(project_root).resolve()
@@ -127,7 +125,8 @@ class Project(ToStringMixin):
             msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
         else:
             msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
-        msg += f"\nProgramming language: {self.project_config.language.value}; file encoding: {self.project_config.encoding}"
+        languages_str = ", ".join([lang.value for lang in self.project_config.languages])
+        msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
         memories = self.memories_manager.list_memories()
         if memories:
             msg += (
@@ -179,8 +178,13 @@ class Project(ToStringMixin):
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
         if is_file and ignore_non_source_files:
-            fn_matcher = self.language.get_source_fn_matcher()
-            if not fn_matcher.is_relevant_filename(abs_path):
+            is_file_in_supported_language = False
+            for language in self.project_config.languages:
+                fn_matcher = language.get_source_fn_matcher()
+                if fn_matcher.is_relevant_filename(abs_path):
+                    is_file_in_supported_language = True
+                    break
+            if not is_file_in_supported_language:
                 return True
 
         # Create normalized path for consistent handling
@@ -345,13 +349,46 @@ class Project(ToStringMixin):
             source_file_path=relative_file_path,
         )
 
-    def create_language_server(
+    def _create_language_server_factory(
+        self,
+        language: Language,
+        ls_timeout: float | None,
+        ls_specific_settings: dict | None,
+        log_level: int,
+        trace_lsp_communication: bool,
+    ) -> Callable[[], SolidLanguageServer]:
+
+        def factory() -> SolidLanguageServer:
+            ls_config = LanguageServerConfig(
+                code_language=language,
+                ignored_paths=self._ignored_patterns,
+                trace_lsp_communication=trace_lsp_communication,
+                encoding=self.project_config.encoding,
+            )
+            ls_logger = LanguageServerLogger(log_level=log_level)
+
+            log.info(f"Creating language server instance for {self.project_root}, language={language}.")
+            return SolidLanguageServer.create(
+                ls_config,
+                ls_logger,
+                self.project_root,
+                timeout=ls_timeout,
+                solidlsp_settings=SolidLSPSettings(
+                    solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
+                    project_data_relative_path=SERENA_MANAGED_DIR_NAME,
+                    ls_specific_settings=ls_specific_settings or {},
+                ),
+            )
+
+        return factory
+
+    def create_language_server_manager(
         self,
         log_level: int = logging.INFO,
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
         ls_specific_settings: dict[Language, Any] | None = None,
-    ) -> SolidLanguageServer:
+    ) -> LanguageServerManager:
         """
         Create a language server for a project. Note that you will have to start it
         before performing any LS operations.
@@ -365,23 +402,18 @@ class Project(ToStringMixin):
             see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
         :return: the language server
         """
-        ls_config = LanguageServerConfig(
-            code_language=self.language,
-            ignored_paths=self._ignored_patterns,
-            trace_lsp_communication=trace_lsp_communication,
-            encoding=self.project_config.encoding,
-        )
-        ls_logger = LanguageServerLogger(log_level=log_level)
-
-        log.info(f"Creating language server instance for {self.project_root}.")
-        return SolidLanguageServer.create(
-            ls_config,
-            ls_logger,
-            self.project_root,
-            timeout=ls_timeout,
-            solidlsp_settings=SolidLSPSettings(
-                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
-                project_data_relative_path=SERENA_MANAGED_DIR_NAME,
-                ls_specific_settings=ls_specific_settings or {},
-            ),
-        )
+        log.info(f"Creating language server manager for {self.project_root}")
+        language_servers: dict[Language, SolidLanguageServer] = {}
+        language_server_factories: dict[Language, Callable[[], SolidLanguageServer]] = {}
+        for language in self.project_config.languages:
+            language_server_factory = self._create_language_server_factory(
+                language, ls_timeout, ls_specific_settings, log_level, trace_lsp_communication
+            )
+            language_server = language_server_factory()
+            log.info(f"Starting language server for {language} at root {self.project_root}")
+            language_server.start()
+            if not language_server.is_running():
+                raise RuntimeError(f"Failed to start the language server for {language} for root {self.project_root}")
+            language_servers[language] = language_server
+            language_server_factories[language] = language_server_factory
+        return LanguageServerManager(language_servers, language_server_factories)

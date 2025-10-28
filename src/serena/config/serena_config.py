@@ -162,7 +162,7 @@ def is_running_in_docker() -> bool:
 @dataclass(kw_only=True)
 class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     project_name: str
-    language: Language
+    languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
@@ -212,7 +212,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 dominant_language = project_language.value
             config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
             config_with_comments["project_name"] = project_name
-            config_with_comments["language"] = dominant_language
+            config_with_comments["languages"] = [dominant_language]
             if save_to_disk:
                 save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
             return cls._from_dict(config_with_comments)
@@ -226,19 +226,28 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
-        language_str = data["language"].lower()
         project_name = data["project_name"]
+        language_strings = data.get("languages", [])
+
         # backwards compatibility
-        if language_str == "javascript":
-            log.warning(f"Found deprecated project language `javascript` in project {project_name}, please change to `typescript`")
-            language_str = "typescript"
-        try:
-            language = Language(language_str)
-        except ValueError as e:
-            raise ValueError(f"Invalid language: {data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+        lang_name_mapping = {"javascript": "typescript"}
+        if len(language_strings) == 0 and "language" in data:
+            language_strings = [data["language"]]
+
+        languages: list[Language] = []
+        for language_str in language_strings:
+            try:
+                language_str = language_str.lower()
+                if language_str in lang_name_mapping:
+                    language_str = lang_name_mapping[language_str]
+                language = Language(language_str)
+                languages.append(language)
+            except ValueError as e:
+                raise ValueError(f"Invalid language: {data['language']}.\nValid language_strings are: {[l.value for l in Language]}") from e
+
         return cls(
             project_name=project_name,
-            language=language,
+            languages=languages,
             ignored_paths=data.get("ignored_paths", []),
             excluded_tools=data.get("excluded_tools", []),
             included_optional_tools=data.get("included_optional_tools", []),

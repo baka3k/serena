@@ -47,9 +47,9 @@ class Component(ABC):
     def create_language_server_symbol_retriever(self) -> LanguageServerSymbolRetriever:
         if not self.agent.is_using_language_server():
             raise Exception("Cannot create LanguageServerSymbolRetriever; agent is not in language server mode.")
-        language_server = self.agent.language_server
-        assert language_server is not None
-        return LanguageServerSymbolRetriever(language_server, agent=self.agent)
+        language_server_manager = self.agent.language_server_manager
+        assert language_server_manager is not None
+        return LanguageServerSymbolRetriever(language_server_manager, agent=self.agent)
 
     @property
     def project(self) -> Project:
@@ -244,18 +244,24 @@ class Tool(Component):
                             "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
-                    if self.agent.is_using_language_server() and not self.agent.is_language_server_running():
-                        log.info("Language server is not running. Starting it ...")
-                        self.agent.reset_language_server()
 
                 # apply the actual tool
                 try:
                     result = apply_fn(**kwargs)
                 except SolidLSPException as e:
                     if e.is_language_server_terminated():
-                        log.error(f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ...")
-                        self.agent.reset_language_server()
-                        result = apply_fn(**kwargs)
+                        affected_language = e.get_affected_language()
+                        if affected_language is not None and self.agent.language_server_manager is not None:
+                            log.error(
+                                f"Language server terminated while executing tool ({e}). Restarting the language server and retrying ..."
+                            )
+                            self.agent.language_server_manager.restart_language_server(affected_language)
+                            result = apply_fn(**kwargs)
+                        else:
+                            log.error(
+                                f"Language server terminated while executing tool ({e}), but affected language is unknown. Not retrying."
+                            )
+                            raise
                     else:
                         raise
 
@@ -273,8 +279,8 @@ class Tool(Component):
                 log.info(f"Result: {result}")
 
             try:
-                if self.agent.language_server is not None:
-                    self.agent.language_server.save_cache()
+                if self.agent.language_server_manager is not None:
+                    self.agent.language_server_manager.save_all_caches()
             except Exception as e:
                 log.error(f"Error saving language server cache: {e}")
 

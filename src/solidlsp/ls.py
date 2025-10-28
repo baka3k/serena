@@ -214,6 +214,7 @@ class SolidLanguageServer(ABC):
         )
         self.server = SolidLanguageServerHandler(
             process_launch_info,
+            language=self.language,
             logger=logging_fn,
             start_independent_lsp_process=config.start_independent_lsp_process,
         )

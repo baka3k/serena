@@ -429,7 +429,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 all_langs = [l.name.lower() for l in Language.iter_all(include_experimental=True)]
                 raise ValueError(f"Unknown language '{language}'. Supported: {all_langs}")
         generated_conf = ProjectConfig.autogenerate(project_root=project_path, project_language=lang_inst)
-        print(f"Generated project.yml with language {generated_conf.language.value} at {yml_path}.")
+        print(f"Generated project.yml with languages {generated_conf.languages} at {yml_path}.")
 
     @staticmethod
     @click.command("index", help="Index a project by saving symbols to the LSP cache.")
@@ -460,6 +460,7 @@ class ProjectCommands(AutoRegisteringGroup):
         serena_config = SerenaConfig.from_config_file()
         proj = Project.load(os.path.abspath(project))
         click.echo(f"Indexing symbols in project {project}…")
+        # TODO FIXME
         ls = proj.create_language_server(log_level=lvl, ls_timeout=timeout, ls_specific_settings=serena_config.ls_specific_settings)
         log_file = os.path.join(project, ".serena", "logs", "indexing.txt")
 
