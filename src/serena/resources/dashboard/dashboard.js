@@ -89,7 +89,10 @@ class Dashboard {
 
         // Register event handlers
         this.$loadButton.click(this.loadLogs.bind(this));
-        this.$menuShutdown.click(this.shutdown.bind(this));
+        this.$menuShutdown.click(function(e) {
+            e.preventDefault();
+            self.shutdown();
+        });
         this.$menuToggle.click(this.toggleMenu.bind(this));
         this.$themeToggle.click(this.toggleTheme.bind(this));
         this.$refreshStats.click(this.loadStats.bind(this));
@@ -184,6 +187,7 @@ class Dashboard {
             url: '/get_config_overview',
             type: 'GET',
             success: function(response) {
+                self.failureCount = 0;
                 self.configData = response;
                 self.displayConfig(response);
                 self.displayBasicStats(response.tool_stats_summary);
@@ -194,6 +198,11 @@ class Dashboard {
             },
             error: function(xhr, status, error) {
                 console.error('Error loading config overview:', error);
+                self.failureCount++;
+                if (self.failureCount >= 3) {
+                    console.log('Server appears to be down, closing tab');
+                    window.close();
+                }
                 self.$configDisplay.html('<div class="error-message">Error loading configuration</div>');
                 self.$basicStatsDisplay.html('<div class="error-message">Error loading stats</div>');
                 self.$projectsDisplay.html('<div class="error-message">Error loading projects</div>');
