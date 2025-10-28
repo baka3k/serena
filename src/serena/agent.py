@@ -86,7 +86,7 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
-        self.language_server_manager: LanguageServerManager | None = None
+        self._language_server_manager: LanguageServerManager | None = None
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
@@ -191,6 +191,18 @@ class SerenaAgent:
                 process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
                 process.start()
                 process.join(timeout=1)
+
+    def get_language_server_manager(self) -> LanguageServerManager | None:
+        return self._language_server_manager
+
+    def get_language_server_manager_or_raise(self) -> LanguageServerManager:
+        if self._language_server_manager is None:
+            raise Exception(
+                "The language server manager is not initialized, indicating a problem during project activation. "
+                "Inform the user, telling them to inspect Serena's logs in order to determine the issue. "
+                "IMPORTANT: Wait for further instructions before you continue!"
+            )
+        return self._language_server_manager
 
     def get_context(self) -> SerenaAgentContext:
         return self._context
@@ -518,13 +530,13 @@ class SerenaAgent:
             ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
 
         # stop the language server if it is running
-        if self.language_server_manager is not None:
-            self.language_server_manager.stop_all()
-            self.language_server_manager = None
+        if self._language_server_manager is not None:
+            self._language_server_manager.stop_all()
+            self._language_server_manager = None
 
-        # instantiate and start the necessarys language servers
-        assert self._active_project is not None
-        self.language_server_manager = self._active_project.create_language_server_manager(
+        # instantiate and start the necessary language servers
+        assert self._active_project is not None, "Active project required"
+        self._language_server_manager = self._active_project.create_language_server_manager(
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
@@ -544,9 +556,9 @@ class SerenaAgent:
         if not hasattr(self, "_is_initialized"):
             return
         log.info("SerenaAgent is shutting down ...")
-        if self.language_server_manager is not None:
-            self.language_server_manager.stop_all(save_cache=True)
-            self.language_server_manager = None
+        if self._language_server_manager is not None:
+            self._language_server_manager.stop_all(save_cache=True)
+            self._language_server_manager = None
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
