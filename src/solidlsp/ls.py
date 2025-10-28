@@ -1688,7 +1688,16 @@ class SolidLanguageServer(ABC):
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
-        self._shutdown(timeout=shutdown_timeout)
+        """
+        Stops the language server process.
+        This function never raises an exception (any exceptions during shutdown are logged).
+
+        :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
+        """
+        try:
+            self._shutdown(timeout=shutdown_timeout)
+        except Exception as e:
+            self.logger.log(f"Exception while shutting down language server: {e}", logging.WARNING)
 
     @property
     def language_server(self) -> Self:

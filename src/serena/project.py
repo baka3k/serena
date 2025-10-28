@@ -1,11 +1,13 @@
 import json
 import logging
 import os
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pathspec
+from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
@@ -405,15 +407,41 @@ class Project(ToStringMixin):
         log.info(f"Creating language server manager for {self.project_root}")
         language_servers: dict[Language, SolidLanguageServer] = {}
         language_server_factories: dict[Language, Callable[[], SolidLanguageServer]] = {}
+        threads = []
+        exceptions = {}
+        lock = threading.Lock()
+
+        def start_language_server(language: Language, factory: Callable[[], SolidLanguageServer]):
+            try:
+                with LogTime(f"Language server startup (language={language.value})"):
+                    language_server = factory()
+                    language_server.start()
+                    if not language_server.is_running():
+                        raise RuntimeError(
+                            f"Failed to start the language server for language {language.value} with root {self.project_root}"
+                        )
+                    with lock:
+                        language_servers[language] = language_server
+            except Exception as e:
+                log.error(f"Error starting language server for language {language.value}: {e}", exc_info=e)
+                with lock:
+                    exceptions[language] = e
+
+        # start language servers in parallel threads
         for language in self.project_config.languages:
-            language_server_factory = self._create_language_server_factory(
-                language, ls_timeout, ls_specific_settings, log_level, trace_lsp_communication
-            )
-            language_server = language_server_factory()
-            log.info(f"Starting language server for {language} at root {self.project_root}")
-            language_server.start()
-            if not language_server.is_running():
-                raise RuntimeError(f"Failed to start the language server for {language} for root {self.project_root}")
-            language_servers[language] = language_server
-            language_server_factories[language] = language_server_factory
+            factory = self._create_language_server_factory(language, ls_timeout, ls_specific_settings, log_level, trace_lsp_communication)
+            language_server_factories[language] = factory
+            thread = threading.Thread(target=start_language_server, args=(language, factory), name="StartLS:" + language.value)
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+
+        # If any server failed to start up, raise an exception and stop all started language servers
+        if exceptions:
+            for ls in language_servers.values():
+                ls.stop()
+            failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
+            raise Exception(f"Failed to start language servers:\n{failure_messages}")
+
         return LanguageServerManager(language_servers, language_server_factories)
