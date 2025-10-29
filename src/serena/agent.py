@@ -378,8 +378,12 @@ class SerenaAgent:
             self._task_executor_task_index += 1
 
             def task_execution_wrapper() -> Any:
-                with LogTime(task_name, logger=log):
-                    return task()
+                try:
+                    with LogTime(task_name, logger=log):
+                        return task()
+                except Exception as e:
+                    log.error(f"Error during execution of {task_name}: {e}", exc_info=e)
+                    raise
 
             log.info(f"Scheduling {task_name}")
             return self._task_executor.submit(task_execution_wrapper)
