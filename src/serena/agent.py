@@ -22,12 +22,13 @@ from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import RegisteredContext, SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import SerenaConfig, ToolInclusionDefinition, ToolSet
 from serena.dashboard import SerenaDashboardAPI
+from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, Tool, ToolMarker, ToolRegistry
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
-from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
@@ -86,7 +87,6 @@ class SerenaAgent:
 
         # project-specific instances, which will be initialized upon project activation
         self._active_project: Project | None = None
-        self.language_server: SolidLanguageServer | None = None
 
         # adjust log level
         serena_log_level = self.serena_config.log_level
@@ -191,6 +191,21 @@ class SerenaAgent:
                 process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
                 process.start()
                 process.join(timeout=1)
+
+    def get_language_server_manager(self) -> LanguageServerManager | None:
+        if self._active_project is not None:
+            return self._active_project.language_server_manager
+        return None
+
+    def get_language_server_manager_or_raise(self) -> LanguageServerManager:
+        language_server_manager = self.get_language_server_manager()
+        if language_server_manager is None:
+            raise Exception(
+                "The language server manager is not initialized, indicating a problem during project activation. "
+                "Inform the user, telling them to inspect Serena's logs in order to determine the issue. "
+                "IMPORTANT: Wait for further instructions before you continue!"
+            )
+        return language_server_manager
 
     def get_context(self) -> SerenaAgentContext:
         return self._context
@@ -369,7 +384,7 @@ class SerenaAgent:
             log.info(f"Scheduling {task_name}")
             return self._task_executor.submit(task_execution_wrapper)
 
-    def execute_task(self, task: Callable[[], T]) -> T:
+    def execute_task(self, task: Callable[[], T], name: str | None = None) -> T:
         """
         Executes the given task synchronously via the agent's task executor.
         This is useful for tasks that need to be executed immediately and whose results are needed right away.
@@ -377,7 +392,7 @@ class SerenaAgent:
         :param task: the task to execute
         :return: the result of the task execution
         """
-        future = self.issue_task(task)
+        future = self.issue_task(task, name=name)
         return future.result()
 
     def is_using_language_server(self) -> bool:
@@ -391,15 +406,14 @@ class SerenaAgent:
         self._active_project = project
         self._update_active_tools()
 
-        def init_language_server() -> None:
+        def init_language_server_manager() -> None:
             # start the language server
             with LogTime("Language server initialization", logger=log):
-                self.reset_language_server()
-                assert self.language_server is not None
+                self.reset_language_server_manager()
 
         # initialize the language server in the background (if in language server mode)
         if self.is_using_language_server():
-            self.issue_task(init_language_server)
+            self.issue_task(init_language_server_manager)
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
@@ -506,12 +520,9 @@ class SerenaAgent:
 
         return result_str
 
-    def is_language_server_running(self) -> bool:
-        return self.language_server is not None and self.language_server.is_running()
-
-    def reset_language_server(self) -> None:
+    def reset_language_server_manager(self) -> None:
         """
-        Starts/resets the language server for the current project
+        Starts/resets the language server manager for the current project
         """
         tool_timeout = self.serena_config.tool_timeout
         if tool_timeout is None or tool_timeout < 0:
@@ -521,27 +532,23 @@ class SerenaAgent:
                 raise ValueError(f"Tool timeout must be at least 10 seconds, but is {tool_timeout} seconds")
             ls_timeout = tool_timeout - 5  # the LS timeout is for a single call, it should be smaller than the tool timeout
 
-        # stop the language server if it is running
-        if self.is_language_server_running():
-            assert self.language_server is not None
-            log.info(f"Stopping the current language server at {self.language_server.repository_root_path} ...")
-            self.language_server.stop()
-            self.language_server = None
-
-        # instantiate and start the language server
-        assert self._active_project is not None
-        self.language_server = self._active_project.create_language_server(
+        # instantiate and start the necessary language servers
+        self.get_active_project_or_raise().create_language_server_manager(
             log_level=self.serena_config.log_level,
             ls_timeout=ls_timeout,
             trace_lsp_communication=self.serena_config.trace_lsp_communication,
             ls_specific_settings=self.serena_config.ls_specific_settings,
         )
-        log.info(f"Starting the language server for {self._active_project.project_name}")
-        self.language_server.start()
-        if not self.language_server.is_running():
-            raise RuntimeError(
-                f"Failed to start the language server for {self._active_project.project_name} at {self._active_project.project_root}"
-            )
+
+    def add_language(self, language: Language) -> None:
+        """
+        Adds a new language to the active project, spawning the respective language server and updating the project configuration.
+        The addition is scheduled via the agent's task executor and executed synchronously, i.e. the method returns
+        when the addition is complete.
+
+        :param language: the language to add
+        """
+        self.execute_task(lambda: self.get_active_project_or_raise().add_language(language), name=f"AddLanguage:{language.value}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
@@ -556,11 +563,9 @@ class SerenaAgent:
         if not hasattr(self, "_is_initialized"):
             return
         log.info("SerenaAgent is shutting down ...")
-        if self.is_language_server_running():
-            log.info("Stopping the language server ...")
-            assert self.language_server is not None
-            self.language_server.save_cache()
-            self.language_server.stop()
+        if self._active_project is not None:
+            self._active_project.shutdown()
+            self._active_project = None
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()

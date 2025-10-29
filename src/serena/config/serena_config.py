@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import dataclasses
 import os
 import shutil
 from collections.abc import Iterable
@@ -162,7 +163,7 @@ def is_running_in_docker() -> bool:
 @dataclass(kw_only=True)
 class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
     project_name: str
-    language: Language
+    languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
@@ -176,7 +177,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def autogenerate(
-        cls, project_root: str | Path, project_name: str | None = None, project_language: Language | None = None, save_to_disk: bool = True
+        cls, project_root: str | Path, project_name: str | None = None, languages: list[Language] | None = None, save_to_disk: bool = True
     ) -> Self:
         """
         Autogenerate a project configuration for a given project root.
@@ -184,7 +185,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         :param project_root: the path to the project root
         :param project_name: the name of the project; if None, the name of the project will be the name of the directory
             containing the project
-        :param project_language: the programming language of the project; if None, it will be determined automatically
+        :param languages: the languages of the project; if None, they will be determined automatically
         :param save_to_disk: whether to save the project configuration to disk
         :return: the project configuration
         """
@@ -193,7 +194,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             raise FileNotFoundError(f"Project root not found: {project_root}")
         with LogTime("Project configuration auto-generation", logger=log):
             project_name = project_name or project_root.name
-            if project_language is None:
+            if languages is None:
                 language_composition = determine_programming_language_composition(str(project_root))
                 if len(language_composition) == 0:
                     raise ValueError(
@@ -208,11 +209,12 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                     )
                 # find the language with the highest percentage
                 dominant_language = max(language_composition.keys(), key=lambda lang: language_composition[lang])
+                languages_to_use = [dominant_language]
             else:
-                dominant_language = project_language.value
+                languages_to_use = [lang.value for lang in languages]
             config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
             config_with_comments["project_name"] = project_name
-            config_with_comments["language"] = dominant_language
+            config_with_comments["languages"] = languages_to_use
             if save_to_disk:
                 save_yaml(str(project_root / cls.rel_path_to_project_yml()), config_with_comments, preserve_comments=True)
             return cls._from_dict(config_with_comments)
@@ -226,19 +228,28 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         """
         Create a ProjectConfig instance from a configuration dictionary
         """
-        language_str = data["language"].lower()
         project_name = data["project_name"]
+        language_strings = data.get("languages", [])
+
         # backwards compatibility
-        if language_str == "javascript":
-            log.warning(f"Found deprecated project language `javascript` in project {project_name}, please change to `typescript`")
-            language_str = "typescript"
-        try:
-            language = Language(language_str)
-        except ValueError as e:
-            raise ValueError(f"Invalid language: {data['language']}.\nValid languages are: {[l.value for l in Language]}") from e
+        lang_name_mapping = {"javascript": "typescript"}
+        if len(language_strings) == 0 and "language" in data:
+            language_strings = [data["language"]]
+
+        languages: list[Language] = []
+        for language_str in language_strings:
+            try:
+                language_str = language_str.lower()
+                if language_str in lang_name_mapping:
+                    language_str = lang_name_mapping[language_str]
+                language = Language(language_str)
+                languages.append(language)
+            except ValueError as e:
+                raise ValueError(f"Invalid language: {data['language']}.\nValid language_strings are: {[l.value for l in Language]}") from e
+
         return cls(
             project_name=project_name,
-            language=language,
+            languages=languages,
             ignored_paths=data.get("ignored_paths", []),
             excluded_tools=data.get("excluded_tools", []),
             included_optional_tools=data.get("included_optional_tools", []),
@@ -247,6 +258,14 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             initial_prompt=data.get("initial_prompt", ""),
             encoding=data.get("encoding", DEFAULT_SOURCE_FILE_ENCODING),
         )
+
+    def to_yaml_dict(self) -> dict:
+        """
+        :return: a yaml-serializable dictionary representation of this configuration
+        """
+        d = dataclasses.asdict(self)
+        d["languages"] = [lang.value for lang in self.languages]
+        return d
 
     @classmethod
     def load(cls, project_root: Path | str, autogenerate: bool = False) -> Self:

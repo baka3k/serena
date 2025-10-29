@@ -8,14 +8,14 @@ import pathspec
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
-from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
+from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
+from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
+from serena.util.general import load_yaml, save_yaml
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_logger import LanguageServerLogger
+from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
-from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +59,7 @@ class Project(ToStringMixin):
         self.project_root = project_root
         self.project_config = project_config
         self.memories_manager = MemoriesManager(project_root)
+        self.language_server_manager: LanguageServerManager | None = None
         self._is_newly_created = is_newly_created
 
         # create .gitignore file in the project's Serena data folder if not yet present
@@ -101,10 +102,6 @@ class Project(ToStringMixin):
     def project_name(self) -> str:
         return self.project_config.project_name
 
-    @property
-    def language(self) -> Language:
-        return self.project_config.language
-
     @classmethod
     def load(cls, project_root: str | Path, autogenerate: bool = True) -> "Project":
         project_root = Path(project_root).resolve()
@@ -112,6 +109,16 @@ class Project(ToStringMixin):
             raise FileNotFoundError(f"Project root not found: {project_root}")
         project_config = ProjectConfig.load(project_root, autogenerate=autogenerate)
         return Project(project_root=str(project_root), project_config=project_config)
+
+    def save_config(self) -> None:
+        """
+        Saves the current project configuration to disk.
+        """
+        config_path = os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
+        log.info("Saving updated project configuration to %s", config_path)
+        config_with_comments = load_yaml(config_path, preserve_comments=True)
+        config_with_comments.update(self.project_config.to_yaml_dict())
+        save_yaml(config_path, config_with_comments, preserve_comments=True)
 
     def path_to_serena_data_folder(self) -> str:
         return os.path.join(self.project_root, SERENA_MANAGED_DIR_NAME)
@@ -127,7 +134,8 @@ class Project(ToStringMixin):
             msg = f"Created and activated a new project with name '{self.project_name}' at {self.project_root}. "
         else:
             msg = f"The project with name '{self.project_name}' at {self.project_root} is activated."
-        msg += f"\nProgramming language: {self.project_config.language.value}; file encoding: {self.project_config.encoding}"
+        languages_str = ", ".join([lang.value for lang in self.project_config.languages])
+        msg += f"\nProgramming languages: {languages_str}; file encoding: {self.project_config.encoding}"
         memories = self.memories_manager.list_memories()
         if memories:
             msg += (
@@ -179,8 +187,13 @@ class Project(ToStringMixin):
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
         if is_file and ignore_non_source_files:
-            fn_matcher = self.language.get_source_fn_matcher()
-            if not fn_matcher.is_relevant_filename(abs_path):
+            is_file_in_supported_language = False
+            for language in self.project_config.languages:
+                fn_matcher = language.get_source_fn_matcher()
+                if fn_matcher.is_relevant_filename(abs_path):
+                    is_file_in_supported_language = True
+                    break
+            if not is_file_in_supported_language:
                 return True
 
         # Create normalized path for consistent handling
@@ -345,43 +358,66 @@ class Project(ToStringMixin):
             source_file_path=relative_file_path,
         )
 
-    def create_language_server(
+    def create_language_server_manager(
         self,
         log_level: int = logging.INFO,
         ls_timeout: float | None = DEFAULT_TOOL_TIMEOUT - 5,
         trace_lsp_communication: bool = False,
         ls_specific_settings: dict[Language, Any] | None = None,
-    ) -> SolidLanguageServer:
+    ) -> LanguageServerManager:
         """
-        Create a language server for a project. Note that you will have to start it
-        before performing any LS operations.
+        Creates the language server manager for the project, starting one language server per configured programming language.
 
-        :param project: either a path to the project root or a ProjectConfig instance.
-            If no project.yml is found, the default project configuration will be used.
         :param log_level: the log level for the language server
         :param ls_timeout: the timeout for the language server
         :param trace_lsp_communication: whether to trace LSP communication
         :param ls_specific_settings: optional LS specific configuration of the language server,
             see docstrings in the inits of subclasses of SolidLanguageServer to see what values may be passed.
-        :return: the language server
+        :return: the language server manager, which is also stored in the project instance
         """
-        ls_config = LanguageServerConfig(
-            code_language=self.language,
-            ignored_paths=self._ignored_patterns,
-            trace_lsp_communication=trace_lsp_communication,
-            encoding=self.project_config.encoding,
-        )
-        ls_logger = LanguageServerLogger(log_level=log_level)
+        # if there is an existing instance, stop its language servers first
+        if self.language_server_manager is not None:
+            log.info("Stopping existing language server manager ...")
+            self.language_server_manager.stop_all()
+            self.language_server_manager = None
 
-        log.info(f"Creating language server instance for {self.project_root}.")
-        return SolidLanguageServer.create(
-            ls_config,
-            ls_logger,
-            self.project_root,
-            timeout=ls_timeout,
-            solidlsp_settings=SolidLSPSettings(
-                solidlsp_dir=SERENA_MANAGED_DIR_IN_HOME,
-                project_data_relative_path=SERENA_MANAGED_DIR_NAME,
-                ls_specific_settings=ls_specific_settings or {},
-            ),
+        log.info(f"Creating language server manager for {self.project_root}")
+        factory = LanguageServerFactory(
+            project_root=self.project_root,
+            encoding=self.project_config.encoding,
+            ignored_patterns=self._ignored_patterns,
+            ls_timeout=ls_timeout,
+            ls_specific_settings=ls_specific_settings,
+            log_level=log_level,
+            trace_lsp_communication=trace_lsp_communication,
         )
+        self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
+        return self.language_server_manager
+
+    def add_language(self, language: Language) -> None:
+        """
+        Adds a new programming language to the project configuration, starting the corresponding
+        language server instance if the LS manager is active.
+        The project configuration is saved to disk after adding the language.
+
+        :param language: the programming language to add
+        """
+        if language in self.project_config.languages:
+            log.info(f"Language {language.value} is already present in the project configuration.")
+            return
+
+        # start the language server (if the LS manager is active)
+        if self.language_server_manager is None:
+            log.info("Language server manager is not active; skipping language server startup for the new language.")
+        else:
+            log.info("Adding and starting the language server for new language %s ...", language.value)
+            self.language_server_manager.add_language_server(language)
+
+        # update the project configuration
+        self.project_config.languages.append(language)
+        self.save_config()
+
+    def shutdown(self) -> None:
+        if self.language_server_manager is not None:
+            self.language_server_manager.stop_all(save_cache=True)
+            self.language_server_manager = None
