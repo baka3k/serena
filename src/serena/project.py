@@ -11,7 +11,7 @@ from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
 from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
-from serena.ls_manager import LanguageServerFactory, LanguageServerFactoryParams, LanguageServerManager
+from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
 from serena.util.general import load_yaml, save_yaml
@@ -384,7 +384,7 @@ class Project(ToStringMixin):
             self.language_server_manager = None
 
         log.info(f"Creating language server manager for {self.project_root}")
-        language_server_factory_params = LanguageServerFactoryParams(
+        language_server_factory = LanguageServerFactory(
             project_root=self.project_root,
             encoding=self.project_config.encoding,
             ignored_patterns=self._ignored_patterns,
@@ -394,15 +394,14 @@ class Project(ToStringMixin):
             trace_lsp_communication=trace_lsp_communication,
         )
         language_servers: dict[Language, SolidLanguageServer] = {}
-        language_server_factories: dict[Language, LanguageServerFactory] = {}
         threads = []
         exceptions = {}
         lock = threading.Lock()
 
-        def start_language_server(language: Language, factory: LanguageServerFactory) -> None:
+        def start_language_server(language: Language) -> None:
             try:
                 with LogTime(f"Language server startup (language={language.value})"):
-                    language_server = factory.create_language_server(language_server_factory_params)
+                    language_server = language_server_factory.create_language_server(language)
                     language_server.start()
                     if not language_server.is_running():
                         raise RuntimeError(
@@ -417,9 +416,7 @@ class Project(ToStringMixin):
 
         # start language servers in parallel threads
         for language in self.project_config.languages:
-            factory = LanguageServerFactory(language)
-            language_server_factories[language] = factory
-            thread = threading.Thread(target=start_language_server, args=(language, factory), name="StartLS:" + language.value)
+            thread = threading.Thread(target=start_language_server, args=(language,), name="StartLS:" + language.value)
             thread.start()
             threads.append(thread)
         for thread in threads:
@@ -432,7 +429,7 @@ class Project(ToStringMixin):
             failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
             raise Exception(f"Failed to start language servers:\n{failure_messages}")
 
-        self.language_server_manager = LanguageServerManager(language_servers, language_server_factories, language_server_factory_params)
+        self.language_server_manager = LanguageServerManager(language_servers, language_server_factory)
         return self.language_server_manager
 
     def add_language(self, language: Language) -> None:
