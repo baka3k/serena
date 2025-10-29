@@ -1,12 +1,10 @@
 import json
 import logging
 import os
-import threading
 from pathlib import Path
 from typing import Any
 
 import pathspec
-from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
 from serena.config.serena_config import DEFAULT_TOOL_TIMEOUT, ProjectConfig, get_serena_managed_in_project_dir
@@ -384,7 +382,7 @@ class Project(ToStringMixin):
             self.language_server_manager = None
 
         log.info(f"Creating language server manager for {self.project_root}")
-        language_server_factory = LanguageServerFactory(
+        factory = LanguageServerFactory(
             project_root=self.project_root,
             encoding=self.project_config.encoding,
             ignored_patterns=self._ignored_patterns,
@@ -393,43 +391,7 @@ class Project(ToStringMixin):
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
         )
-        language_servers: dict[Language, SolidLanguageServer] = {}
-        threads = []
-        exceptions = {}
-        lock = threading.Lock()
-
-        def start_language_server(language: Language) -> None:
-            try:
-                with LogTime(f"Language server startup (language={language.value})"):
-                    language_server = language_server_factory.create_language_server(language)
-                    language_server.start()
-                    if not language_server.is_running():
-                        raise RuntimeError(
-                            f"Failed to start the language server for language {language.value} with root {self.project_root}"
-                        )
-                    with lock:
-                        language_servers[language] = language_server
-            except Exception as e:
-                log.error(f"Error starting language server for language {language.value}: {e}", exc_info=e)
-                with lock:
-                    exceptions[language] = e
-
-        # start language servers in parallel threads
-        for language in self.project_config.languages:
-            thread = threading.Thread(target=start_language_server, args=(language,), name="StartLS:" + language.value)
-            thread.start()
-            threads.append(thread)
-        for thread in threads:
-            thread.join()
-
-        # If any server failed to start up, raise an exception and stop all started language servers
-        if exceptions:
-            for ls in language_servers.values():
-                ls.stop()
-            failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
-            raise Exception(f"Failed to start language servers:\n{failure_messages}")
-
-        self.language_server_manager = LanguageServerManager(language_servers, language_server_factory)
+        self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
         return self.language_server_manager
 
     def add_language(self, language: Language) -> None:

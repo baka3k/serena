@@ -1,5 +1,8 @@
 import logging
+import threading
 from collections.abc import Iterator
+
+from sensai.util.logging import LogTime
 
 from serena.constants import SERENA_MANAGED_DIR_IN_HOME, SERENA_MANAGED_DIR_NAME
 from solidlsp import SolidLanguageServer
@@ -73,6 +76,52 @@ class LanguageServerManager:
         self._language_server_factory = language_server_factory
         self._default_language_server = next(iter(language_servers.values()))
         self._root_path = self._default_language_server.repository_root_path
+
+    @staticmethod
+    def from_languages(languages: list[Language], factory: LanguageServerFactory) -> "LanguageServerManager":
+        """
+        Creates a manager with language servers for the given languages using the given factory.
+        The language servers are started in parallel threads.
+
+        :param languages: the languages for which to spawn language servers
+        :param factory: the factory for language server creation
+        :return: the instance
+        """
+        language_servers: dict[Language, SolidLanguageServer] = {}
+        threads = []
+        exceptions = {}
+        lock = threading.Lock()
+
+        def start_language_server(language: Language) -> None:
+            try:
+                with LogTime(f"Language server startup (language={language.value})"):
+                    language_server = factory.create_language_server(language)
+                    language_server.start()
+                    if not language_server.is_running():
+                        raise RuntimeError(f"Failed to start the language server for language {language.value}")
+                    with lock:
+                        language_servers[language] = language_server
+            except Exception as e:
+                log.error(f"Error starting language server for language {language.value}: {e}", exc_info=e)
+                with lock:
+                    exceptions[language] = e
+
+        # start language servers in parallel threads
+        for language in languages:
+            thread = threading.Thread(target=start_language_server, args=(language,), name="StartLS:" + language.value)
+            thread.start()
+            threads.append(thread)
+        for thread in threads:
+            thread.join()
+
+        # If any server failed to start up, raise an exception and stop all started language servers
+        if exceptions:
+            for ls in language_servers.values():
+                ls.stop()
+            failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
+            raise Exception(f"Failed to start language servers:\n{failure_messages}")
+
+        return LanguageServerManager(language_servers, factory)
 
     def get_root_path(self) -> str:
         return self._root_path
