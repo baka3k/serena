@@ -416,6 +416,28 @@ class Project(ToStringMixin):
             log.info("Adding and starting the language server for new language %s ...", language.value)
             self.language_server_manager.add_language_server(language)
 
+    def remove_language(self, language: Language) -> None:
+        """
+        Removes a programming language from the project configuration, stopping the corresponding
+        language server instance if the LS manager is active.
+        The project configuration is saved to disk after removing the language.
+
+        :param language: the programming language to remove
+        """
+        if language not in self.project_config.languages:
+            log.info(f"Language {language.value} is not present in the project configuration.")
+            return
+        # update the project configuration
+        self.project_config.languages.remove(language)
+        self.save_config()
+
+        # stop the language server (if the LS manager is active)
+        if self.language_server_manager is None:
+            log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
+        else:
+            log.info("Removing and stopping the language server for language %s ...", language.value)
+            self.language_server_manager.remove_language_server(language)
+
     def shutdown(self) -> None:
         if self.language_server_manager is not None:
             self.language_server_manager.stop_all(save_cache=True)

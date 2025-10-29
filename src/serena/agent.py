@@ -557,6 +557,15 @@ class SerenaAgent:
         else:
             self.issue_task(task, name=task_name)
 
+    def remove_language(self, language: Language) -> None:
+        """
+        Removes a language from the active project, shutting down the respective language server and updating the project configuration.
+        The removal is scheduled via the agent's task executor and executed asynchronously.
+
+        :param language: the language to remove
+        """
+        self.issue_task(lambda: self.get_active_project_or_raise().remove_language(language), name=f"RemoveLanguage:{language.value}")
+
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]  # type: ignore
 

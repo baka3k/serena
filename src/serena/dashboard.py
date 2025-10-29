@@ -50,6 +50,20 @@ class ResponseConfigOverview(BaseModel):
     available_modes: list[dict[str, str | bool]]
     available_contexts: list[dict[str, str | bool]]
     available_memories: list[str] | None
+    jetbrains_mode: bool
+    languages: list[str]
+
+
+class ResponseAvailableLanguages(BaseModel):
+    languages: list[str]
+
+
+class RequestAddLanguage(BaseModel):
+    language: str
+
+
+class RequestRemoveLanguage(BaseModel):
+    language: str
 
 
 class SerenaDashboardAPI:
@@ -126,6 +140,35 @@ class SerenaDashboardAPI:
         def shutdown() -> dict[str, str]:
             self._shutdown()
             return {"status": "shutting down"}
+
+        @self._app.route("/get_available_languages", methods=["GET"])
+        def get_available_languages() -> dict[str, Any]:
+            result = self._get_available_languages()
+            return result.model_dump()
+
+        @self._app.route("/add_language", methods=["POST"])
+        def add_language() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_add_language = RequestAddLanguage.model_validate(request_data)
+            try:
+                self._add_language(request_add_language)
+                return {"status": "success", "message": f"Language {request_add_language.language} added successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/remove_language", methods=["POST"])
+        def remove_language() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_remove_language = RequestRemoveLanguage.model_validate(request_data)
+            try:
+                self._remove_language(request_remove_language)
+                return {"status": "success", "message": f"Language {request_remove_language.language} removed successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
 
     def _get_log_messages(self, request_log: RequestLog) -> ResponseLog:
         all_messages = self._memory_log_handler.get_log_messages()
@@ -233,6 +276,11 @@ class SerenaDashboardAPI:
         if self._agent.tool_is_active("read_memory") and project is not None:
             available_memories = project.memories_manager.list_memories()
 
+        # Get list of languages for the active project
+        languages = []
+        if project is not None:
+            languages = [lang.value for lang in project.project_config.languages]
+
         return ResponseConfigOverview(
             active_project=project_info,
             context=context_info,
@@ -244,6 +292,8 @@ class SerenaDashboardAPI:
             available_modes=available_modes,
             available_contexts=available_contexts,
             available_memories=available_memories,
+            jetbrains_mode=self._agent.serena_config.jetbrains,
+            languages=languages,
         )
 
     def _shutdown(self) -> None:
@@ -254,6 +304,46 @@ class SerenaDashboardAPI:
             # noinspection PyProtectedMember
             # noinspection PyUnresolvedReferences
             os._exit(0)
+
+    def _get_available_languages(self) -> ResponseAvailableLanguages:
+        from solidlsp.ls_config import Language
+
+        # Get all non-experimental languages
+        all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
+
+        # Filter out already added languages for the active project
+        project = self._agent.get_active_project()
+        if project:
+            current_languages = [lang.value for lang in project.project_config.languages]
+            available_languages = [lang for lang in all_languages if lang not in current_languages]
+        else:
+            available_languages = all_languages
+
+        return ResponseAvailableLanguages(languages=sorted(available_languages))
+
+    def _add_language(self, request_add_language: RequestAddLanguage) -> None:
+        from solidlsp.ls_config import Language
+
+        # Convert string to Language enum
+        try:
+            language = Language(request_add_language.language)
+        except ValueError:
+            raise ValueError(f"Invalid language: {request_add_language.language}")
+
+        # Add the language to the active project
+        self._agent.add_language(language, wait_for_ls_startup=False)
+
+    def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
+        from solidlsp.ls_config import Language
+
+        # Convert string to Language enum
+        try:
+            language = Language(request_remove_language.language)
+        except ValueError:
+            raise ValueError(f"Invalid language: {request_remove_language.language}")
+
+        # Remove the language from the active project
+        self._agent.remove_language(language)
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:

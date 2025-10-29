@@ -52,6 +52,9 @@ class Dashboard {
         // Page state
         this.currentPage = 'overview';
         this.configData = null;
+        this.jetbrainsMode = false;
+        this.activeProjectName = null;
+        this.languageToRemove = null;
 
         // Tool names and stats
         this.toolNames = [];
@@ -80,6 +83,18 @@ class Dashboard {
         this.$availableToolsDisplay = $('#available-tools-display');
         this.$availableModesDisplay = $('#available-modes-display');
         this.$availableContextsDisplay = $('#available-contexts-display');
+        this.$addLanguageBtn = $('#add-language-btn');
+        this.$addLanguageModal = $('#add-language-modal');
+        this.$modalLanguageSelect = $('#modal-language-select');
+        this.$modalProjectName = $('#modal-project-name');
+        this.$modalAddBtn = $('#modal-add-btn');
+        this.$modalCancelBtn = $('#modal-cancel-btn');
+        this.$modalClose = $('.modal-close');
+        this.$removeLanguageModal = $('#remove-language-modal');
+        this.$removeLanguageName = $('#remove-language-name');
+        this.$removeModalOkBtn = $('#remove-modal-ok-btn');
+        this.$removeModalCancelBtn = $('#remove-modal-cancel-btn');
+        this.$modalCloseRemove = $('.modal-close-remove');
 
         // Chart references
         this.countChart = null;
@@ -97,6 +112,13 @@ class Dashboard {
         this.$themeToggle.click(this.toggleTheme.bind(this));
         this.$refreshStats.click(this.loadStats.bind(this));
         this.$clearStats.click(this.clearStats.bind(this));
+        this.$addLanguageBtn.click(this.openLanguageModal.bind(this));
+        this.$modalAddBtn.click(this.addLanguageFromModal.bind(this));
+        this.$modalCancelBtn.click(this.closeLanguageModal.bind(this));
+        this.$modalClose.click(this.closeLanguageModal.bind(this));
+        this.$removeModalOkBtn.click(this.confirmRemoveLanguageOk.bind(this));
+        this.$removeModalCancelBtn.click(this.closeRemoveLanguageModal.bind(this));
+        this.$modalCloseRemove.click(this.closeRemoveLanguageModal.bind(this));
 
         // Page navigation
         $('[data-page]').click(function(e) {
@@ -112,6 +134,19 @@ class Dashboard {
             }
         });
 
+        // Close modals when clicking outside
+        this.$addLanguageModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeLanguageModal();
+            }
+        });
+
+        this.$removeLanguageModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeRemoveLanguageModal();
+            }
+        });
+
         // Collapsible sections
         $('.collapsible-header').click(function() {
             const $header = $(this);
@@ -124,6 +159,17 @@ class Dashboard {
 
         // Initialize theme
         this.initializeTheme();
+
+        // Add ESC key handler for closing modals
+        $(document).keydown(function(e) {
+            if (e.key === 'Escape' || e.keyCode === 27) {
+                if (self.$addLanguageModal.is(':visible')) {
+                    self.closeLanguageModal();
+                } else if (self.$removeLanguageModal.is(':visible')) {
+                    self.closeRemoveLanguageModal();
+                }
+            }
+        });
 
         // Initialize the application
         this.loadToolNames().then(function() {
@@ -187,8 +233,11 @@ class Dashboard {
             url: '/get_config_overview',
             type: 'GET',
             success: function(response) {
+                console.log('Config overview response:', response);
                 self.failureCount = 0;
                 self.configData = response;
+                self.jetbrainsMode = response.jetbrains_mode;
+                self.activeProjectName = response.active_project.name;
                 self.displayConfig(response);
                 self.displayBasicStats(response.tool_stats_summary);
                 self.displayProjects(response.registered_projects);
@@ -219,13 +268,14 @@ class Dashboard {
     }
 
     displayConfig(config) {
-        // Check if tools and memories sections are currently expanded
-        const $existingToolsContent = $('#tools-content');
-        const $existingMemoriesContent = $('#memories-content');
-        const wasToolsExpanded = $existingToolsContent.is(':visible');
-        const wasMemoriesExpanded = $existingMemoriesContent.is(':visible');
+        try {
+            // Check if tools and memories sections are currently expanded
+            const $existingToolsContent = $('#tools-content');
+            const $existingMemoriesContent = $('#memories-content');
+            const wasToolsExpanded = $existingToolsContent.is(':visible');
+            const wasMemoriesExpanded = $existingMemoriesContent.is(':visible');
 
-        let html = '<div class="config-grid">';
+            let html = '<div class="config-grid">';
 
         // Project info
         html += '<div class="config-label">Active Project:</div>';
@@ -236,8 +286,28 @@ class Dashboard {
             html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
         }
 
-        html += '<div class="config-label">Language:</div>';
-        html += '<div class="config-value">' + (config.active_project.language || 'N/A') + '</div>';
+        html += '<div class="config-label">Languages:</div>';
+        if (this.jetbrainsMode) {
+            html += '<div class="config-value">Using JetBrains backend</div>';
+        } else {
+            html += '<div class="config-value">';
+            if (config.languages && config.languages.length > 0) {
+                html += '<div class="languages-container">';
+                config.languages.forEach(function(language, index) {
+                    const isRemovable = config.languages.length > 1;
+                    html += '<div class="language-badge' + (isRemovable ? ' removable' : '') + '">';
+                    html += language;
+                    if (isRemovable) {
+                        html += '<span class="language-remove" data-language="' + language + '">&times;</span>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+            } else {
+                html += 'N/A';
+            }
+            html += '</div>';
+        }
 
         // Context info
         html += '<div class="config-label">Context:</div>';
@@ -294,6 +364,22 @@ class Dashboard {
 
         this.$configDisplay.html(html);
 
+        // Show/hide add language button based on jetbrains mode
+        if (this.jetbrainsMode) {
+            this.$addLanguageBtn.hide();
+        } else {
+            this.$addLanguageBtn.show();
+        }
+
+        // Attach event handlers for language remove buttons
+        const self = this;
+        $('.language-remove').click(function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const language = $(this).data('language');
+            self.confirmRemoveLanguage(language);
+        });
+
         // Re-attach collapsible handler for the newly created tools header
         $('#tools-header').click(function() {
             const $header = $(this);
@@ -313,6 +399,10 @@ class Dashboard {
             $content.slideToggle(300);
             $icon.toggleClass('expanded');
         });
+        } catch (error) {
+            console.error('Error in displayConfig:', error);
+            this.$configDisplay.html('<div class="error-message">Error displaying configuration: ' + error.message + '</div>');
+        }
     }
 
     displayBasicStats(stats) {
@@ -950,6 +1040,140 @@ class Dashboard {
             }
             this.tokensChart.update();
         }
+    }
+
+    // ===== Language Management Methods =====
+
+    confirmRemoveLanguage(language) {
+        // Store the language to remove
+        this.languageToRemove = language;
+
+        // Set language name in modal
+        this.$removeLanguageName.text(language);
+
+        // Show modal
+        this.$removeLanguageModal.fadeIn(200);
+    }
+
+    closeRemoveLanguageModal() {
+        this.$removeLanguageModal.fadeOut(200);
+        this.languageToRemove = null;
+    }
+
+    confirmRemoveLanguageOk() {
+        if (this.languageToRemove) {
+            this.removeLanguage(this.languageToRemove);
+            this.closeRemoveLanguageModal();
+        }
+    }
+
+    removeLanguage(language) {
+        const self = this;
+
+        $.ajax({
+            url: '/remove_language',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                language: language
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Reload config to show updated language list
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error removing language:', error);
+                alert('Error removing language: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+    }
+
+    openLanguageModal() {
+        // Set project name in modal
+        this.$modalProjectName.text(this.activeProjectName || 'Unknown');
+
+        // Load available languages into modal dropdown
+        this.loadAvailableLanguages();
+
+        // Show modal
+        this.$addLanguageModal.fadeIn(200);
+    }
+
+    closeLanguageModal() {
+        this.$addLanguageModal.fadeOut(200);
+        this.$modalLanguageSelect.empty();
+        this.$modalAddBtn.prop('disabled', false).text('Add Language');
+    }
+
+    loadAvailableLanguages() {
+        let self = this;
+        $.ajax({
+            url: '/get_available_languages',
+            type: 'GET',
+            success: function(response) {
+                const languages = response.languages || [];
+                // Clear all existing options
+                self.$modalLanguageSelect.empty();
+
+                if (languages.length === 0) {
+                    // Show message if no languages available
+                    self.$modalLanguageSelect.append($('<option>').val('').text('No languages available to add'));
+                    self.$modalAddBtn.prop('disabled', true);
+                } else {
+                    // Add language options
+                    languages.forEach(function(language) {
+                        self.$modalLanguageSelect.append($('<option>').val(language).text(language));
+                    });
+                    self.$modalAddBtn.prop('disabled', false);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading available languages:', error);
+            }
+        });
+    }
+
+    addLanguageFromModal() {
+        const selectedLanguage = this.$modalLanguageSelect.val();
+        if (!selectedLanguage) {
+            alert('No language selected or no languages available to add');
+            return;
+        }
+
+        const self = this;
+        // Disable button during request
+        self.$modalAddBtn.prop('disabled', true).text('Adding...');
+
+        $.ajax({
+            url: '/add_language',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                language: selectedLanguage
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Close modal
+                    self.closeLanguageModal();
+                    // Reload config to show updated language
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error adding language:', error);
+                alert('Error adding language: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            },
+            complete: function() {
+                // Re-enable button
+                self.$modalAddBtn.prop('disabled', false).text('Add Language');
+            }
+        });
     }
 
     // ===== Shutdown Method =====
