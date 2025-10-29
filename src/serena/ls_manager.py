@@ -147,7 +147,7 @@ class LanguageServerManager:
         if self._language_server_factory is None:
             raise ValueError(f"No language server factory available to create language server for {language}")
         language_server = self._language_server_factory.create_language_server(language)
-        self._language_servers[language].start()
+        language_server.start()
         self._language_servers[language] = language_server
         return language_server
 
