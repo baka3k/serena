@@ -405,6 +405,9 @@ class Project(ToStringMixin):
         if language in self.project_config.languages:
             log.info(f"Language {language.value} is already present in the project configuration.")
             return
+        # update the project configuration
+        self.project_config.languages.append(language)
+        self.save_config()
 
         # start the language server (if the LS manager is active)
         if self.language_server_manager is None:
@@ -412,10 +415,6 @@ class Project(ToStringMixin):
         else:
             log.info("Adding and starting the language server for new language %s ...", language.value)
             self.language_server_manager.add_language_server(language)
-
-        # update the project configuration
-        self.project_config.languages.append(language)
-        self.save_config()
 
     def shutdown(self) -> None:
         if self.language_server_manager is not None:
