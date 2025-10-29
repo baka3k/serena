@@ -71,7 +71,7 @@ class Project(ToStringMixin):
                 f.write(f"/{SolidLanguageServer.CACHE_FOLDER_NAME}\n")
 
         # gather ignored paths from the project configuration and gitignore files
-        ignored_patterns = project_config.ignored_paths
+        ignored_patterns = list(project_config.ignored_paths)
         if len(ignored_patterns) > 0:
             log.info(f"Using {len(ignored_patterns)} ignored paths from the explicit project configuration.")
             log.debug(f"Ignored paths: {ignored_patterns}")
