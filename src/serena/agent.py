@@ -544,22 +544,15 @@ class SerenaAgent:
             ls_specific_settings=self.serena_config.ls_specific_settings,
         )
 
-    def add_language(self, language: Language, wait_for_ls_startup: bool = False) -> None:
+    def add_language(self, language: Language) -> None:
         """
         Adds a new language to the active project, spawning the respective language server and updating the project configuration.
         The addition is scheduled via the agent's task executor and executed synchronously, i.e. the method returns
         when the addition is complete.
 
         :param language: the language to add
-        :param wait_for_ls_startup: whether to wait for the language server to start up before returning (synchronous execution)
-            or to just issue the addition task and return immediately (asynchronous execution)
         """
-        task = lambda: self.get_active_project_or_raise().add_language(language)
-        task_name = f"AddLanguage:{language.value}"
-        if wait_for_ls_startup:
-            self.execute_task(task, name=task_name)
-        else:
-            self.issue_task(task, name=task_name)
+        self.execute_task(lambda: self.get_active_project_or_raise().add_language(language), name=f"AddLanguage:{language.value}")
 
     def remove_language(self, language: Language) -> None:
         """
