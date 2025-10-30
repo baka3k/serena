@@ -8,9 +8,8 @@ import platform
 import sys
 import webbrowser
 from collections.abc import Callable
-from concurrent.futures import Future
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -371,7 +370,9 @@ class SerenaAgent:
 
         log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
-    def issue_task(self, task: Callable[[], Any], name: str | None = None, logged: bool = True) -> Future:
+    def issue_task(
+        self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None
+    ) -> TaskExecutor.Task[T]:
         """
         Issue a task to the executor for asynchronous execution.
         It is ensured that tasks are executed in the order they are issued, one after another.
@@ -379,11 +380,12 @@ class SerenaAgent:
         :param task: the task to execute
         :param name: the name of the task for logging purposes; if None, use the task function's name
         :param logged: whether to log management of the task; if False, only errors will be logged
-        :return: a Future object representing the execution of the task
+        :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
+        :return: the task object, through which the task's future result can be accessed
         """
-        return self._task_executor.issue_task(task, name=name, logged=logged)
+        return self._task_executor.issue_task(task, name=name, logged=logged, timeout=timeout)
 
-    def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True) -> T:
+    def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None) -> T:
         """
         Executes the given task synchronously via the agent's task executor.
         This is useful for tasks that need to be executed immediately and whose results are needed right away.
@@ -391,9 +393,10 @@ class SerenaAgent:
         :param task: the task to execute
         :param name: the name of the task for logging purposes; if None, use the task function's name
         :param logged: whether to log management of the task; if False, only errors will be logged
+        :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
         :return: the result of the task execution
         """
-        return self._task_executor.execute_task(task, name=name, logged=logged)
+        return self._task_executor.execute_task(task, name=name, logged=logged, timeout=timeout)
 
     def is_using_language_server(self) -> bool:
         """

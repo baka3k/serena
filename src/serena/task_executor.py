@@ -1,7 +1,3 @@
-"""
-The Serena Model Context Protocol (MCP) Server
-"""
-
 import concurrent.futures
 import threading
 import time
@@ -9,7 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
 from threading import Thread
-from typing import Any, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
@@ -28,16 +24,18 @@ class TaskExecutor:
         self._task_executor_task_index = 1
         self._task_executor_current_task: Optional[TaskExecutor.Task] = None
 
-    class Task(ToStringMixin):
-        def __init__(self, function: Callable[[], Any], name: str, logged: bool = True):
+    class Task(ToStringMixin, Generic[T]):
+        def __init__(self, function: Callable[[], T], name: str, logged: bool = True, timeout: Optional[float] = None):
             """
             :param function: the function representing the task to execute
             :param name: the name of the task
             :param logged: whether to log management of the task; if False, only errors will be logged
+            :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
             """
             self.name = name
             self.future: concurrent.futures.Future = concurrent.futures.Future()
             self.logged = logged
+            self.timeout = timeout
             self._function = function
 
         def _tostring_includes(self) -> list[str]:
@@ -72,12 +70,34 @@ class TaskExecutor:
             """
             return self.future.done()
 
+        def result(self, timeout: float | None = None) -> T:
+            """
+            Blocks until the task is done or the timeout is reached, and returns the result.
+            If an exception occurred during task execution, it is raised here.
+            If the timeout is reached, a TimeoutError is raised (but the task is not cancelled).
+            If the task is cancelled, a CancelledError is raised.
+
+            :param timeout: the maximum time to wait in seconds; if None, use the task's own timeout
+                (which may be None to wait indefinitely)
+            :return: True if the task is done, False if the timeout was reached
+            """
+            return self.future.result(timeout=timeout)
+
+        def cancel(self) -> None:
+            """
+            Cancels the task. If it has not yet started, it will not be executed.
+            If it has already started, its future will be marked as cancelled and will raise a CancelledError
+            when its result is requested.
+            """
+            self.future.cancel()
+
         def wait_until_done(self, timeout: float | None = None) -> None:
             """
             Waits until the task is done or the timeout is reached.
+            The task is done if it either completed successfully, failed with an exception, or was cancelled.
 
-            :param timeout: the maximum time to wait in seconds, or None to wait indefinitely
-            :return: True if the task is done, False if the timeout was reached
+            :param timeout: the maximum time to wait in seconds; if None, use the task's own timeout
+                (which may be None to wait indefinitely)
             """
             try:
                 self.future.result(timeout=timeout)
@@ -103,7 +123,7 @@ class TaskExecutor:
             task.start()
 
             # wait for task completion
-            task.wait_until_done()
+            task.wait_until_done(timeout=task.timeout)
             with self._task_executor_lock:
                 self._task_executor_current_task = None
 
@@ -143,7 +163,7 @@ class TaskExecutor:
                     tasks.append(self.TaskInfo.from_task(task, False))
         return tasks
 
-    def issue_task(self, task: Callable[[], Any], name: str | None = None, logged: bool = True) -> Future:
+    def issue_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None) -> Task[T]:
         """
         Issue a task to the executor for asynchronous execution.
         It is ensured that tasks are executed in the order they are issued, one after another.
@@ -151,7 +171,8 @@ class TaskExecutor:
         :param task: the task to execute
         :param name: the name of the task for logging purposes; if None, use the task function's name
         :param logged: whether to log management of the task; if False, only errors will be logged
-        :return: a Future object representing the execution of the task
+        :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
+        :return: the task object, through which the task's future result can be accessed
         """
         with self._task_executor_lock:
             if logged:
@@ -162,11 +183,11 @@ class TaskExecutor:
             task_name = f"{task_prefix_name}:{name or task.__name__}"
             if logged:
                 log.info(f"Scheduling {task_name}")
-            task = self.Task(function=task, name=task_name, logged=logged)
-            self._task_executor_queue.append(task)
-            return task.future
+            task_obj = self.Task(function=task, name=task_name, logged=logged, timeout=timeout)
+            self._task_executor_queue.append(task_obj)
+            return task_obj
 
-    def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True) -> T:
+    def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None) -> T:
         """
         Executes the given task synchronously via the agent's task executor.
         This is useful for tasks that need to be executed immediately and whose results are needed right away.
@@ -174,7 +195,8 @@ class TaskExecutor:
         :param task: the task to execute
         :param name: the name of the task for logging purposes; if None, use the task function's name
         :param logged: whether to log management of the task; if False, only errors will be logged
+        :param timeout: the maximum time to wait for task completion in seconds, or None to wait indefinitely
         :return: the result of the task execution
         """
-        future = self.issue_task(task, name=name, logged=logged)
-        return future.result()
+        task_obj = self.issue_task(task, name=name, logged=logged, timeout=timeout)
+        return task_obj.result()
