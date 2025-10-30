@@ -2,24 +2,18 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
-import concurrent.futures
 import multiprocessing
 import os
 import platform
 import sys
-import threading
-import time
 import webbrowser
 from collections.abc import Callable
 from concurrent.futures import Future
-from dataclasses import dataclass
 from logging import Logger
-from threading import Thread
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
-from sensai.util.string import ToStringMixin
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
@@ -30,6 +24,7 @@ from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
+from serena.task_queue import TaskExecutor
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, Tool, ToolMarker, ToolRegistry
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
@@ -158,12 +153,7 @@ class SerenaAgent:
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
-        self._task_executor_lock = threading.Lock()
-        self._task_executor_queue: list[SerenaAgent.Task] = []
-        self._task_executor_thread = Thread(target=self._process_task_queue, name="SerenaAgentTaskExecutor", daemon=True)
-        self._task_executor_thread.start()
-        self._task_executor_task_index = 1
-        self._task_executor_current_task: Optional[SerenaAgent.Task] = None
+        self._task_executor = TaskExecutor("SerenaAgentTaskExecutor")
 
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
@@ -200,120 +190,14 @@ class SerenaAgent:
                 process.start()
                 process.join(timeout=1)
 
-    class Task(ToStringMixin):
-        def __init__(self, function: Callable[[], Any], name: str, logged: bool = True):
-            """
-            :param function: the function representing the task to execute
-            :param name: the name of the task
-            :param logged: whether to log management of the task; if False, only errors will be logged
-            """
-            self.name = name
-            self.future: concurrent.futures.Future = concurrent.futures.Future()
-            self.logged = logged
-            self._function = function
-
-        def _tostring_includes(self) -> list[str]:
-            return ["name"]
-
-        def start(self) -> None:
-            """
-            Executes the task in a separate thread, setting the result or exception on the future.
-            """
-
-            def run_task() -> None:
-                try:
-                    if self.future.done():
-                        if self.logged:
-                            log.info(f"Task {self.name} was already completed/cancelled; skipping execution")
-                        return
-                    with LogTime(self.name, logger=log, enabled=self.logged):
-                        result = self._function()
-                        if not self.future.done():
-                            self.future.set_result(result)
-                except Exception as e:
-                    if not self.future.done():
-                        log.error(f"Error during execution of {self.name}: {e}", exc_info=e)
-                        self.future.set_exception(e)
-
-            thread = Thread(target=run_task, name=self.name)
-            thread.start()
-
-        def is_done(self) -> bool:
-            """
-            :return: whether the task has completed (either successfully, with failure, or via cancellation)
-            """
-            return self.future.done()
-
-        def wait_until_done(self, timeout: float | None = None) -> None:
-            """
-            Waits until the task is done or the timeout is reached.
-
-            :param timeout: the maximum time to wait in seconds, or None to wait indefinitely
-            :return: True if the task is done, False if the timeout was reached
-            """
-            try:
-                self.future.result(timeout=timeout)
-            except:
-                pass
-
-    def _process_task_queue(self) -> None:
-        while True:
-            # obtain task from the queue
-            task: SerenaAgent.Task | None = None
-            with self._task_executor_lock:
-                if len(self._task_executor_queue) > 0:
-                    task = self._task_executor_queue.pop(0)
-            if task is None:
-                time.sleep(0.1)
-                continue
-
-            # start task execution asynchronously
-            with self._task_executor_lock:
-                self._task_executor_current_task = task
-            if task.logged:
-                log.info("Starting execution of %s", task.name)
-            task.start()
-
-            # wait for task completion
-            task.wait_until_done()
-            with self._task_executor_lock:
-                self._task_executor_current_task = None
-
-    @dataclass
-    class TaskInfo:
-        name: str
-        is_running: bool
-        future: Future
-        """
-        future for accessing the task's result
-        """
-        task_id: int
-        """
-        unique identifier of the task
-        """
-
-        @staticmethod
-        def from_task(task: "SerenaAgent.Task", is_running: bool) -> "SerenaAgent.TaskInfo":
-            return SerenaAgent.TaskInfo(name=task.name, is_running=is_running, future=task.future, task_id=id(task))
-
-        def cancel(self) -> None:
-            self.future.cancel()
-
-    def get_current_tasks(self) -> list["SerenaAgent.TaskInfo"]:
+    def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
         """
         Gets the list of tasks currently running or queued for execution.
         The function returns a list of thread-safe TaskInfo objects (specifically created for the caller).
 
         :return: the list of tasks in the execution order (running task first)
         """
-        tasks = []
-        with self._task_executor_lock:
-            if self._task_executor_current_task is not None:
-                tasks.append(self.TaskInfo.from_task(self._task_executor_current_task, True))
-            for task in self._task_executor_queue:
-                if not task.is_done():
-                    tasks.append(self.TaskInfo.from_task(task, False))
-        return tasks
+        return self._task_executor.get_current_tasks()
 
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:
@@ -497,18 +381,7 @@ class SerenaAgent:
         :param logged: whether to log management of the task; if False, only errors will be logged
         :return: a Future object representing the execution of the task
         """
-        with self._task_executor_lock:
-            if logged:
-                task_prefix_name = f"Task-{self._task_executor_task_index}"
-                self._task_executor_task_index += 1
-            else:
-                task_prefix_name = "BackgroundTask"
-            task_name = f"{task_prefix_name}:{name or task.__name__}"
-            if logged:
-                log.info(f"Scheduling {task_name}")
-            task = SerenaAgent.Task(function=task, name=task_name, logged=logged)
-            self._task_executor_queue.append(task)
-            return task.future
+        return self._task_executor.issue_task(task, name=name, logged=logged)
 
     def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True) -> T:
         """
@@ -520,8 +393,7 @@ class SerenaAgent:
         :param logged: whether to log management of the task; if False, only errors will be logged
         :return: the result of the task execution
         """
-        future = self.issue_task(task, name=name, logged=logged)
-        return future.result()
+        return self._task_executor.execute_task(task, name=name, logged=logged)
 
     def is_using_language_server(self) -> bool:
         """
