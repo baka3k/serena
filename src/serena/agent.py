@@ -238,6 +238,12 @@ class SerenaAgent:
             thread = Thread(target=run_task, name=self.name)
             thread.start()
 
+        def is_done(self) -> bool:
+            """
+            :return: whether the task has completed (either successfully, with failure, or via cancellation)
+            """
+            return self.future.done()
+
     def _process_task_queue(self) -> None:
         while True:
             # obtain task from the queue
@@ -296,7 +302,8 @@ class SerenaAgent:
             if self._task_executor_current_task is not None:
                 tasks.append(self.TaskInfo.from_task(self._task_executor_current_task, True))
             for task in self._task_executor_queue:
-                tasks.append(self.TaskInfo.from_task(task, False))
+                if not task.is_done():
+                    tasks.append(self.TaskInfo.from_task(task, False))
         return tasks
 
     def get_language_server_manager(self) -> LanguageServerManager | None:
