@@ -201,9 +201,15 @@ class SerenaAgent:
                 process.join(timeout=1)
 
     class Task(ToStringMixin):
-        def __init__(self, function: Callable[[], Any], name: str):
+        def __init__(self, function: Callable[[], Any], name: str, logged: bool = True):
+            """
+            :param function: the function representing the task to execute
+            :param name: the name of the task
+            :param logged: whether to log management of the task; if False, only errors will be logged
+            """
             self.name = name
             self.future: concurrent.futures.Future = concurrent.futures.Future()
+            self.logged = logged
             self._function = function
 
         def _tostring_includes(self) -> list[str]:
@@ -216,7 +222,7 @@ class SerenaAgent:
 
             def run_task() -> None:
                 try:
-                    with LogTime(self.name, logger=log):
+                    with LogTime(self.name, logger=log, enabled=self.logged):
                         result = self._function()
                         if not self.future.done():
                             self.future.set_result(result)
@@ -242,7 +248,8 @@ class SerenaAgent:
             # start task execution asynchronously
             with self._task_executor_lock:
                 self._task_executor_current_task = task
-            log.info("Starting execution of %s", task)
+            if task.logged:
+                log.info("Starting execution of %s", task)
             task.start()
 
             # wait for task completion
@@ -460,32 +467,40 @@ class SerenaAgent:
 
         log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self.get_active_tool_names())}")
 
-    def issue_task(self, task: Callable[[], Any], name: str | None = None) -> Future:
+    def issue_task(self, task: Callable[[], Any], name: str | None = None, logged: bool = True) -> Future:
         """
         Issue a task to the executor for asynchronous execution.
         It is ensured that tasks are executed in the order they are issued, one after another.
 
         :param task: the task to execute
         :param name: the name of the task for logging purposes; if None, use the task function's name
+        :param logged: whether to log management of the task; if False, only errors will be logged
         :return: a Future object representing the execution of the task
         """
         with self._task_executor_lock:
-            task_name = f"Task-{self._task_executor_task_index}[{name or task.__name__}]"
-            self._task_executor_task_index += 1
-            log.info(f"Scheduling {task_name}")
-            task = SerenaAgent.Task(function=task, name=task_name)
+            if logged:
+                task_prefix_name = f"Task-{self._task_executor_task_index}"
+                self._task_executor_task_index += 1
+            else:
+                task_prefix_name = "BackgroundTask"
+            task_name = f"{task_prefix_name}:{name or task.__name__}"
+            if logged:
+                log.info(f"Scheduling {task_name}")
+            task = SerenaAgent.Task(function=task, name=task_name, logged=logged)
             self._task_executor_queue.append(task)
             return task.future
 
-    def execute_task(self, task: Callable[[], T], name: str | None = None) -> T:
+    def execute_task(self, task: Callable[[], T], name: str | None = None, logged: bool = True) -> T:
         """
         Executes the given task synchronously via the agent's task executor.
         This is useful for tasks that need to be executed immediately and whose results are needed right away.
 
         :param task: the task to execute
+        :param name: the name of the task for logging purposes; if None, use the task function's name
+        :param logged: whether to log management of the task; if False, only errors will be logged
         :return: the result of the task execution
         """
-        future = self.issue_task(task, name=name)
+        future = self.issue_task(task, name=name, logged=logged)
         return future.result()
 
     def is_using_language_server(self) -> bool:
