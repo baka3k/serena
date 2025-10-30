@@ -72,7 +72,7 @@ class Dashboard {
         // jQuery elements
         this.$logContainer = $('#log-container');
         this.$errorContainer = $('#error-container');
-        this.$loadButton = $('#load-logs');
+        this.$copyLogsBtn = $('#copy-logs-btn');
         this.$menuToggle = $('#menu-toggle');
         this.$menuDropdown = $('#menu-dropdown');
         this.$menuShutdown = $('#menu-shutdown');
@@ -111,6 +111,12 @@ class Dashboard {
         this.$deleteMemoryOkBtn = $('#delete-memory-ok-btn');
         this.$deleteMemoryCancelBtn = $('#delete-memory-cancel-btn');
         this.$modalCloseDeleteMemory = $('.modal-close-delete-memory');
+        this.$createMemoryModal = $('#create-memory-modal');
+        this.$createMemoryProjectName = $('#create-memory-project-name');
+        this.$createMemoryNameInput = $('#create-memory-name-input');
+        this.$createMemoryCreateBtn = $('#create-memory-create-btn');
+        this.$createMemoryCancelBtn = $('#create-memory-cancel-btn');
+        this.$modalCloseCreateMemory = $('.modal-close-create-memory');
 
         // Chart references
         this.countChart = null;
@@ -119,7 +125,7 @@ class Dashboard {
         this.outputChart = null;
 
         // Register event handlers
-        this.$loadButton.click(this.loadLogs.bind(this));
+        this.$copyLogsBtn.click(this.copyLogs.bind(this));
         this.$menuShutdown.click(function(e) {
             e.preventDefault();
             self.shutdown();
@@ -141,6 +147,15 @@ class Dashboard {
         this.$deleteMemoryOkBtn.click(this.confirmDeleteMemoryOk.bind(this));
         this.$deleteMemoryCancelBtn.click(this.closeDeleteMemoryModal.bind(this));
         this.$modalCloseDeleteMemory.click(this.closeDeleteMemoryModal.bind(this));
+        this.$createMemoryCreateBtn.click(this.createMemoryFromModal.bind(this));
+        this.$createMemoryCancelBtn.click(this.closeCreateMemoryModal.bind(this));
+        this.$modalCloseCreateMemory.click(this.closeCreateMemoryModal.bind(this));
+        this.$createMemoryNameInput.keypress(function(e) {
+            if (e.which === 13) { // Enter key
+                e.preventDefault();
+                self.createMemoryFromModal();
+            }
+        });
 
         // Page navigation
         $('[data-page]').click(function(e) {
@@ -181,6 +196,12 @@ class Dashboard {
             }
         });
 
+        this.$createMemoryModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeCreateMemoryModal();
+            }
+        });
+
         // Collapsible sections
         $('.collapsible-header').click(function() {
             const $header = $(this);
@@ -205,6 +226,8 @@ class Dashboard {
                     self.closeEditMemoryModal();
                 } else if (self.$deleteMemoryModal.is(':visible')) {
                     self.closeDeleteMemoryModal();
+                } else if (self.$createMemoryModal.is(':visible')) {
+                    self.closeCreateMemoryModal();
                 }
             }
         });
@@ -403,20 +426,25 @@ class Dashboard {
         html += '</div>';
         html += '</div>';
 
-        // Available memories - collapsible (only show if memories exist)
-        if (config.available_memories && config.available_memories.length > 0) {
+        // Available memories - collapsible (show if memories exist or if project exists)
+        if (config.active_project && config.active_project.name) {
             html += '<div style="margin-top: 20px;">';
             html += '<h3 class="collapsible-header" id="memories-header" style="font-size: 16px; margin: 0;">';
-            html += '<span>Available Memories (' + config.available_memories.length + ')</span>';
+            const memoryCount = (config.available_memories && config.available_memories.length) || 0;
+            html += '<span>Available Memories (' + memoryCount + ')</span>';
             html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
             html += '</h3>';
             html += '<div class="collapsible-content memories-container" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
-            config.available_memories.forEach(function(memory) {
-                html += '<div class="memory-item removable" data-memory="' + memory + '">';
-                html += memory;
-                html += '<span class="memory-remove" data-memory="' + memory + '">&times;</span>';
-                html += '</div>';
-            });
+            if (config.available_memories && config.available_memories.length > 0) {
+                config.available_memories.forEach(function(memory) {
+                    html += '<div class="memory-item removable" data-memory="' + memory + '">';
+                    html += memory;
+                    html += '<span class="memory-remove" data-memory="' + memory + '">&times;</span>';
+                    html += '</div>';
+                });
+            }
+            // Add Create Memory button
+            html += '<button id="create-memory-btn" class="btn language-add-btn">+ Create Memory</button>';
             html += '</div>';
             html += '</div>';
         }
@@ -455,6 +483,9 @@ class Dashboard {
             const memoryName = $(this).data('memory');
             self.confirmDeleteMemory(memoryName);
         });
+
+        // Attach event handler for create memory button
+        $('#create-memory-btn').click(this.openCreateMemoryModal.bind(this));
 
         // Re-attach collapsible handler for the newly created tools header
         $('#tools-header').click(function() {
@@ -598,12 +629,34 @@ class Dashboard {
         document.title = activeProject ? `${activeProject} – Serena Dashboard` : 'Serena Dashboard';
     }
 
+    copyLogs() {
+        const logText = this.$logContainer.text();
+
+        if (!logText) {
+            alert('No logs to copy');
+            return;
+        }
+
+        // Use the Clipboard API to copy text
+        navigator.clipboard.writeText(logText).then(() => {
+            // Visual feedback - temporarily change icon to grey checkmark
+            const originalHtml = this.$copyLogsBtn.html();
+            const checkmarkSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="copy-logs-text">copy logs</span>';
+            this.$copyLogsBtn.html(checkmarkSvg);
+
+            setTimeout(() => {
+                this.$copyLogsBtn.html(originalHtml);
+            }, 1500);
+        }).catch(err => {
+            console.error('Failed to copy logs:', err);
+            alert('Failed to copy logs to clipboard');
+        });
+    }
+
     loadLogs() {
         console.log("Loading logs");
         let self = this;
 
-        // Disable button and show loading state
-        self.$loadButton.prop('disabled', true).text('Loading...');
         self.$errorContainer.empty();
 
         // Make API call
@@ -643,10 +696,6 @@ class Dashboard {
                 console.error('Error loading logs:', error);
                 self.$errorContainer.html('<div class="error-message">Error loading logs: ' +
                     (xhr.responseJSON ? xhr.responseJSON.detail : error) + '</div>');
-            },
-            complete: function() {
-                // Re-enable button
-                self.$loadButton.prop('disabled', false).text('Reload Log');
             }
         });
     }
@@ -1403,6 +1452,78 @@ class Dashboard {
             error: function(xhr, status, error) {
                 console.error('Error deleting memory:', error);
                 alert('Error deleting memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+    }
+
+    openCreateMemoryModal() {
+        // Set project name in modal
+        this.$createMemoryProjectName.text(this.activeProjectName || 'Unknown');
+
+        // Clear the input field
+        this.$createMemoryNameInput.val('');
+
+        // Show modal
+        this.$createMemoryModal.fadeIn(200);
+
+        // Focus on the input field
+        setTimeout(() => {
+            this.$createMemoryNameInput.focus();
+        }, 250);
+    }
+
+    closeCreateMemoryModal() {
+        this.$createMemoryModal.fadeOut(200);
+        this.$createMemoryNameInput.val('');
+        this.$createMemoryCreateBtn.prop('disabled', false).text('Create');
+    }
+
+    createMemoryFromModal() {
+        const memoryName = this.$createMemoryNameInput.val().trim();
+
+        if (!memoryName) {
+            alert('Please enter a memory name');
+            return;
+        }
+
+        // Validate memory name (alphanumeric and underscores only)
+        if (!/^[a-zA-Z0-9_]+$/.test(memoryName)) {
+            alert('Memory name can only contain letters, numbers, and underscores');
+            return;
+        }
+
+        const self = this;
+
+        // Disable button during request
+        self.$createMemoryCreateBtn.prop('disabled', true).text('Creating...');
+
+        $.ajax({
+            url: '/save_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName,
+                content: ''
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Close the create modal
+                    self.closeCreateMemoryModal();
+                    // Reload config to show the new memory
+                    self.loadConfigOverview();
+                    // Open the edit modal for the newly created memory
+                    setTimeout(() => {
+                        self.openEditMemoryModal(memoryName);
+                    }, 500);
+                } else {
+                    alert('Error: ' + response.message);
+                    self.$createMemoryCreateBtn.prop('disabled', false).text('Create');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error creating memory:', error);
+                alert('Error creating memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+                self.$createMemoryCreateBtn.prop('disabled', false).text('Create');
             }
         });
     }

@@ -425,7 +425,6 @@ class SerenaDashboardAPI:
         # add_language is already thread-safe
         self._agent.add_language(language)
 
-
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
         from solidlsp.ls_config import Language
 
@@ -435,7 +434,6 @@ class SerenaDashboardAPI:
             raise ValueError(f"Invalid language: {request_remove_language.language}")
         # remove_language is already thread-safe
         self._agent.remove_language(language)
-
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:

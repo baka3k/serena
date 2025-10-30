@@ -832,3 +832,42 @@ body {
     flex-wrap: wrap;
     gap: 8px;
 }
+
+/* Copy Logs Button */
+.copy-logs-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.copy-logs-btn:hover {
+    opacity: 1;
+    background-color: var(--border-color);
+}
+
+.copy-logs-btn svg {
+    flex-shrink: 0;
+}
+
+.copy-logs-text {
+    display: none;
+    white-space: nowrap;
+}
+
+.copy-logs-btn:hover .copy-logs-text {
+    display: inline;
+}
