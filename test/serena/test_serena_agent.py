@@ -293,23 +293,25 @@ class TestSerenaAgent:
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"
 
-    @staticmethod
-    def _create_task(delay: float, name: str, exception: bool = False):
-        def fn():
-            time.sleep(delay)
-            if exception:
-                raise ValueError(f"Task {name} failed")
-            return True
+    class Task:
+        def __init__(self, delay: float, exception: bool = False):
+            self.delay = delay
+            self.exception = exception
+            self.did_run = False
 
-        fn.__name__ = name
-        return fn
+        def run(self):
+            self.did_run = True
+            time.sleep(self.delay)
+            if self.exception:
+                raise ValueError("Task failed")
+            return True
 
     def test_task_queue_sequence(self, basic_serena_agent):
         """
         Tests that a sequence of tasks is executed correctly
         """
-        future1 = basic_serena_agent.issue_task(self._create_task(1, "task1"))
-        future2 = basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        future1 = basic_serena_agent.issue_task(self.Task(1).run, name="task1")
+        future2 = basic_serena_agent.issue_task(self.Task(1).run, name="task2")
         assert future1.result() is True
         assert future2.result() is True
 
@@ -319,8 +321,8 @@ class TestSerenaAgent:
           * the exception is propagated,
           * subsequent tasks are still executed.
         """
-        future1 = basic_serena_agent.issue_task(self._create_task(1, "task1", exception=True))
-        future2 = basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        future1 = basic_serena_agent.issue_task(self.Task(1, exception=True).run, name="task1")
+        future2 = basic_serena_agent.issue_task(self.Task(1).run, name="task2")
         have_exception = False
         try:
             assert future1.result()
@@ -330,15 +332,15 @@ class TestSerenaAgent:
         assert have_exception
         assert future2.result() is True
 
-    def test_task_queue_cancel(self, basic_serena_agent):
+    def test_task_queue_cancel_current(self, basic_serena_agent):
         """
         Tests that tasks that are cancelled are handled correctly, i.e. that
           * subsequent tasks are executed as soon as cancellation ensues.
           * the cancelled task raises CancelledError when result() is called.
         """
         start_time = time.time()
-        future1 = basic_serena_agent.issue_task(self._create_task(10, "task1"))
-        future2 = basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        future1 = basic_serena_agent.issue_task(self.Task(10).run, name="task1")
+        future2 = basic_serena_agent.issue_task(self.Task(1).run, name="task2")
         time.sleep(1)
         future1.cancel()
         assert future2.result() is True
@@ -352,10 +354,28 @@ class TestSerenaAgent:
             have_cancelled_error = True
         assert have_cancelled_error
 
+    def test_task_queue_cancel_future(self, basic_serena_agent):
+        """
+        Tests that when a future task is cancelled, it is never run at all
+        """
+        task1 = self.Task(10)
+        task2 = self.Task(1)
+        future1 = basic_serena_agent.issue_task(task1.run, name="task1")
+        future2 = basic_serena_agent.issue_task(task2.run, name="task2")
+        time.sleep(1)
+        future2.cancel()
+        future1.cancel()
+        try:
+            future2.result()
+        except:
+            pass
+        assert task1.did_run
+        assert not task2.did_run
+
     def test_task_queue_cancellation_via_task_info(self, basic_serena_agent):
         start_time = time.time()
-        basic_serena_agent.issue_task(self._create_task(10, "task1"))
-        basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        basic_serena_agent.issue_task(self.Task(10).run, "task1")
+        basic_serena_agent.issue_task(self.Task(1).run, "task2")
         task_infos = basic_serena_agent.get_current_tasks()
         task_infos2 = basic_serena_agent.get_current_tasks()
 
