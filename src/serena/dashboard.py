@@ -52,6 +52,7 @@ class ResponseConfigOverview(BaseModel):
     available_memories: list[str] | None
     jetbrains_mode: bool
     languages: list[str]
+    encoding: str | None
 
 
 class ResponseAvailableLanguages(BaseModel):
@@ -335,6 +336,11 @@ class SerenaDashboardAPI:
         if project is not None:
             languages = [lang.value for lang in project.project_config.languages]
 
+        # Get file encoding for the active project
+        encoding = None
+        if project is not None:
+            encoding = project.project_config.encoding
+
         return ResponseConfigOverview(
             active_project=project_info,
             context=context_info,
@@ -348,6 +354,7 @@ class SerenaDashboardAPI:
             available_memories=available_memories,
             jetbrains_mode=self._agent.serena_config.jetbrains,
             languages=languages,
+            encoding=encoding,
         )
 
     def _shutdown(self) -> None:

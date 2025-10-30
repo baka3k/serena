@@ -364,6 +364,10 @@ class Dashboard {
         }
         html += '</div>';
 
+        // File Encoding info
+        html += '<div class="config-label">File Encoding:</div>';
+        html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
+
         html += '</div>';
 
         // Configuration help link
