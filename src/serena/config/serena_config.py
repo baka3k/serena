@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 DEFAULT_TOOL_TIMEOUT: float = 240
+DictType = dict | CommentedMap
+TDict = TypeVar("TDict", bound=DictType)
 
 
 @singleton
@@ -212,7 +214,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 languages_to_use = [dominant_language]
             else:
                 languages_to_use = [lang.value for lang in languages]
-            config_with_comments = load_yaml(PROJECT_TEMPLATE_FILE, preserve_comments=True)
+            config_with_comments = cls.load_commented_map(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
             if save_to_disk:
@@ -224,17 +226,7 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
         return os.path.join(SERENA_MANAGED_DIR_NAME, cls.SERENA_DEFAULT_PROJECT_FILE)
 
     @classmethod
-    def load_commented_map(cls, yml_path: str) -> CommentedMap:
-        """
-        Load the project configuration as a CommentedMap, preserving comments and ensuring
-        completeness of the configuration by applying default values for missing fields
-        and backward compatibility adjustments.
-
-        :param yml_path: the path to the project.yml file
-        :return: a CommentedMap representing a full project configuration
-        """
-        data = load_yaml(yml_path, preserve_comments=True)
-
+    def _apply_defaults_to_dict(cls, data: TDict) -> TDict:
         # apply defaults for new fields
         data["languages"] = data.get("languages", [])
         data["ignored_paths"] = data.get("ignored_paths", [])
@@ -252,6 +244,19 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
             del data["language"]
 
         return data
+
+    @classmethod
+    def load_commented_map(cls, yml_path: str) -> CommentedMap:
+        """
+        Load the project configuration as a CommentedMap, preserving comments and ensuring
+        completeness of the configuration by applying default values for missing fields
+        and backward compatibility adjustments.
+
+        :param yml_path: the path to the project.yml file
+        :return: a CommentedMap representing a full project configuration
+        """
+        data = load_yaml(yml_path, preserve_comments=True)
+        return cls._apply_defaults_to_dict(data)
 
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> Self:
