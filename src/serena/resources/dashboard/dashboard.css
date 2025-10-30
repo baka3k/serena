@@ -1,3 +1,7 @@
+html {
+    scrollbar-gutter: stable; /* Prevent layout shift when scrollbar appears */
+}
+
 :root {
     /* Light theme variables */
     --bg-primary: #f5f5f5;
