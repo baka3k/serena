@@ -222,6 +222,10 @@ class SerenaAgent:
 
             def run_task() -> None:
                 try:
+                    if self.future.done():
+                        if self.logged:
+                            log.info(f"Task {self.name} was already completed before start; skipping execution")
+                        return
                     with LogTime(self.name, logger=log, enabled=self.logged):
                         result = self._function()
                         if not self.future.done():
