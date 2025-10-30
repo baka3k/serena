@@ -60,6 +60,7 @@ class Dashboard {
         this.memoryContentDirty = false;
         this.memoryToDelete = null;
         this.isAddingLanguage = false;
+        this.waitingForPollingResult = false;
 
         // Tool names and stats
         this.toolNames = [];
@@ -265,6 +266,11 @@ class Dashboard {
     // ===== Config Overview Methods =====
 
     loadConfigOverview() {
+        if (this.waitingForPollingResult) {
+            console.log('Still waiting for previous config poll result, skipping this poll');
+            return;
+        }
+        this.waitingForPollingResult = true;
         let self = this;
         $.ajax({
             url: '/get_config_overview',
@@ -295,6 +301,9 @@ class Dashboard {
                 self.$availableToolsDisplay.html('<div class="error-message">Error loading tools</div>');
                 self.$availableModesDisplay.html('<div class="error-message">Error loading modes</div>');
                 self.$availableContextsDisplay.html('<div class="error-message">Error loading contexts</div>');
+            },
+            complete: function() {
+                self.waitingForPollingResult = false;
             }
         });
     }

@@ -152,7 +152,7 @@ class SerenaDashboardAPI:
 
         @self._app.route("/get_config_overview", methods=["GET"])
         def get_config_overview() -> dict[str, Any]:
-            result = self._get_config_overview()
+            result = self._agent.execute_task(self._get_config_overview)
             return result.model_dump()
 
         @self._app.route("/shutdown", methods=["PUT"])
@@ -369,64 +369,73 @@ class SerenaDashboardAPI:
     def _get_available_languages(self) -> ResponseAvailableLanguages:
         from solidlsp.ls_config import Language
 
-        # Get all non-experimental languages
-        all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
+        def run() -> ResponseAvailableLanguages:
+            all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
 
-        # Filter out already added languages for the active project
-        project = self._agent.get_active_project()
-        if project:
-            current_languages = [lang.value for lang in project.project_config.languages]
-            available_languages = [lang for lang in all_languages if lang not in current_languages]
-        else:
-            available_languages = all_languages
+            # Filter out already added languages for the active project
+            project = self._agent.get_active_project()
+            if project:
+                current_languages = [lang.value for lang in project.project_config.languages]
+                available_languages = [lang for lang in all_languages if lang not in current_languages]
+            else:
+                available_languages = all_languages
 
-        return ResponseAvailableLanguages(languages=sorted(available_languages))
+            return ResponseAvailableLanguages(languages=sorted(available_languages))
+
+        return self._agent.execute_task(run)
 
     def _get_memory(self, request_get_memory: RequestGetMemory) -> ResponseGetMemory:
-        project = self._agent.get_active_project()
-        if project is None:
-            raise ValueError("No active project")
+        def run() -> ResponseGetMemory:
+            project = self._agent.get_active_project()
+            if project is None:
+                raise ValueError("No active project")
 
-        content = project.memories_manager.load_memory(request_get_memory.memory_name)
-        return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
+            content = project.memories_manager.load_memory(request_get_memory.memory_name)
+            return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
+
+        return self._agent.execute_task(run)
 
     def _save_memory(self, request_save_memory: RequestSaveMemory) -> None:
-        project = self._agent.get_active_project()
-        if project is None:
-            raise ValueError("No active project")
+        def run() -> None:
+            project = self._agent.get_active_project()
+            if project is None:
+                raise ValueError("No active project")
 
-        project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
+            project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
+
+        self._agent.execute_task(run)
 
     def _delete_memory(self, request_delete_memory: RequestDeleteMemory) -> None:
-        project = self._agent.get_active_project()
-        if project is None:
-            raise ValueError("No active project")
+        def run() -> None:
+            project = self._agent.get_active_project()
+            if project is None:
+                raise ValueError("No active project")
 
-        project.memories_manager.delete_memory(request_delete_memory.memory_name)
+            project.memories_manager.delete_memory(request_delete_memory.memory_name)
+
+        self._agent.execute_task(run)
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
         from solidlsp.ls_config import Language
 
-        # Convert string to Language enum
         try:
             language = Language(request_add_language.language)
         except ValueError:
             raise ValueError(f"Invalid language: {request_add_language.language}")
-
-        # Add the language to the active project
+        # add_language is already thread-safe
         self._agent.add_language(language)
+
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
         from solidlsp.ls_config import Language
 
-        # Convert string to Language enum
         try:
             language = Language(request_remove_language.language)
         except ValueError:
             raise ValueError(f"Invalid language: {request_remove_language.language}")
-
-        # Remove the language from the active project
+        # remove_language is already thread-safe
         self._agent.remove_language(language)
+
 
     @staticmethod
     def _find_first_free_port(start_port: int) -> int:
