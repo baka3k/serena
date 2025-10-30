@@ -198,6 +198,14 @@ class SerenaAgent:
         """
         return self._task_executor.get_current_tasks()
 
+    def get_last_executed_task(self) -> TaskExecutor.TaskInfo | None:
+        """
+        Gets the last executed task.
+
+        :return: the last executed task info or None if no task has been executed yet
+        """
+        return self._task_executor.get_last_executed_task()
+
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:
             return self._active_project.language_server_manager

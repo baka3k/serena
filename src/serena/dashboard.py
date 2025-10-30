@@ -2,7 +2,7 @@ import os
 import socket
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from flask import Flask, Response, request, send_from_directory
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
 from serena.constants import SERENA_DASHBOARD_DIR
+from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
 
 if TYPE_CHECKING:
@@ -83,6 +84,22 @@ class RequestSaveMemory(BaseModel):
 
 class RequestDeleteMemory(BaseModel):
     memory_name: str
+
+
+class QueuedExecution(BaseModel):
+    task_id: int
+    is_running: bool
+    name: str
+    finished_successfully: bool
+
+    @classmethod
+    def from_task_info(cls, task_info: TaskExecutor.TaskInfo) -> Self:
+        return cls(
+            task_id=task_info.task_id,
+            is_running=task_info.is_running,
+            name=task_info.name,
+            finished_successfully=task_info.finished_successfully(),
+        )
 
 
 class SerenaDashboardAPI:
@@ -222,6 +239,24 @@ class SerenaDashboardAPI:
             try:
                 self._delete_memory(request_delete_memory)
                 return {"status": "success", "message": f"Memory {request_delete_memory.memory_name} deleted successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/queued_task_executions", methods=["GET"])
+        def get_queued_executions() -> dict[str, Any]:
+            try:
+                current_executions = self._agent.get_current_tasks()
+                response = [QueuedExecution.from_task_info(task_info).model_dump() for task_info in current_executions]
+                return {"queued_executions": response, "status": "success"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/last_execution", methods=["GET"])
+        def get_last_execution() -> dict[str, Any]:
+            try:
+                last_execution_info = self._agent.get_last_executed_task()
+                response = QueuedExecution.from_task_info(last_execution_info).model_dump() if last_execution_info is not None else None
+                return {"last_execution": response, "status": "success"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
