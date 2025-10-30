@@ -363,7 +363,7 @@ class Dashboard {
 
         // Configuration help link
         html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
-        html += '<span style="color: var(--text-muted);">📖</span>';
+        html += '<span style="color: var(--text-muted);">📖</span> ';
         html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
         html += '</div>';
 
