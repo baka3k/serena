@@ -224,7 +224,7 @@ class SerenaAgent:
                 try:
                     if self.future.done():
                         if self.logged:
-                            log.info(f"Task {self.name} was already completed before start; skipping execution")
+                            log.info(f"Task {self.name} was already completed/cancelled; skipping execution")
                         return
                     with LogTime(self.name, logger=log, enabled=self.logged):
                         result = self._function()
@@ -244,6 +244,18 @@ class SerenaAgent:
             """
             return self.future.done()
 
+        def wait_until_done(self, timeout: float | None = None) -> None:
+            """
+            Waits until the task is done or the timeout is reached.
+
+            :param timeout: the maximum time to wait in seconds, or None to wait indefinitely
+            :return: True if the task is done, False if the timeout was reached
+            """
+            try:
+                self.future.result(timeout=timeout)
+            except:
+                pass
+
     def _process_task_queue(self) -> None:
         while True:
             # obtain task from the queue
@@ -259,14 +271,11 @@ class SerenaAgent:
             with self._task_executor_lock:
                 self._task_executor_current_task = task
             if task.logged:
-                log.info("Starting execution of %s", task)
+                log.info("Starting execution of %s", task.name)
             task.start()
 
             # wait for task completion
-            try:
-                task.future.result()
-            except:
-                pass
+            task.wait_until_done()
             with self._task_executor_lock:
                 self._task_executor_current_task = None
 
