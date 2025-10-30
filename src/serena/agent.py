@@ -151,7 +151,7 @@ class SerenaAgent:
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}")
 
         # create executor for starting the language server and running tools in another thread
-        # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
+        # This executor is used to achieve linear task execution
         self._task_executor = TaskExecutor("SerenaAgentTaskExecutor")
 
         # Initialize the prompt factory
