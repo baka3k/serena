@@ -55,6 +55,10 @@ class Dashboard {
         this.jetbrainsMode = false;
         this.activeProjectName = null;
         this.languageToRemove = null;
+        this.currentMemoryName = null;
+        this.originalMemoryContent = null;
+        this.memoryContentDirty = false;
+        this.memoryToDelete = null;
 
         // Tool names and stats
         this.toolNames = [];
@@ -95,6 +99,17 @@ class Dashboard {
         this.$removeModalOkBtn = $('#remove-modal-ok-btn');
         this.$removeModalCancelBtn = $('#remove-modal-cancel-btn');
         this.$modalCloseRemove = $('.modal-close-remove');
+        this.$editMemoryModal = $('#edit-memory-modal');
+        this.$editMemoryName = $('#edit-memory-name');
+        this.$editMemoryContent = $('#edit-memory-content');
+        this.$editMemorySaveBtn = $('#edit-memory-save-btn');
+        this.$editMemoryCancelBtn = $('#edit-memory-cancel-btn');
+        this.$modalCloseEditMemory = $('.modal-close-edit-memory');
+        this.$deleteMemoryModal = $('#delete-memory-modal');
+        this.$deleteMemoryName = $('#delete-memory-name');
+        this.$deleteMemoryOkBtn = $('#delete-memory-ok-btn');
+        this.$deleteMemoryCancelBtn = $('#delete-memory-cancel-btn');
+        this.$modalCloseDeleteMemory = $('.modal-close-delete-memory');
 
         // Chart references
         this.countChart = null;
@@ -119,6 +134,13 @@ class Dashboard {
         this.$removeModalOkBtn.click(this.confirmRemoveLanguageOk.bind(this));
         this.$removeModalCancelBtn.click(this.closeRemoveLanguageModal.bind(this));
         this.$modalCloseRemove.click(this.closeRemoveLanguageModal.bind(this));
+        this.$editMemorySaveBtn.click(this.saveMemoryFromModal.bind(this));
+        this.$editMemoryCancelBtn.click(this.closeEditMemoryModal.bind(this));
+        this.$modalCloseEditMemory.click(this.closeEditMemoryModal.bind(this));
+        this.$editMemoryContent.on('input', this.trackMemoryChanges.bind(this));
+        this.$deleteMemoryOkBtn.click(this.confirmDeleteMemoryOk.bind(this));
+        this.$deleteMemoryCancelBtn.click(this.closeDeleteMemoryModal.bind(this));
+        this.$modalCloseDeleteMemory.click(this.closeDeleteMemoryModal.bind(this));
 
         // Page navigation
         $('[data-page]').click(function(e) {
@@ -147,6 +169,18 @@ class Dashboard {
             }
         });
 
+        this.$editMemoryModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeEditMemoryModal();
+            }
+        });
+
+        this.$deleteMemoryModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeDeleteMemoryModal();
+            }
+        });
+
         // Collapsible sections
         $('.collapsible-header').click(function() {
             const $header = $(this);
@@ -167,6 +201,10 @@ class Dashboard {
                     self.closeLanguageModal();
                 } else if (self.$removeLanguageModal.is(':visible')) {
                     self.closeRemoveLanguageModal();
+                } else if (self.$editMemoryModal.is(':visible')) {
+                    self.closeEditMemoryModal();
+                } else if (self.$deleteMemoryModal.is(':visible')) {
+                    self.closeDeleteMemoryModal();
                 }
             }
         });
@@ -354,9 +392,12 @@ class Dashboard {
             html += '<span>Available Memories (' + config.available_memories.length + ')</span>';
             html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
             html += '</h3>';
-            html += '<div class="collapsible-content tools-grid" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+            html += '<div class="collapsible-content memories-container" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
             config.available_memories.forEach(function(memory) {
-                html += '<div class="tool-item" title="' + memory + '">' + memory + '</div>';
+                html += '<div class="memory-item removable" data-memory="' + memory + '">';
+                html += memory;
+                html += '<span class="memory-remove" data-memory="' + memory + '">&times;</span>';
+                html += '</div>';
             });
             html += '</div>';
             html += '</div>';
@@ -365,7 +406,7 @@ class Dashboard {
         this.$configDisplay.html(html);
 
         // Show/hide add language button based on jetbrains mode
-        if (this.jetbrainsMode) {
+        if (this.jetbrainsMode || this.activeProjectName === null) {
             this.$addLanguageBtn.hide();
         } else {
             this.$addLanguageBtn.show();
@@ -378,6 +419,21 @@ class Dashboard {
             e.stopPropagation();
             const language = $(this).data('language');
             self.confirmRemoveLanguage(language);
+        });
+
+        // Attach event handlers for memory items
+        $('.memory-item').click(function(e) {
+            e.preventDefault();
+            const memoryName = $(this).data('memory');
+            self.openEditMemoryModal(memoryName);
+        });
+
+        // Attach event handlers for memory remove buttons
+        $('.memory-remove').click(function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const memoryName = $(this).data('memory');
+            self.confirmDeleteMemory(memoryName);
         });
 
         // Re-attach collapsible handler for the newly created tools header
@@ -1172,6 +1228,152 @@ class Dashboard {
             complete: function() {
                 // Re-enable button
                 self.$modalAddBtn.prop('disabled', false).text('Add Language');
+            }
+        });
+    }
+
+    // ===== Memory Editing Methods =====
+
+    openEditMemoryModal(memoryName) {
+        const self = this;
+        this.currentMemoryName = memoryName;
+        this.memoryContentDirty = false;
+
+        // Set memory name in modal
+        this.$editMemoryName.text(memoryName);
+
+        // Load memory content
+        $.ajax({
+            url: '/get_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName
+            }),
+            success: function(response) {
+                if (response.status === 'error') {
+                    alert('Error: ' + response.message);
+                    return;
+                }
+                self.originalMemoryContent = response.content;
+                self.$editMemoryContent.val(response.content);
+                self.memoryContentDirty = false;
+                self.$editMemoryModal.fadeIn(200);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading memory:', error);
+                alert('Error loading memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+    }
+
+    closeEditMemoryModal() {
+        // Check if there are unsaved changes
+        if (this.memoryContentDirty) {
+            if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+                return;
+            }
+        }
+
+        this.$editMemoryModal.fadeOut(200);
+        this.currentMemoryName = null;
+        this.originalMemoryContent = null;
+        this.memoryContentDirty = false;
+    }
+
+    trackMemoryChanges() {
+        const currentContent = this.$editMemoryContent.val();
+        this.memoryContentDirty = (currentContent !== this.originalMemoryContent);
+    }
+
+    saveMemoryFromModal() {
+        const self = this;
+        const memoryName = this.currentMemoryName;
+        const content = this.$editMemoryContent.val();
+
+        if (!memoryName) {
+            alert('No memory selected');
+            return;
+        }
+
+        // Disable button during request
+        self.$editMemorySaveBtn.prop('disabled', true).text('Saving...');
+
+        $.ajax({
+            url: '/save_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName,
+                content: content
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Update original content and reset dirty flag
+                    self.originalMemoryContent = content;
+                    self.memoryContentDirty = false;
+                    // Close modal
+                    self.$editMemoryModal.fadeOut(200);
+                    self.currentMemoryName = null;
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error saving memory:', error);
+                alert('Error saving memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            },
+            complete: function() {
+                // Re-enable button
+                self.$editMemorySaveBtn.prop('disabled', false).text('Save');
+            }
+        });
+    }
+
+    confirmDeleteMemory(memoryName) {
+        // Set memory name to delete
+        this.memoryToDelete = memoryName;
+
+        // Set memory name in modal
+        this.$deleteMemoryName.text(memoryName);
+
+        // Show modal
+        this.$deleteMemoryModal.fadeIn(200);
+    }
+
+    closeDeleteMemoryModal() {
+        this.$deleteMemoryModal.fadeOut(200);
+        this.memoryToDelete = null;
+    }
+
+    confirmDeleteMemoryOk() {
+        if (this.memoryToDelete) {
+            this.deleteMemory(this.memoryToDelete);
+            this.closeDeleteMemoryModal();
+        }
+    }
+
+    deleteMemory(memoryName) {
+        const self = this;
+
+        $.ajax({
+            url: '/delete_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Reload config to show updated memory list
+                    self.loadConfigOverview();
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error deleting memory:', error);
+                alert('Error deleting memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
             }
         });
     }

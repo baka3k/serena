@@ -711,3 +711,79 @@ body {
     background: rgba(255, 68, 68, 0.2);
     transform: scale(1.1);
 }
+
+/* Memory Editor Styles */
+.modal-content-large {
+    max-width: 800px;
+    width: 90%;
+}
+
+.memory-editor {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    tab-size: 4;
+    -moz-tab-size: 4;
+}
+
+.memory-editor:focus {
+    outline: 2px solid var(--btn-primary);
+    outline-offset: -1px;
+}
+
+/* Memory Item Styles */
+.memory-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 5px;
+    border-radius: 4px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.memory-item:hover {
+    background-color: var(--border-color);
+    text-decoration: underline;
+}
+
+.memory-item.removable {
+    padding-right: 28px;
+}
+
+.memory-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 68, 68, 0.1);
+    border-radius: 3px;
+    cursor: pointer;
+    color: #ff4444;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    transition: all 0.2s;
+}
+
+.memory-remove:hover {
+    background: rgba(255, 68, 68, 0.2);
+    transform: scale(1.1);
+    text-decoration: none;
+}
+
+.memories-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
