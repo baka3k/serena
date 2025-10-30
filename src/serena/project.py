@@ -12,7 +12,7 @@ from serena.constants import SERENA_FILE_ENCODING, SERENA_MANAGED_DIR_NAME
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.text_utils import MatchedConsecutiveLines, search_files
 from serena.util.file_system import GitignoreParser, match_path
-from serena.util.general import load_yaml, save_yaml
+from serena.util.general import save_yaml
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import FileUtils
@@ -116,7 +116,7 @@ class Project(ToStringMixin):
         """
         config_path = os.path.join(self.project_root, self.project_config.rel_path_to_project_yml())
         log.info("Saving updated project configuration to %s", config_path)
-        config_with_comments = load_yaml(config_path, preserve_comments=True)
+        config_with_comments = ProjectConfig.load_commented_map(config_path)
         config_with_comments.update(self.project_config.to_yaml_dict())
         save_yaml(config_path, config_with_comments, preserve_comments=True)
 
