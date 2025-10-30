@@ -24,7 +24,7 @@ from serena.dashboard import SerenaDashboardAPI
 from serena.ls_manager import LanguageServerManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
-from serena.task_queue import TaskExecutor
+from serena.task_executor import TaskExecutor
 from serena.tools import ActivateProjectTool, GetCurrentConfigTool, Tool, ToolMarker, ToolRegistry
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
