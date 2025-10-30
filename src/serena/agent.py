@@ -211,18 +211,31 @@ class SerenaAgent:
             """
             Execute the task, setting the result or exception on the future.
             """
-            try:
-                with LogTime(self.name, logger=log):
-                    result = self._function()
-                    self.future.set_result(result)
-            except Exception as e:
-                log.error(f"Error during execution of {self.name}: {e}", exc_info=e)
-                self.future.set_exception(e)
+
+            def run_task():
+                try:
+                    with LogTime(self.name, logger=log):
+                        result = self._function()
+                        if not self.future.done():
+                            self.future.set_result(result)
+                except Exception as e:
+                    if not self.future.done():
+                        log.error(f"Error during execution of {self.name}: {e}", exc_info=e)
+                        self.future.set_exception(e)
+
+            thread = Thread(target=run_task, name=self.name)
+            thread.start()
 
     def _process_task_queue(self) -> None:
         while True:
+            log.debug("Waiting for task ...")
             task: SerenaAgent.Task = self._task_executor_queue.get()
             task.execute()
+            try:
+                # wait for task completion
+                task.future.result()
+            except:
+                pass
 
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:

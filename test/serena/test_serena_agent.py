@@ -61,6 +61,14 @@ def serena_agent(request: pytest.FixtureRequest, serena_config):
     return SerenaAgent(project=project_name, serena_config=serena_config)
 
 
+@pytest.fixture
+def basic_serena_agent(serena_config):
+    """
+    Fixture for a basic SerenaAgent without a project
+    """
+    return SerenaAgent(project=None, serena_config=serena_config)
+
+
 class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
@@ -284,3 +292,62 @@ class TestSerenaAgent:
 
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {name_path}. Symbols found: {symbols}"
+
+    @staticmethod
+    def _create_task(delay: float, name: str, exception: bool = False):
+        def fn():
+            time.sleep(delay)
+            if exception:
+                raise ValueError(f"Task {name} failed")
+            return True
+
+        fn.__name__ = name
+        return fn
+
+    def test_task_queue_sequence(self, basic_serena_agent):
+        """
+        Tests that a sequence of tasks is executed correctly
+        """
+        future1 = basic_serena_agent.issue_task(self._create_task(1, "task1"))
+        future2 = basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        assert future1.result() is True
+        assert future2.result() is True
+
+    def test_task_queue_exception(self, basic_serena_agent):
+        """
+        Tests that tasks that raise exceptions are handled correctly, i.e. that
+          * the exception is propagated,
+          * subsequent tasks are still executed.
+        """
+        future1 = basic_serena_agent.issue_task(self._create_task(1, "task1", exception=True))
+        future2 = basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        have_exception = False
+        try:
+            assert future1.result()
+        except Exception as e:
+            assert isinstance(e, ValueError)
+            have_exception = True
+        assert have_exception
+        assert future2.result() is True
+
+    def test_task_queue_cancel(self, basic_serena_agent):
+        """
+        Tests that tasks that are cancelled are handled correctly, i.e. that
+          * subsequent tasks are executed as soon as cancellation ensues.
+          * the cancelled task raises CancelledError when result() is called.
+        """
+        start_time = time.time()
+        future1 = basic_serena_agent.issue_task(self._create_task(10, "task1"))
+        future2 = basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        time.sleep(1)
+        future1.cancel()
+        assert future2.result() is True
+        end_time = time.time()
+        assert (end_time - start_time) < 9, "Cancelled task did not stop in time"
+        have_cancelled_error = False
+        try:
+            future1.result()
+        except Exception as e:
+            assert e.__class__.__name__ == "CancelledError"
+            have_cancelled_error = True
+        assert have_cancelled_error
