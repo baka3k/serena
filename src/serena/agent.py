@@ -157,7 +157,7 @@ class SerenaAgent:
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
-        self._task_executor_queue = Queue()
+        self._task_executor_queue: Queue = Queue()
         self._task_executor_thread = Thread(target=self._process_task_queue, name="SerenaAgentTaskExecutor", daemon=True)
         self._task_executor_thread.start()
         self._task_executor_lock = threading.Lock()
@@ -201,13 +201,16 @@ class SerenaAgent:
     class Task(ToStringMixin):
         def __init__(self, function: Callable[[], Any], name: str):
             self.name = name
-            self.future = concurrent.futures.Future()
+            self.future: concurrent.futures.Future = concurrent.futures.Future()
             self._function = function
 
         def _tostring_includes(self) -> list[str]:
             return ["name"]
 
-        def execute(self):
+        def execute(self) -> None:
+            """
+            Execute the task, setting the result or exception on the future.
+            """
             try:
                 with LogTime(self.name, logger=log):
                     result = self._function()
@@ -216,7 +219,7 @@ class SerenaAgent:
                 log.error(f"Error during execution of {self.name}: {e}", exc_info=e)
                 self.future.set_exception(e)
 
-    def _process_task_queue(self):
+    def _process_task_queue(self) -> None:
         while True:
             task: SerenaAgent.Task = self._task_executor_queue.get()
             task.execute()
