@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import concurrent.futures
 import multiprocessing
 import os
 import platform
@@ -9,12 +10,15 @@ import sys
 import threading
 import webbrowser
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future
 from logging import Logger
+from queue import Queue
+from threading import Thread
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from sensai.util import logging
 from sensai.util.logging import LogTime
+from sensai.util.string import ToStringMixin
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
@@ -153,7 +157,9 @@ class SerenaAgent:
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
-        self._task_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="SerenaAgentExecutor")
+        self._task_executor_queue = Queue()
+        self._task_executor_thread = Thread(target=self._process_task_queue, name="SerenaAgentTaskExecutor", daemon=True)
+        self._task_executor_thread.start()
         self._task_executor_lock = threading.Lock()
         self._task_executor_task_index = 1
 
@@ -191,6 +197,29 @@ class SerenaAgent:
                 process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
                 process.start()
                 process.join(timeout=1)
+
+    class Task(ToStringMixin):
+        def __init__(self, function: Callable[[], Any], name: str):
+            self.name = name
+            self.future = concurrent.futures.Future()
+            self._function = function
+
+        def _tostring_includes(self) -> list[str]:
+            return ["name"]
+
+        def execute(self):
+            try:
+                with LogTime(self.name, logger=log):
+                    result = self._function()
+                    self.future.set_result(result)
+            except Exception as e:
+                log.error(f"Error during execution of {self.name}: {e}", exc_info=e)
+                self.future.set_exception(e)
+
+    def _process_task_queue(self):
+        while True:
+            task: SerenaAgent.Task = self._task_executor_queue.get()
+            task.execute()
 
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:
@@ -376,16 +405,10 @@ class SerenaAgent:
         with self._task_executor_lock:
             task_name = f"Task-{self._task_executor_task_index}[{name or task.__name__}]"
             self._task_executor_task_index += 1
-
-            def task_execution_wrapper() -> Any:
-                try:
-                    with LogTime(task_name, logger=log):
-                        return task()
-                except Exception as e:
-                    log.error(f"Error during execution of {task_name}: {e}", exc_info=e)
-
             log.info(f"Scheduling {task_name}")
-            return self._task_executor.submit(task_execution_wrapper)
+            task = SerenaAgent.Task(function=task, name=task_name)
+            self._task_executor_queue.put(task)
+            return task.future
 
     def execute_task(self, task: Callable[[], T], name: str | None = None) -> T:
         """
@@ -543,22 +566,15 @@ class SerenaAgent:
             ls_specific_settings=self.serena_config.ls_specific_settings,
         )
 
-    def add_language(self, language: Language, wait_for_ls_startup: bool = False) -> None:
+    def add_language(self, language: Language) -> None:
         """
         Adds a new language to the active project, spawning the respective language server and updating the project configuration.
         The addition is scheduled via the agent's task executor and executed synchronously, i.e. the method returns
         when the addition is complete.
 
         :param language: the language to add
-        :param wait_for_ls_startup: whether to wait for the language server to start up before returning (synchronous execution)
-            or to just issue the addition task and return immediately (asynchronous execution)
         """
-        task = lambda: self.get_active_project_or_raise().add_language(language)
-        task_name = f"AddLanguage:{language.value}"
-        if wait_for_ls_startup:
-            self.execute_task(task, name=task_name)
-        else:
-            self.issue_task(task, name=task_name)
+        self.execute_task(lambda: self.get_active_project_or_raise().add_language(language), name=f"AddLanguage:{language.value}")
 
     def remove_language(self, language: Language) -> None:
         """

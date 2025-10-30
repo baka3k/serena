@@ -414,7 +414,7 @@ class SerenaDashboardAPI:
             raise ValueError(f"Invalid language: {request_add_language.language}")
 
         # Add the language to the active project
-        self._agent.add_language(language, wait_for_ls_startup=False)
+        self._agent.add_language(language)
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
         from solidlsp.ls_config import Language

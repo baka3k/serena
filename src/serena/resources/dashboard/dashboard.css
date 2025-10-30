@@ -1,3 +1,7 @@
+html {
+    scrollbar-gutter: stable; /* Prevent layout shift when scrollbar appears */
+}
+
 :root {
     /* Light theme variables */
     --bg-primary: #f5f5f5;
@@ -43,15 +47,16 @@
 body {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     margin: 0;
-    padding: 20px;
-    padding-top: 130px;
     background-color: var(--bg-primary);
     color: var(--text-primary);
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+.main {
+    padding: 20px;
+}
+
 .header {
-    position: fixed;
     top: 0;
     left: 0;
     right: 0;
@@ -72,7 +77,7 @@ body {
 }
 
 .logo-container img {
-    max-width: 300px;
+    max-width: 250px;
     height: auto;
     display: block;
 }
@@ -710,6 +715,46 @@ body {
 .language-remove:hover {
     background: rgba(255, 68, 68, 0.2);
     transform: scale(1.1);
+}
+
+.language-add-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px dashed var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.language-add-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--btn-primary);
+    color: var(--btn-primary);
+}
+
+.language-spinner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+}
+
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--btn-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Memory Editor Styles */

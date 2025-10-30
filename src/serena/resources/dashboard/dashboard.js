@@ -87,7 +87,6 @@ class Dashboard {
         this.$availableToolsDisplay = $('#available-tools-display');
         this.$availableModesDisplay = $('#available-modes-display');
         this.$availableContextsDisplay = $('#available-contexts-display');
-        this.$addLanguageBtn = $('#add-language-btn');
         this.$addLanguageModal = $('#add-language-modal');
         this.$modalLanguageSelect = $('#modal-language-select');
         this.$modalProjectName = $('#modal-project-name');
@@ -127,7 +126,6 @@ class Dashboard {
         this.$themeToggle.click(this.toggleTheme.bind(this));
         this.$refreshStats.click(this.loadStats.bind(this));
         this.$clearStats.click(this.clearStats.bind(this));
-        this.$addLanguageBtn.click(this.openLanguageModal.bind(this));
         this.$modalAddBtn.click(this.addLanguageFromModal.bind(this));
         this.$modalCancelBtn.click(this.closeLanguageModal.bind(this));
         this.$modalClose.click(this.closeLanguageModal.bind(this));
@@ -340,6 +338,13 @@ class Dashboard {
                     }
                     html += '</div>';
                 });
+                // Add the "Add Language" button inline with language badges (only if active project exists)
+                if (config.active_project && config.active_project.name) {
+                    html += '<button id="add-language-btn" class="btn language-add-btn">+ Add Language</button>';
+                    html += '<div id="add-language-spinner" class="language-spinner" style="display:none;">';
+                    html += '<div class="spinner"></div>';
+                    html += '</div>';
+                }
                 html += '</div>';
             } else {
                 html += 'N/A';
@@ -368,12 +373,6 @@ class Dashboard {
         html += '<div class="config-label">File Encoding:</div>';
         html += '<div class="config-value">' + (config.encoding || 'N/A') + '</div>';
 
-        html += '</div>';
-
-        // Configuration help link
-        html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
-        html += '<span style="color: var(--text-muted);">📖</span>';
-        html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
         html += '</div>';
 
         // Active tools - collapsible
@@ -407,14 +406,16 @@ class Dashboard {
             html += '</div>';
         }
 
+        // Configuration help link
+        html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
+        html += '<span style="color: var(--text-muted);">📖</span> ';
+        html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
+        html += '</div>';
+
         this.$configDisplay.html(html);
 
-        // Show/hide add language button based on jetbrains mode
-        if (this.jetbrainsMode || this.activeProjectName === null) {
-            this.$addLanguageBtn.hide();
-        } else {
-            this.$addLanguageBtn.show();
-        }
+        // Attach event handlers for the dynamically created add language button
+        $('#add-language-btn').click(this.openLanguageModal.bind(this));
 
         // Attach event handlers for language remove buttons
         const self = this;
@@ -1052,9 +1053,9 @@ class Dashboard {
         const logoElement = document.getElementById('serena-logo');
         if (logoElement) {
             if (theme === 'dark') {
-                logoElement.src = 'serena-logs-dark-mode.png';
+                logoElement.src = 'serena-logo-dark-mode.svg';
             } else {
-                logoElement.src = 'serena-logs.png';
+                logoElement.src = 'serena-logo.svg';
             }
         }
     }
@@ -1205,8 +1206,13 @@ class Dashboard {
         }
 
         const self = this;
-        // Disable button during request
-        self.$modalAddBtn.prop('disabled', true).text('Adding...');
+
+        // Close modal immediately
+        self.closeLanguageModal();
+
+        // Hide the inline add language button and show spinner
+        $('#add-language-btn').hide();
+        $('#add-language-spinner').show();
 
         $.ajax({
             url: '/add_language',
@@ -1217,21 +1223,21 @@ class Dashboard {
             }),
             success: function(response) {
                 if (response.status === 'success') {
-                    // Close modal
-                    self.closeLanguageModal();
-                    // Reload config to show updated language
+                    // Reload config to show updated language (this will restore the button)
                     self.loadConfigOverview();
                 } else {
                     alert('Error: ' + response.message);
+                    // Restore button visibility on error
+                    $('#add-language-btn').show();
+                    $('#add-language-spinner').hide();
                 }
             },
             error: function(xhr, status, error) {
                 console.error('Error adding language:', error);
                 alert('Error adding language: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
-            },
-            complete: function() {
-                // Re-enable button
-                self.$modalAddBtn.prop('disabled', false).text('Add Language');
+                // Restore button visibility on error
+                $('#add-language-btn').show();
+                $('#add-language-spinner').hide();
             }
         });
     }
