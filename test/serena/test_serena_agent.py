@@ -351,3 +351,24 @@ class TestSerenaAgent:
             assert e.__class__.__name__ == "CancelledError"
             have_cancelled_error = True
         assert have_cancelled_error
+
+    def test_task_queue_cancellation_via_task_info(self, basic_serena_agent):
+        start_time = time.time()
+        basic_serena_agent.issue_task(self._create_task(10, "task1"))
+        basic_serena_agent.issue_task(self._create_task(1, "task2"))
+        task_infos = basic_serena_agent.get_current_tasks()
+        task_infos2 = basic_serena_agent.get_current_tasks()
+
+        # test expected tasks
+        assert len(task_infos) == 2
+        assert "task1" in task_infos[0].name
+        assert "task2" in task_infos[1].name
+
+        # test task identifiers being stable
+        assert task_infos2[0].task_id == task_infos[0].task_id
+
+        # test cancellation
+        task_infos[0].cancel()
+        assert task_infos[1].future.result()
+        end_time = time.time()
+        assert (end_time - start_time) < 9, "Cancelled task did not stop in time"

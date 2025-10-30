@@ -8,11 +8,12 @@ import os
 import platform
 import sys
 import threading
+import time
 import webbrowser
 from collections.abc import Callable
 from concurrent.futures import Future
+from dataclasses import dataclass
 from logging import Logger
-from queue import Queue
 from threading import Thread
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
@@ -157,11 +158,12 @@ class SerenaAgent:
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution, so it is important to use a single-threaded executor.
-        self._task_executor_queue: Queue = Queue()
+        self._task_executor_lock = threading.Lock()
+        self._task_executor_queue: list[SerenaAgent.Task] = []
         self._task_executor_thread = Thread(target=self._process_task_queue, name="SerenaAgentTaskExecutor", daemon=True)
         self._task_executor_thread.start()
-        self._task_executor_lock = threading.Lock()
         self._task_executor_task_index = 1
+        self._task_executor_current_task: Optional[SerenaAgent.Task] = None
 
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
@@ -207,12 +209,12 @@ class SerenaAgent:
         def _tostring_includes(self) -> list[str]:
             return ["name"]
 
-        def execute(self) -> None:
+        def start(self) -> None:
             """
-            Execute the task, setting the result or exception on the future.
+            Executes the task in a separate thread, setting the result or exception on the future.
             """
 
-            def run_task():
+            def run_task() -> None:
                 try:
                     with LogTime(self.name, logger=log):
                         result = self._function()
@@ -228,14 +230,63 @@ class SerenaAgent:
 
     def _process_task_queue(self) -> None:
         while True:
-            log.debug("Waiting for task ...")
-            task: SerenaAgent.Task = self._task_executor_queue.get()
-            task.execute()
+            # obtain task from the queue
+            task: SerenaAgent.Task | None = None
+            with self._task_executor_lock:
+                if len(self._task_executor_queue) > 0:
+                    task = self._task_executor_queue.pop(0)
+            if task is None:
+                time.sleep(0.1)
+                continue
+
+            # start task execution asynchronously
+            with self._task_executor_lock:
+                self._task_executor_current_task = task
+            log.info("Starting execution of %s", task)
+            task.start()
+
+            # wait for task completion
             try:
-                # wait for task completion
                 task.future.result()
             except:
                 pass
+            with self._task_executor_lock:
+                self._task_executor_current_task = None
+
+    @dataclass
+    class TaskInfo:
+        name: str
+        is_running: bool
+        future: Future
+        """
+        future for accessing the task's result
+        """
+        task_id: int
+        """
+        unique identifier of the task
+        """
+
+        @staticmethod
+        def from_task(task: "SerenaAgent.Task", is_running: bool) -> "SerenaAgent.TaskInfo":
+            return SerenaAgent.TaskInfo(name=task.name, is_running=is_running, future=task.future, task_id=id(task))
+
+        def cancel(self) -> None:
+            self.future.cancel()
+
+    def get_current_tasks(self) -> list["SerenaAgent.TaskInfo"]:
+        """
+        Gets the list of tasks currently running or queued for execution.
+        The function returns a list of thread-safe TaskInfo objects (specifically created for the caller).
+
+        :return: the list of tasks in the execution order (running task first)
+        """
+        tasks = []
+        with self._task_executor_lock:
+            if self._task_executor_current_task is not None:
+                tasks.append(self.TaskInfo.from_task(self._task_executor_current_task, True))
+            for task in self._task_executor_queue:
+                tasks.append(self.TaskInfo.from_task(task, False))
+        return tasks
 
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:
@@ -423,7 +474,7 @@ class SerenaAgent:
             self._task_executor_task_index += 1
             log.info(f"Scheduling {task_name}")
             task = SerenaAgent.Task(function=task, name=task_name)
-            self._task_executor_queue.put(task)
+            self._task_executor_queue.append(task)
             return task.future
 
     def execute_task(self, task: Callable[[], T], name: str | None = None) -> T:
