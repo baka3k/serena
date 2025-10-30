@@ -993,9 +993,9 @@ class Dashboard {
         const logoElement = document.getElementById('serena-logo');
         if (logoElement) {
             if (theme === 'dark') {
-                logoElement.src = 'serena-logs-dark-mode.png';
+                logoElement.src = 'serena-logo-dark-mode.svg';
             } else {
-                logoElement.src = 'serena-logs.png';
+                logoElement.src = 'serena-logo.svg';
             }
         }
     }
