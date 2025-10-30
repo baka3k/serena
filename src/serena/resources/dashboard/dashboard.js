@@ -59,6 +59,7 @@ class Dashboard {
         this.originalMemoryContent = null;
         this.memoryContentDirty = false;
         this.memoryToDelete = null;
+        this.isAddingLanguage = false;
 
         // Tool names and stats
         this.toolNames = [];
@@ -340,8 +341,13 @@ class Dashboard {
                 });
                 // Add the "Add Language" button inline with language badges (only if active project exists)
                 if (config.active_project && config.active_project.name) {
-                    html += '<button id="add-language-btn" class="btn language-add-btn">+ Add Language</button>';
-                    html += '<div id="add-language-spinner" class="language-spinner" style="display:none;">';
+                    // TODO: address after refactoring, it's not awesome to keep depending on state
+                    if (this.isAddingLanguage) {
+                        html += '<div id="add-language-spinner" class="language-spinner">';
+                    } else {
+                        html += '<button id="add-language-btn" class="btn language-add-btn">+ Add Language</button>';
+                        html += '<div id="add-language-spinner" class="language-spinner" style="display:none;">';
+                    }
                     html += '<div class="spinner"></div>';
                     html += '</div>';
                 }
@@ -1213,6 +1219,7 @@ class Dashboard {
         // Hide the inline add language button and show spinner
         $('#add-language-btn').hide();
         $('#add-language-spinner').show();
+        self.isAddingLanguage = true;
 
         $.ajax({
             url: '/add_language',
@@ -1223,8 +1230,7 @@ class Dashboard {
             }),
             success: function(response) {
                 if (response.status === 'success') {
-                    // Reload config to show updated language (this will restore the button)
-                    self.loadConfigOverview();
+                    console.log("Language added successfully");
                 } else {
                     alert('Error: ' + response.message);
                     // Restore button visibility on error
@@ -1238,6 +1244,10 @@ class Dashboard {
                 // Restore button visibility on error
                 $('#add-language-btn').show();
                 $('#add-language-spinner').hide();
+            },
+            complete: function() {
+                self.isAddingLanguage = false;
+                self.loadConfigOverview();
             }
         });
     }
