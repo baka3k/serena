@@ -58,6 +58,27 @@
                         <div class="loading">Loading stats...</div>
                     </div>
                 </section>
+
+                <section class="executions-section">
+                    <h2>Executions Queue</h2>
+                    <div id="active-executions-display">
+                        <div class="loading">Loading executions...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section">
+                    <h2>Last Execution</h2>
+                    <div id="last-execution-display">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section" style="display:none">
+                    <h2>Cancelled Executions</h2>
+                    <div id="cancelled-executions-display">
+                        <div class="no-stats-message">No cancelled executions.</div>
+                    </div>
+                </section>
             </div>
 
             <div class="overview-right">
@@ -252,6 +273,23 @@
                         style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
                 </button>
                 <button id="create-memory-create-btn" class="btn" style="padding: 8px 16px;">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel Execution Confirmation Modal -->
+    <div id="cancel-execution-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-cancel-execution">&times;</span>
+            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+                Are you sure? The execution will continue running until timeout, it will simply no longer be in the queue.
+                Abandoning a running execution is only advised as a measure for unblocking Serena.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="cancel-execution-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="cancel-execution-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
             </div>
         </div>
     </div>

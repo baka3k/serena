@@ -86,11 +86,16 @@ class RequestDeleteMemory(BaseModel):
     memory_name: str
 
 
+class RequestCancelTaskExecution(BaseModel):
+    task_id: int
+
+
 class QueuedExecution(BaseModel):
     task_id: int
     is_running: bool
     name: str
     finished_successfully: bool
+    logged: bool
 
     @classmethod
     def from_task_info(cls, task_info: TaskExecutor.TaskInfo) -> Self:
@@ -99,6 +104,7 @@ class QueuedExecution(BaseModel):
             is_running=task_info.is_running,
             name=task_info.name,
             finished_successfully=task_info.finished_successfully(),
+            logged=task_info.logged,
         )
 
 
@@ -169,7 +175,7 @@ class SerenaDashboardAPI:
 
         @self._app.route("/get_config_overview", methods=["GET"])
         def get_config_overview() -> dict[str, Any]:
-            result = self._agent.execute_task(self._get_config_overview)
+            result = self._agent.execute_task(self._get_config_overview, logged=False)
             return result.model_dump()
 
         @self._app.route("/shutdown", methods=["PUT"])
@@ -250,6 +256,16 @@ class SerenaDashboardAPI:
                 return {"queued_executions": response, "status": "success"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
+
+        @self._app.route("/cancel_task_execution", methods=["POST"])
+        def cancel_task_execution() -> dict[str, Any]:
+            request_data = request.get_json()
+            try:
+                request_cancel_task = RequestCancelTaskExecution.model_validate(request_data)
+                task_was_cancelled = self._agent.cancel_task(request_cancel_task.task_id)
+                return {"status": "success", "was_cancelled": task_was_cancelled}
+            except Exception as e:
+                return {"status": "error", "message": str(e), "was_cancelled": False}
 
         @self._app.route("/last_execution", methods=["GET"])
         def get_last_execution() -> dict[str, Any]:
@@ -417,7 +433,7 @@ class SerenaDashboardAPI:
 
             return ResponseAvailableLanguages(languages=sorted(available_languages))
 
-        return self._agent.execute_task(run)
+        return self._agent.execute_task(run, logged=False)
 
     def _get_memory(self, request_get_memory: RequestGetMemory) -> ResponseGetMemory:
         def run() -> ResponseGetMemory:
@@ -428,7 +444,7 @@ class SerenaDashboardAPI:
             content = project.memories_manager.load_memory(request_get_memory.memory_name)
             return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
 
-        return self._agent.execute_task(run)
+        return self._agent.execute_task(run, logged=False)
 
     def _save_memory(self, request_save_memory: RequestSaveMemory) -> None:
         def run() -> None:
@@ -438,7 +454,7 @@ class SerenaDashboardAPI:
 
             project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
 
-        self._agent.execute_task(run)
+        self._agent.execute_task(run, logged=True, name="SaveMemory")
 
     def _delete_memory(self, request_delete_memory: RequestDeleteMemory) -> None:
         def run() -> None:
@@ -448,7 +464,7 @@ class SerenaDashboardAPI:
 
             project.memories_manager.delete_memory(request_delete_memory.memory_name)
 
-        self._agent.execute_task(run)
+        self._agent.execute_task(run, logged=True, name="DeleteMemory")
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
         from solidlsp.ls_config import Language

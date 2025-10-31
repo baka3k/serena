@@ -198,6 +198,15 @@ class SerenaAgent:
         """
         return self._task_executor.get_current_tasks()
 
+    def cancel_task(self, task_id: int) -> bool:
+        """
+        Cancels a task with the given ID and removes it from the task queue.
+
+        :param task_id: the ID of the task to cancel
+        :return: True if the task was found and cancelled, False otherwise
+        """
+        return self._task_executor.cancel_task(task_id)
+
     def get_last_executed_task(self) -> TaskExecutor.TaskInfo | None:
         """
         Gets the last executed task.

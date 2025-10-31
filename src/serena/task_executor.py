@@ -142,13 +142,14 @@ class TaskExecutor:
         """
         unique identifier of the task
         """
+        logged: bool
 
         def finished_successfully(self) -> bool:
             return self.future.done() and not self.future.cancelled() and self.future.exception() is None
 
         @staticmethod
         def from_task(task: "TaskExecutor.Task", is_running: bool) -> "TaskExecutor.TaskInfo":
-            return TaskExecutor.TaskInfo(name=task.name, is_running=is_running, future=task.future, task_id=id(task))
+            return TaskExecutor.TaskInfo(name=task.name, is_running=is_running, future=task.future, task_id=id(task), logged=task.logged)
 
         def cancel(self) -> None:
             self.future.cancel()
@@ -215,3 +216,22 @@ class TaskExecutor:
         """
         with self._task_executor_lock:
             return self._task_executor_last_executed_task_info
+
+    def cancel_task(self, task_id: int) -> bool:
+        """
+        Cancels a task with the given task ID and removes it from the queue if found.
+
+        :param task_id: the unique identifier of the task to cancel
+        :return: True if the task was found and cancelled, False otherwise
+        """
+        with self._task_executor_lock:
+            if self._task_executor_current_task is not None and id(self._task_executor_current_task) == task_id:
+                self._task_executor_current_task.cancel()
+                self._task_executor_current_task = None
+                return True
+            for task in self._task_executor_queue:
+                if id(task) == task_id:
+                    task.cancel()
+                    self._task_executor_queue.remove(task)
+                    return True
+        raise KeyError(f"Task with ID {task_id} not found in the queue. {self._task_executor_queue=}, {self._task_executor_current_task=}")

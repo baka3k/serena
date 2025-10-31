@@ -62,11 +62,16 @@ class Dashboard {
         this.isAddingLanguage = false;
         this.waitingForPollingResult = false;
 
+        // Execution tracking
+        this.cancelledExecutions = [];
+        this.executionToCancel = null;
+
         // Tool names and stats
         this.toolNames = [];
         this.currentMaxIdx = -1;
         this.pollInterval = null;
         this.configPollInterval = null;
+        this.executionsPollInterval = null;
         this.failureCount = 0;
 
         // jQuery elements
@@ -117,6 +122,13 @@ class Dashboard {
         this.$createMemoryCreateBtn = $('#create-memory-create-btn');
         this.$createMemoryCancelBtn = $('#create-memory-cancel-btn');
         this.$modalCloseCreateMemory = $('.modal-close-create-memory');
+        this.$activeExecutionQueueDisplay = $('#active-executions-display');
+        this.$lastExecutionDisplay = $('#last-execution-display');
+        this.$cancelledExecutionsDisplay = $('#cancelled-executions-display');
+        this.$cancelExecutionModal = $('#cancel-execution-modal');
+        this.$cancelExecutionOkBtn = $('#cancel-execution-ok-btn');
+        this.$cancelExecutionCancelBtn = $('#cancel-execution-cancel-btn');
+        this.$modalCloseCancelExecution = $('.modal-close-cancel-execution');
 
         // Chart references
         this.countChart = null;
@@ -156,6 +168,9 @@ class Dashboard {
                 self.createMemoryFromModal();
             }
         });
+        this.$cancelExecutionOkBtn.click(this.confirmCancelExecutionOk.bind(this));
+        this.$cancelExecutionCancelBtn.click(this.closeCancelExecutionModal.bind(this));
+        this.$modalCloseCancelExecution.click(this.closeCancelExecutionModal.bind(this));
 
         // Page navigation
         $('[data-page]').click(function(e) {
@@ -237,6 +252,7 @@ class Dashboard {
             // Start on overview page
             self.loadConfigOverview();
             self.startConfigPolling();
+            self.startExecutionsPolling();
         });
     }
 
@@ -268,6 +284,7 @@ class Dashboard {
         if (page === 'overview') {
             this.loadConfigOverview();
             this.startConfigPolling();
+            this.startExecutionsPolling();
         } else if (page === 'logs') {
             this.loadLogs();
         } else if (page === 'stats') {
@@ -284,6 +301,10 @@ class Dashboard {
             clearInterval(this.configPollInterval);
             this.configPollInterval = null;
         }
+        if (this.executionsPollInterval) {
+            clearInterval(this.executionsPollInterval);
+            this.executionsPollInterval = null;
+        }
     }
 
     // ===== Config Overview Methods =====
@@ -299,7 +320,6 @@ class Dashboard {
             url: '/get_config_overview',
             type: 'GET',
             success: function(response) {
-                console.log('Config overview response:', response);
                 self.failureCount = 0;
                 self.configData = response;
                 self.jetbrainsMode = response.jetbrains_mode;
@@ -334,6 +354,17 @@ class Dashboard {
     startConfigPolling() {
         // Poll every 2 seconds for config updates
         this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 2000);
+    }
+
+    startExecutionsPolling() {
+        // Poll every 1 second for executions (independent of config polling)
+        // This ensures stuck executions can still be cancelled even if config polling is blocked
+        this.loadExecutions();
+        this.loadLastExecution();
+        this.executionsPollInterval = setInterval(() => {
+            this.loadExecutions();
+            this.loadLastExecution();
+        }, 1000);
     }
 
     displayConfig(config) {
@@ -602,6 +633,279 @@ class Dashboard {
         });
 
         this.$availableContextsDisplay.html(html);
+    }
+
+    // ===== Executions Methods =====
+
+    loadExecutions() {
+        let self = this;
+        $.ajax({
+            url: '/queued_task_executions',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    self.displayActiveExecutionsQueue(response.queued_executions || []);
+                } else {
+                    console.error('Error loading executions:', response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading executions:', error);
+                self.$activeExecutionQueueDisplay.html('<div class="error-message">Error loading executions</div>');
+            }
+        });
+    }
+
+    loadLastExecution() {
+        let self = this;
+        $.ajax({
+            url: '/last_execution',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    if (response.last_execution !== null && response.last_execution.logged) {
+                        self.displayLastExecution(response.last_execution);
+                    }
+                } else {
+                    console.error('Error loading last execution:', response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading last execution:', error);
+                self.$lastExecutionDisplay.html('<div class="error-message">Error loading last execution</div>');
+            }
+        });
+    }
+
+    displayActiveExecutionsQueue(executions) {
+        if (!executions || executions.length === 0) {
+            return;
+        }
+
+        let html = '<div class="execution-list">';
+        let self = this;
+
+        executions.forEach(function(execution) {
+            const isRunning = execution.is_running;
+            const logged = execution.logged;
+
+            if (!logged) {
+                return; // Skip unlogged executions
+            }
+
+            let itemClass = 'execution-item';
+            if (isRunning) {
+                itemClass += ' running';
+            }
+
+            // Escape JSON for HTML attribute - replace single quotes and use HTML entities
+            const executionJson = JSON.stringify(execution).replace(/'/g, '&#39;');
+
+            html += '<div class="' + itemClass + '" data-task-id="' + execution.task_id + '" data-execution=\'' + executionJson + '\'>';
+
+            if (isRunning) {
+                html += '<div class="execution-spinner"></div>';
+            }
+
+            html += '<div class="execution-name">' + self.escapeHtml(execution.name) + '</div>';
+
+            if (isRunning) {
+                html += '<div class="execution-meta">#' + execution.task_id + '</div>';
+            } else {
+                html += '<div class="execution-meta">queued · #' + execution.task_id + '</div>';
+            }
+
+            html += '<button class="execution-cancel-btn" data-task-id="' + execution.task_id + '" data-is-running="' + isRunning + '">✕</button>';
+            html += '</div>';
+        });
+
+        html += '</div>';
+        this.$activeExecutionQueueDisplay.html(html);
+
+        // Attach event handlers for cancel buttons
+        $('.execution-cancel-btn').click(function(e) {
+            e.preventDefault();
+            console.log('Cancel button clicked');
+            const $item = $(this).closest('.execution-item');
+            console.log('Found item:', $item.length);
+            const executionDataStr = $item.attr('data-execution');
+            console.log('Execution data string:', executionDataStr);
+            if (executionDataStr) {
+                // Unescape HTML entities
+                const unescapedStr = executionDataStr.replace(/&#39;/g, "'");
+                const executionData = JSON.parse(unescapedStr);
+                console.log('Parsed execution data:', executionData);
+                self.confirmCancelExecution(executionData);
+            } else {
+                console.error('No execution data found on element');
+            }
+        });
+
+        // Update cancelled executions display
+        this.displayCancelledExecutions(executions);
+    }
+
+    displayLastExecution(execution) {
+        if (!execution) {
+            this.$lastExecutionDisplay.html('<div class="no-stats-message">No executions yet.</div>');
+            return;
+        }
+
+        const isSuccess = execution.finished_successfully;
+        let html = '<div class="last-execution-container' + (isSuccess ? '' : ' error') + '">';
+
+        html += '<div class="last-execution-icon-container">';
+        html += isSuccess ? '✓' : '✕';
+        html += '</div>';
+
+        html += '<div class="last-execution-body">';
+        html += '<div class="last-execution-status">' + (isSuccess ? 'Succeeded' : 'Failed') + '</div>';
+        html += '<div class="last-execution-name">' + this.escapeHtml(execution.name) + '</div>';
+        html += '</div>';
+
+        html += '<div class="execution-meta">#' + execution.task_id + '</div>';
+        html += '</div>';
+
+        this.$lastExecutionDisplay.html(html);
+    }
+
+    displayCancelledExecutions() {
+        let self = this;
+        const cancelledExecs = self.cancelledExecutions
+
+        if (cancelledExecs.length === 0) {
+            // Hide the cancelled executions section
+            $('.executions-section').eq(2).hide();
+            return;
+        }
+
+        // Show the cancelled executions section
+        $('.executions-section').eq(2).show();
+
+        let html = '<div class="execution-list">';
+
+        cancelledExecs.forEach(function(execution) {
+            const isAbandoned = execution.is_running;
+
+            html += '<div class="execution-item ' + (isAbandoned ? 'abandoned' : 'cancelled') + '">';
+            html += '<div class="execution-icon ' + (isAbandoned ? 'abandoned' : 'cancelled') + '">';
+            html += isAbandoned ? '!' : '✕';
+            html += '</div>';
+            html += '<div class="execution-name">' + self.escapeHtml(execution.name) + '</div>';
+            html += '<div class="execution-meta">' + (isAbandoned ? 'abandoned · ' : '') + '#' + execution.task_id + '</div>';
+            html += '</div>';
+        });
+
+        html += '</div>';
+        this.$cancelledExecutionsDisplay.html(html);
+    }
+
+    confirmCancelExecution(executionData) {
+        console.log('confirmCancelExecution called with:', executionData);
+        this.executionToCancel = executionData;
+
+        if (executionData.is_running) {
+            // Show modal for running executions
+            console.log('Showing modal for running execution');
+            this.$cancelExecutionModal.fadeIn(200);
+        } else {
+            // Directly cancel queued executions
+            console.log('Directly cancelling queued execution');
+            this.cancelExecution(executionData);
+        }
+    }
+
+    confirmCancelExecutionOk() {
+        if (this.executionToCancel) {
+            this.cancelExecution(this.executionToCancel);
+        }
+        this.closeCancelExecutionModal();
+    }
+
+    cancelExecution(executionData) {
+        const self = this;
+
+        console.log('cancelExecution called with full execution data:', executionData);
+        console.log('Attempting to cancel task:', executionData.task_id);
+
+        // Call backend API to cancel the task
+        $.ajax({
+            url: '/cancel_task_execution',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                task_id: executionData.task_id
+            }),
+            success: function(response) {
+                console.log('Cancel task response:', response);
+
+                if (response.status === 'error') {
+                    console.error('Backend returned error status:', response.message);
+                    alert('Error cancelling task: ' + response.message);
+                    return;
+                }
+
+                if (response.status === 'success') {
+                    if (response.was_cancelled) {
+                        console.log('Task ' + executionData.task_id + ' was successfully cancelled');
+                        // Add to cancelled list (only managed in JS, not persisted)
+                        const alreadyCancelled = self.cancelledExecutions.some(function(exec) {
+                            return exec.task_id === executionData.task_id;
+                        });
+                        if (!alreadyCancelled) {
+                            console.log('Adding execution to cancelled list:', executionData);
+                            self.cancelledExecutions.push(executionData);
+                            console.log('Cancelled executions array now contains:', self.cancelledExecutions);
+                        } else {
+                            console.log('Execution already in cancelled list');
+                        }
+                    } else {
+                        console.log('Task ' + executionData.task_id + ' could not be cancelled (may have already completed). ' + response.message );
+                    }
+                    // Refresh display regardless
+                    self.loadExecutions();
+                } else {
+                    console.error('Unexpected response status:', response.status);
+                    alert('Unexpected response from server');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error cancelling task:');
+                console.error('  Status:', status);
+                console.error('  Error:', error);
+                console.error('  XHR:', xhr);
+                console.error('  Response:', xhr.responseText);
+
+                let errorMessage = error;
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMessage = xhr.responseJSON.message;
+                } else if (xhr.responseText) {
+                    errorMessage = xhr.responseText;
+                }
+
+                alert('Error cancelling task: ' + errorMessage);
+            }
+        });
+    }
+
+    closeCancelExecutionModal() {
+        this.$cancelExecutionModal.fadeOut(200);
+        this.executionToCancel = null;
+    }
+
+    escapeHtml(text) {
+        if (typeof text !== 'string') return text;
+
+        const patterns = {
+            '<': '&lt;',
+            '>': '&gt;',
+            '&': '&amp;',
+            '"': '&quot;',
+            "'": '&#x27;',
+            '`': '&#x60;'
+        };
+
+        return text.replace(/[<>&"'`]/g, match => patterns[match]);
     }
 
     // ===== Logs Methods =====
@@ -1207,7 +1511,7 @@ class Dashboard {
                     // Reload config to show updated language list
                     self.loadConfigOverview();
                 } else {
-                    alert('Error: ' + response.message);
+                    alert('Error removing language ' + language + ": " + response.message);
                 }
             },
             error: function(xhr, status, error) {
@@ -1290,7 +1594,7 @@ class Dashboard {
                 if (response.status === 'success') {
                     console.log("Language added successfully");
                 } else {
-                    alert('Error: ' + response.message);
+                    alert('Error adding language ' + selectedLanguage + ": " + response.message);
                     // Restore button visibility on error
                     $('#add-language-btn').show();
                     $('#add-language-spinner').hide();
