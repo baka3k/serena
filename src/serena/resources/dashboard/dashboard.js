@@ -60,7 +60,10 @@ class Dashboard {
         this.memoryContentDirty = false;
         this.memoryToDelete = null;
         this.isAddingLanguage = false;
-        this.waitingForPollingResult = false;
+        this.waitingForConfigPollingResult = false;
+        this.waitingForExecutionsPollingResult = false;
+        this.originalSerenaConfigContent = null;
+        this.serenaConfigContentDirty = false;
 
         // Execution tracking
         this.cancelledExecutions = [];
@@ -129,6 +132,11 @@ class Dashboard {
         this.$cancelExecutionOkBtn = $('#cancel-execution-ok-btn');
         this.$cancelExecutionCancelBtn = $('#cancel-execution-cancel-btn');
         this.$modalCloseCancelExecution = $('.modal-close-cancel-execution');
+        this.$editSerenaConfigModal = $('#edit-serena-config-modal');
+        this.$editSerenaConfigContent = $('#edit-serena-config-content');
+        this.$editSerenaConfigSaveBtn = $('#edit-serena-config-save-btn');
+        this.$editSerenaConfigCancelBtn = $('#edit-serena-config-cancel-btn');
+        this.$modalCloseEditSerenaConfig = $('.modal-close-edit-serena-config');
 
         // Chart references
         this.countChart = null;
@@ -171,6 +179,9 @@ class Dashboard {
         this.$cancelExecutionOkBtn.click(this.confirmCancelExecutionOk.bind(this));
         this.$cancelExecutionCancelBtn.click(this.closeCancelExecutionModal.bind(this));
         this.$modalCloseCancelExecution.click(this.closeCancelExecutionModal.bind(this));
+        this.$editSerenaConfigSaveBtn.click(this.saveSerenaConfigFromModal.bind(this));
+        this.$editSerenaConfigCancelBtn.click(this.closeEditSerenaConfigModal.bind(this));
+        this.$modalCloseEditSerenaConfig.click(this.closeEditSerenaConfigModal.bind(this));
 
         // Page navigation
         $('[data-page]').click(function(e) {
@@ -214,6 +225,12 @@ class Dashboard {
         this.$createMemoryModal.click(function(e) {
             if ($(e.target).hasClass('modal')) {
                 self.closeCreateMemoryModal();
+            }
+        });
+
+        this.$editSerenaConfigModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeEditSerenaConfigModal();
             }
         });
 
@@ -310,11 +327,12 @@ class Dashboard {
     // ===== Config Overview Methods =====
 
     loadConfigOverview() {
-        if (this.waitingForPollingResult) {
+        if (this.waitingForConfigPollingResult) {
             console.log('Still waiting for previous config poll result, skipping this poll');
             return;
         }
-        this.waitingForPollingResult = true;
+        this.waitingForConfigPollingResult = true;
+        console.log('Polling for config overview...');
         let self = this;
         $.ajax({
             url: '/get_config_overview',
@@ -346,23 +364,21 @@ class Dashboard {
                 self.$availableContextsDisplay.html('<div class="error-message">Error loading contexts</div>');
             },
             complete: function() {
-                self.waitingForPollingResult = false;
+                self.waitingForConfigPollingResult = false;
             }
         });
     }
 
     startConfigPolling() {
-        // Poll every 2 seconds for config updates
-        this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 2000);
+        this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 100000);
     }
 
     startExecutionsPolling() {
         // Poll every 1 second for executions (independent of config polling)
         // This ensures stuck executions can still be cancelled even if config polling is blocked
-        this.loadExecutions();
-        this.loadLastExecution();
+        this.loadExecutions()
         this.executionsPollInterval = setInterval(() => {
-            this.loadExecutions();
+            this.loadQueuedExecutions();
             this.loadLastExecution();
         }, 1000);
     }
@@ -475,21 +491,27 @@ class Dashboard {
                 });
             }
             // Add Create Memory button
-            html += '<button id="create-memory-btn" class="btn language-add-btn">+ Create Memory</button>';
+            html += '<button id="create-memory-btn" class="btn language-add-btn" style="padding: 8px 12px;">+ Add Memory</button>';
             html += '</div>';
             html += '</div>';
         }
 
-        // Configuration help link
-        html += '<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
+        // Configuration help link and edit config button
+        html += '<div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">';
+        html += '<div style="flex: 1; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
         html += '<span style="color: var(--text-muted);">📖</span> ';
         html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
+        html += '</div>';
+        html += '<button id="edit-serena-config-btn" class="btn language-add-btn" style="white-space: nowrap; padding: 10px; ">Edit Global Serena Config</button>';
         html += '</div>';
 
         this.$configDisplay.html(html);
 
         // Attach event handlers for the dynamically created add language button
         $('#add-language-btn').click(this.openLanguageModal.bind(this));
+
+        // Attach event handler for edit serena config button
+        $('#edit-serena-config-btn').click(this.openEditSerenaConfigModal.bind(this));
 
         // Attach event handlers for language remove buttons
         const self = this;
@@ -637,7 +659,7 @@ class Dashboard {
 
     // ===== Executions Methods =====
 
-    loadExecutions() {
+    loadQueuedExecutions() {
         let self = this;
         $.ajax({
             url: '/queued_task_executions',
@@ -675,6 +697,17 @@ class Dashboard {
                 self.$lastExecutionDisplay.html('<div class="error-message">Error loading last execution</div>');
             }
         });
+    }
+
+    loadExecutions() {
+        if (this.waitingForExecutionsPollingResult) {
+            console.log('Still waiting for previous executions poll result, skipping this poll');
+        } else {
+            this.waitingForExecutionsPollingResult = true;
+            console.log('Polling for executions...');
+            this.loadQueuedExecutions();
+            this.loadLastExecution();
+        }
     }
 
     displayActiveExecutionsQueue(executions) {
@@ -863,7 +896,7 @@ class Dashboard {
                         console.log('Task ' + executionData.task_id + ' could not be cancelled (may have already completed). ' + response.message );
                     }
                     // Refresh display regardless
-                    self.loadExecutions();
+                    self.loadQueuedExecutions();
                 } else {
                     console.error('Unexpected response status:', response.status);
                     alert('Unexpected response from server');
@@ -1832,6 +1865,89 @@ class Dashboard {
         });
     }
 
+    // ===== Serena Config Editing Methods =====
+
+    openEditSerenaConfigModal() {
+        const self = this;
+        this.serenaConfigContentDirty = false;
+
+        // Load serena config content
+        $.ajax({
+            url: '/get_serena_config',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'error') {
+                    alert('Error: ' + response.message);
+                    return;
+                }
+                self.originalSerenaConfigContent = response.content;
+                self.$editSerenaConfigContent.val(response.content);
+                self.serenaConfigContentDirty = false;
+                self.$editSerenaConfigModal.fadeIn(200);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading serena config:', error);
+                alert('Error loading serena config: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+
+        // Track changes to config content
+        this.$editSerenaConfigContent.off('input').on('input', function() {
+            const currentContent = self.$editSerenaConfigContent.val();
+            self.serenaConfigContentDirty = (currentContent !== self.originalSerenaConfigContent);
+        });
+    }
+
+    closeEditSerenaConfigModal() {
+        // Check if there are unsaved changes
+        if (this.serenaConfigContentDirty) {
+            if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+                return;
+            }
+        }
+
+        this.$editSerenaConfigModal.fadeOut(200);
+        this.originalSerenaConfigContent = null;
+        this.serenaConfigContentDirty = false;
+    }
+
+    saveSerenaConfigFromModal() {
+        const self = this;
+        const content = this.$editSerenaConfigContent.val();
+
+        // Disable button during request
+        self.$editSerenaConfigSaveBtn.prop('disabled', true).text('Saving...');
+
+        $.ajax({
+            url: '/save_serena_config',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                content: content
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Update original content and reset dirty flag
+                    self.originalSerenaConfigContent = content;
+                    self.serenaConfigContentDirty = false;
+                    // Close modal
+                    self.$editSerenaConfigModal.fadeOut(200);
+                    alert('Configuration saved successfully. Please restart Serena for changes to take effect.');
+                } else {
+                    alert('Error: ' + response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error saving serena config:', error);
+                alert('Error saving serena config: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            },
+            complete: function() {
+                // Re-enable button
+                self.$editSerenaConfigSaveBtn.prop('disabled', false).text('Save');
+            }
+        });
+    }
+
     // ===== Shutdown Method =====
 
     shutdown() {
@@ -1846,7 +1962,7 @@ class Dashboard {
             self.$errorContainer.html('<div class="error-message">Shutting down ...</div>')
             setTimeout(function() {
                 window.close();
-            }, 2000);
+            }, 1000);
         }
 
         // ask for confirmation using a dialog

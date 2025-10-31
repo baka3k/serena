@@ -86,6 +86,14 @@ class RequestDeleteMemory(BaseModel):
     memory_name: str
 
 
+class ResponseGetSerenaConfig(BaseModel):
+    content: str
+
+
+class RequestSaveSerenaConfig(BaseModel):
+    content: str
+
+
 class RequestCancelTaskExecution(BaseModel):
     task_id: int
 
@@ -245,6 +253,26 @@ class SerenaDashboardAPI:
             try:
                 self._delete_memory(request_delete_memory)
                 return {"status": "success", "message": f"Memory {request_delete_memory.memory_name} deleted successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/get_serena_config", methods=["GET"])
+        def get_serena_config() -> dict[str, Any]:
+            try:
+                result = self._get_serena_config()
+                return result.model_dump()
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/save_serena_config", methods=["POST"])
+        def save_serena_config() -> dict[str, str]:
+            request_data = request.get_json()
+            if not request_data:
+                return {"status": "error", "message": "No data provided"}
+            request_save_config = RequestSaveSerenaConfig.model_validate(request_data)
+            try:
+                self._save_serena_config(request_save_config)
+                return {"status": "success", "message": "Serena config saved successfully"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
@@ -472,6 +500,27 @@ class SerenaDashboardAPI:
             project.memories_manager.delete_memory(request_delete_memory.memory_name)
 
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
+
+    def _get_serena_config(self) -> ResponseGetSerenaConfig:
+        config_path = self._agent.serena_config.config_file_path
+        if config_path is None or not os.path.exists(config_path):
+            raise ValueError("Serena config file not found")
+
+        with open(config_path, encoding="utf-8") as f:
+            content = f.read()
+
+        return ResponseGetSerenaConfig(content=content)
+
+    def _save_serena_config(self, request_save_config: RequestSaveSerenaConfig) -> None:
+        def run() -> None:
+            config_path = self._agent.serena_config.config_file_path
+            if config_path is None:
+                raise ValueError("Serena config file path not set")
+
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write(request_save_config.content)
+
+        self._agent.execute_task(run, logged=True, name="SaveSerenaConfig")
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
         from solidlsp.ls_config import Language

@@ -919,6 +919,24 @@ body {
     color: var(--btn-primary);
 }
 
+.memory-add-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px dashed var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.memory-add-btn:hover {
+    background: var(--border-color);
+    border-color: var(--btn-primary);
+    color: var(--btn-primary);
+}
+
 .language-spinner {
     display: inline-flex;
     align-items: center;

@@ -293,6 +293,25 @@
             </div>
         </div>
     </div>
+
+    <!-- Edit Serena Config Modal -->
+    <div id="edit-serena-config-modal" class="modal" style="display:none">
+        <div class="modal-content modal-content-large">
+            <span class="modal-close modal-close-edit-serena-config">&times;</span>
+            <h3 style="margin-bottom: 10px;">Serena Configuration</h3>
+            <p style="margin: 10px 0 20px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                Note: Changes to the configuration will only take effect after Serena is restarted.
+            </p>
+            <textarea id="edit-serena-config-content" class="memory-editor" rows="20"
+                      style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="edit-serena-config-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="edit-serena-config-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
+            </div>
+        </div>
+    </div>
 </div>    <!-- End of Main -->
 
 <script>
