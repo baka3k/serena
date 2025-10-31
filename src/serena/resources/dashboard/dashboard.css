@@ -920,15 +920,20 @@ body {
 }
 
 .memory-add-btn {
-    padding: 6px 12px;
-    font-size: 13px;
-    font-weight: 500;
-    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 5px;
+    border-radius: 4px;
     border: 1px dashed var(--border-color);
     background: var(--bg-secondary);
     color: var(--text-primary);
     cursor: pointer;
     transition: all 0.2s;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
 }
 
 .memory-add-btn:hover {

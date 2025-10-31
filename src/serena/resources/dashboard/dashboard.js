@@ -370,7 +370,7 @@ class Dashboard {
     }
 
     startConfigPolling() {
-        this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 100000);
+        this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 1000);
     }
 
     startExecutionsPolling() {
@@ -491,7 +491,7 @@ class Dashboard {
                 });
             }
             // Add Create Memory button
-            html += '<button id="create-memory-btn" class="btn language-add-btn" style="padding: 8px 12px;">+ Add Memory</button>';
+            html += '<button id="create-memory-btn" class="memory-add-btn">+ Add Memory</button>';
             html += '</div>';
             html += '</div>';
         }
