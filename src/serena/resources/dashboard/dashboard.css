@@ -338,6 +338,190 @@ body {
     color: var(--text-secondary);
 }
 
+/* Executions Styles */
+.executions-section {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.executions-section h2 {
+    margin-top: 0;
+    color: var(--text-secondary);
+}
+
+.execution-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.execution-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 8px 12px;
+    min-height: 40px;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.execution-item.running {
+    border-color: var(--btn-primary);
+    background: linear-gradient(to right, rgba(234, 164, 93, 0.1), var(--bg-primary));
+}
+
+.execution-item.cancelled {
+    border-color: var(--text-muted);
+    background-color: var(--bg-primary);
+    opacity: 0.7;
+}
+
+.execution-item.abandoned {
+    border-color: var(--log-error);
+    background: linear-gradient(to right, rgba(255, 0, 0, 0.1), var(--bg-primary));
+}
+
+.execution-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--btn-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.execution-name {
+    flex: 1;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+}
+
+.execution-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.execution-cancel-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+}
+
+.execution-cancel-btn:hover {
+    background-color: rgba(255, 0, 0, 0.1);
+    color: var(--log-error);
+}
+
+.execution-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.execution-icon.success {
+    background-color: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.6);
+    color: #22c55e;
+}
+
+.execution-icon.cancelled {
+    background-color: var(--border-color);
+    border: 1px solid var(--text-muted);
+    color: var(--text-muted);
+}
+
+.execution-icon.abandoned {
+    background-color: rgba(255, 0, 0, 0.2);
+    border: 1px solid var(--log-error);
+    color: var(--log-error);
+}
+
+.execution-icon.error {
+    background-color: rgba(255, 0, 0, 0.2);
+    border: 1px solid var(--log-error);
+    color: var(--log-error);
+}
+
+.last-execution-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(to right, rgba(34, 197, 94, 0.08), transparent);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.last-execution-container.error {
+    background: linear-gradient(to right, rgba(255, 0, 0, 0.08), transparent);
+    border-color: rgba(255, 0, 0, 0.2);
+}
+
+.last-execution-icon-container {
+    width: 28px;
+    height: 28px;
+    background-color: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.6);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #22c55e;
+    flex-shrink: 0;
+}
+
+.last-execution-container.error .last-execution-icon-container {
+    background-color: rgba(255, 0, 0, 0.2);
+    border-color: var(--log-error);
+    color: var(--log-error);
+}
+
+.last-execution-body {
+    flex: 1;
+}
+
+.last-execution-status {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+}
+
+.last-execution-name {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
 .stat-bar-container {
     display: flex;
     align-items: center;
@@ -730,7 +914,7 @@ body {
 }
 
 .language-add-btn:hover {
-    background: var(--bg-tertiary);
+    background: var(--border-color);
     border-color: var(--btn-primary);
     color: var(--btn-primary);
 }
@@ -831,4 +1015,43 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+}
+
+/* Copy Logs Button */
+.copy-logs-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.copy-logs-btn:hover {
+    opacity: 1;
+    background-color: var(--border-color);
+}
+
+.copy-logs-btn svg {
+    flex-shrink: 0;
+}
+
+.copy-logs-text {
+    display: none;
+    white-space: nowrap;
+}
+
+.copy-logs-btn:hover .copy-logs-text {
+    display: inline;
 }

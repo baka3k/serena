@@ -60,6 +60,5 @@ initial_prompt: ""
 project_name: "serena"
 languages:
 - python
-- typescript
 included_optional_tools: []
 encoding: utf-8

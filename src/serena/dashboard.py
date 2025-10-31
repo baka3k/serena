@@ -2,7 +2,7 @@ import os
 import socket
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from flask import Flask, Response, request, send_from_directory
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from sensai.util import logging
 
 from serena.analytics import ToolUsageStats
 from serena.constants import SERENA_DASHBOARD_DIR
+from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
 
 if TYPE_CHECKING:
@@ -85,6 +86,28 @@ class RequestDeleteMemory(BaseModel):
     memory_name: str
 
 
+class RequestCancelTaskExecution(BaseModel):
+    task_id: int
+
+
+class QueuedExecution(BaseModel):
+    task_id: int
+    is_running: bool
+    name: str
+    finished_successfully: bool
+    logged: bool
+
+    @classmethod
+    def from_task_info(cls, task_info: TaskExecutor.TaskInfo) -> Self:
+        return cls(
+            task_id=task_info.task_id,
+            is_running=task_info.is_running,
+            name=task_info.name,
+            finished_successfully=task_info.finished_successfully(),
+            logged=task_info.logged,
+        )
+
+
 class SerenaDashboardAPI:
     log = logging.getLogger(__qualname__)
 
@@ -152,7 +175,7 @@ class SerenaDashboardAPI:
 
         @self._app.route("/get_config_overview", methods=["GET"])
         def get_config_overview() -> dict[str, Any]:
-            result = self._get_config_overview()
+            result = self._agent.execute_task(self._get_config_overview, logged=False)
             return result.model_dump()
 
         @self._app.route("/shutdown", methods=["PUT"])
@@ -222,6 +245,41 @@ class SerenaDashboardAPI:
             try:
                 self._delete_memory(request_delete_memory)
                 return {"status": "success", "message": f"Memory {request_delete_memory.memory_name} deleted successfully"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/queued_task_executions", methods=["GET"])
+        def get_queued_executions() -> dict[str, Any]:
+            try:
+                current_executions = self._agent.get_current_tasks()
+                response = [QueuedExecution.from_task_info(task_info).model_dump() for task_info in current_executions]
+                return {"queued_executions": response, "status": "success"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
+        @self._app.route("/cancel_task_execution", methods=["POST"])
+        def cancel_task_execution() -> dict[str, Any]:
+            request_data = request.get_json()
+            try:
+                request_cancel_task = RequestCancelTaskExecution.model_validate(request_data)
+                for task in self._agent.get_current_tasks():
+                    if task.task_id == request_cancel_task.task_id:
+                        task.cancel()
+                        return {"status": "success", "was_cancelled": True}
+                return {
+                    "status": "success",
+                    "was_cancelled": False,
+                    "message": f"Task with id {request_data.get('task_id')} not found, maybe execution was already finished",
+                }
+            except Exception as e:
+                return {"status": "error", "message": str(e), "was_cancelled": False}
+
+        @self._app.route("/last_execution", methods=["GET"])
+        def get_last_execution() -> dict[str, Any]:
+            try:
+                last_execution_info = self._agent.get_last_executed_task()
+                response = QueuedExecution.from_task_info(last_execution_info).model_dump() if last_execution_info is not None else None
+                return {"last_execution": response, "status": "success"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
@@ -369,63 +427,70 @@ class SerenaDashboardAPI:
     def _get_available_languages(self) -> ResponseAvailableLanguages:
         from solidlsp.ls_config import Language
 
-        # Get all non-experimental languages
-        all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
+        def run() -> ResponseAvailableLanguages:
+            all_languages = [lang.value for lang in Language.iter_all(include_experimental=False)]
 
-        # Filter out already added languages for the active project
-        project = self._agent.get_active_project()
-        if project:
-            current_languages = [lang.value for lang in project.project_config.languages]
-            available_languages = [lang for lang in all_languages if lang not in current_languages]
-        else:
-            available_languages = all_languages
+            # Filter out already added languages for the active project
+            project = self._agent.get_active_project()
+            if project:
+                current_languages = [lang.value for lang in project.project_config.languages]
+                available_languages = [lang for lang in all_languages if lang not in current_languages]
+            else:
+                available_languages = all_languages
 
-        return ResponseAvailableLanguages(languages=sorted(available_languages))
+            return ResponseAvailableLanguages(languages=sorted(available_languages))
+
+        return self._agent.execute_task(run, logged=False)
 
     def _get_memory(self, request_get_memory: RequestGetMemory) -> ResponseGetMemory:
-        project = self._agent.get_active_project()
-        if project is None:
-            raise ValueError("No active project")
+        def run() -> ResponseGetMemory:
+            project = self._agent.get_active_project()
+            if project is None:
+                raise ValueError("No active project")
 
-        content = project.memories_manager.load_memory(request_get_memory.memory_name)
-        return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
+            content = project.memories_manager.load_memory(request_get_memory.memory_name)
+            return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
+
+        return self._agent.execute_task(run, logged=False)
 
     def _save_memory(self, request_save_memory: RequestSaveMemory) -> None:
-        project = self._agent.get_active_project()
-        if project is None:
-            raise ValueError("No active project")
+        def run() -> None:
+            project = self._agent.get_active_project()
+            if project is None:
+                raise ValueError("No active project")
 
-        project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
+            project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content)
+
+        self._agent.execute_task(run, logged=True, name="SaveMemory")
 
     def _delete_memory(self, request_delete_memory: RequestDeleteMemory) -> None:
-        project = self._agent.get_active_project()
-        if project is None:
-            raise ValueError("No active project")
+        def run() -> None:
+            project = self._agent.get_active_project()
+            if project is None:
+                raise ValueError("No active project")
 
-        project.memories_manager.delete_memory(request_delete_memory.memory_name)
+            project.memories_manager.delete_memory(request_delete_memory.memory_name)
+
+        self._agent.execute_task(run, logged=True, name="DeleteMemory")
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
         from solidlsp.ls_config import Language
 
-        # Convert string to Language enum
         try:
             language = Language(request_add_language.language)
         except ValueError:
             raise ValueError(f"Invalid language: {request_add_language.language}")
-
-        # Add the language to the active project
+        # add_language is already thread-safe
         self._agent.add_language(language)
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
         from solidlsp.ls_config import Language
 
-        # Convert string to Language enum
         try:
             language = Language(request_remove_language.language)
         except ValueError:
             raise ValueError(f"Invalid language: {request_remove_language.language}")
-
-        # Remove the language from the active project
+        # remove_language is already thread-safe
         self._agent.remove_language(language)
 
     @staticmethod

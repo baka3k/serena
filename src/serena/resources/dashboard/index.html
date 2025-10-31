@@ -16,29 +16,29 @@
 </head>
 
 <body>
-    <header class="header">
-        <div class="logo-container">
-            <img id="serena-logo" src="serena-logs.png" alt="Serena">
+<header class="header">
+    <div class="logo-container">
+        <img id="serena-logo" src="serena-logs.png" alt="Serena">
+    </div>
+    <nav class="header-nav">
+        <button id="theme-toggle" class="theme-toggle">
+            <span id="theme-icon">🌙</span>
+            <span id="theme-text">Dark</span>
+        </button>
+        <button id="menu-toggle" class="menu-button">
+            <span>☰</span>
+            <span>Menu</span>
+        </button>
+        <div id="menu-dropdown" class="menu-dropdown" style="display:none">
+            <a href="#" data-page="overview" class="active">Overview</a>
+            <a href="#" data-page="logs">Logs</a>
+            <a href="#" data-page="stats">Advanced Stats</a>
+            <hr>
+            <a href="#" id="menu-shutdown">Shutdown Server</a>
         </div>
-        <nav class="header-nav">
-            <button id="theme-toggle" class="theme-toggle">
-                <span id="theme-icon">🌙</span>
-                <span id="theme-text">Dark</span>
-            </button>
-            <button id="menu-toggle" class="menu-button">
-                <span>☰</span>
-                <span>Menu</span>
-            </button>
-            <div id="menu-dropdown" class="menu-dropdown" style="display:none">
-                <a href="#" data-page="overview" class="active">Overview</a>
-                <a href="#" data-page="logs">Logs</a>
-                <a href="#" data-page="stats">Advanced Stats</a>
-                <hr>
-                <a href="#" id="menu-shutdown">Shutdown Server</a>
-            </div>
-        </nav>
-    </header>
-    <div class="main">
+    </nav>
+</header>
+<div class="main">
     <!-- Overview Page (Landing) -->
     <div id="page-overview" class="page-view">
         <div class="overview-container">
@@ -56,6 +56,27 @@
                     <h2>Tool Usage</h2>
                     <div id="basic-stats-display">
                         <div class="loading">Loading stats...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section">
+                    <h2>Executions Queue</h2>
+                    <div id="active-executions-display">
+                        <div class="loading">Loading executions...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section">
+                    <h2>Last Execution</h2>
+                    <div id="last-execution-display">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </section>
+
+                <section class="executions-section" style="display:none">
+                    <h2>Cancelled Executions</h2>
+                    <div id="cancelled-executions-display">
+                        <div class="no-stats-message">No cancelled executions.</div>
                     </div>
                 </section>
             </div>
@@ -106,11 +127,18 @@
 
     <!-- Logs Page -->
     <div id="page-logs" class="page-view" style="display:none">
-        <div class="controls">
-            <button id="load-logs" class="btn">Reload Log</button>
-        </div>
         <div id="error-container"></div>
-        <div id="log-container" class="log-container"></div>
+        <div style="position: relative;">
+            <button id="copy-logs-btn" class="copy-logs-btn" title="Copy logs">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="copy-logs-text">copy logs</span>
+            </button>
+            <div id="log-container" class="log-container"></div>
+        </div>
     </div>
 
     <!-- Advanced Stats Page -->
@@ -159,12 +187,16 @@
                 it may take a few seconds before the LS is responsive.
             </p>
             <div style="margin: 20px 0;">
-                <label for="modal-language-select" style="display: block; margin-bottom: 8px; font-weight: 500;">Select Language:</label>
-                <select id="modal-language-select" class="language-select" style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+                <label for="modal-language-select" style="display: block; margin-bottom: 8px; font-weight: 500;">Select
+                    Language:</label>
+                <select id="modal-language-select" class="language-select"
+                        style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
                 </select>
             </div>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="modal-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="modal-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
                 <button id="modal-add-btn" class="btn" style="padding: 8px 16px;">Add Language</button>
             </div>
         </div>
@@ -178,7 +210,9 @@
                 Remove language <strong id="remove-language-name"></strong> from configuration?
             </p>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="remove-modal-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="remove-modal-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
                 <button id="remove-modal-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
             </div>
         </div>
@@ -189,9 +223,12 @@
         <div class="modal-content modal-content-large">
             <span class="modal-close modal-close-edit-memory">&times;</span>
             <h3 style="margin-bottom: 20px;">Memory: <span id="edit-memory-name"></span></h3>
-            <textarea id="edit-memory-content" class="memory-editor" rows="20" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
+            <textarea id="edit-memory-content" class="memory-editor" rows="20"
+                      style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="edit-memory-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="edit-memory-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
                 <button id="edit-memory-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
             </div>
         </div>
@@ -205,17 +242,64 @@
                 Delete memory <strong id="delete-memory-name"></strong>?
             </p>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="delete-memory-cancel-btn" class="btn" style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel</button>
+                <button id="delete-memory-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
                 <button id="delete-memory-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
             </div>
         </div>
-    </div> <!-- End of Main -->
+    </div>
 
-    <script>
-        $(document).ready(function () {
-            const dashboard = new Dashboard();
-        });
-    </script>
+    <!-- Create Memory Modal -->
+    <div id="create-memory-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-create-memory">&times;</span>
+            <p id="create-memory-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
+                Create a new memory for project <strong id="create-memory-project-name"></strong>.
+            </p>
+            <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+                Memory names should be descriptive and use underscores instead of spaces (e.g., "api_architecture",
+                "testing_guidelines").
+            </p>
+            <div style="margin: 20px 0;">
+                <label for="create-memory-name-input" style="display: block; margin-bottom: 8px; font-weight: 500;">Memory
+                    Name:</label>
+                <input type="text" id="create-memory-name-input" class="memory-name-input"
+                       placeholder="e.g., project_overview"
+                       style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="create-memory-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="create-memory-create-btn" class="btn" style="padding: 8px 16px;">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel Execution Confirmation Modal -->
+    <div id="cancel-execution-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <span class="modal-close modal-close-cancel-execution">&times;</span>
+            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+                Are you sure? The execution will continue running until timeout, it will simply no longer be in the queue.
+                Abandoning a running execution is only advised as a measure for unblocking Serena.
+            </p>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button id="cancel-execution-cancel-btn" class="btn"
+                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
+                </button>
+                <button id="cancel-execution-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            </div>
+        </div>
+    </div>
+</div>    <!-- End of Main -->
+
+<script>
+    $(document).ready(function () {
+        const dashboard = new Dashboard();
+    });
+</script>
 </body>
 
 </html>

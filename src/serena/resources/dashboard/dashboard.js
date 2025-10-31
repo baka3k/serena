@@ -60,18 +60,24 @@ class Dashboard {
         this.memoryContentDirty = false;
         this.memoryToDelete = null;
         this.isAddingLanguage = false;
+        this.waitingForPollingResult = false;
+
+        // Execution tracking
+        this.cancelledExecutions = [];
+        this.executionToCancel = null;
 
         // Tool names and stats
         this.toolNames = [];
         this.currentMaxIdx = -1;
         this.pollInterval = null;
         this.configPollInterval = null;
+        this.executionsPollInterval = null;
         this.failureCount = 0;
 
         // jQuery elements
         this.$logContainer = $('#log-container');
         this.$errorContainer = $('#error-container');
-        this.$loadButton = $('#load-logs');
+        this.$copyLogsBtn = $('#copy-logs-btn');
         this.$menuToggle = $('#menu-toggle');
         this.$menuDropdown = $('#menu-dropdown');
         this.$menuShutdown = $('#menu-shutdown');
@@ -110,6 +116,19 @@ class Dashboard {
         this.$deleteMemoryOkBtn = $('#delete-memory-ok-btn');
         this.$deleteMemoryCancelBtn = $('#delete-memory-cancel-btn');
         this.$modalCloseDeleteMemory = $('.modal-close-delete-memory');
+        this.$createMemoryModal = $('#create-memory-modal');
+        this.$createMemoryProjectName = $('#create-memory-project-name');
+        this.$createMemoryNameInput = $('#create-memory-name-input');
+        this.$createMemoryCreateBtn = $('#create-memory-create-btn');
+        this.$createMemoryCancelBtn = $('#create-memory-cancel-btn');
+        this.$modalCloseCreateMemory = $('.modal-close-create-memory');
+        this.$activeExecutionQueueDisplay = $('#active-executions-display');
+        this.$lastExecutionDisplay = $('#last-execution-display');
+        this.$cancelledExecutionsDisplay = $('#cancelled-executions-display');
+        this.$cancelExecutionModal = $('#cancel-execution-modal');
+        this.$cancelExecutionOkBtn = $('#cancel-execution-ok-btn');
+        this.$cancelExecutionCancelBtn = $('#cancel-execution-cancel-btn');
+        this.$modalCloseCancelExecution = $('.modal-close-cancel-execution');
 
         // Chart references
         this.countChart = null;
@@ -118,7 +137,7 @@ class Dashboard {
         this.outputChart = null;
 
         // Register event handlers
-        this.$loadButton.click(this.loadLogs.bind(this));
+        this.$copyLogsBtn.click(this.copyLogs.bind(this));
         this.$menuShutdown.click(function(e) {
             e.preventDefault();
             self.shutdown();
@@ -140,6 +159,18 @@ class Dashboard {
         this.$deleteMemoryOkBtn.click(this.confirmDeleteMemoryOk.bind(this));
         this.$deleteMemoryCancelBtn.click(this.closeDeleteMemoryModal.bind(this));
         this.$modalCloseDeleteMemory.click(this.closeDeleteMemoryModal.bind(this));
+        this.$createMemoryCreateBtn.click(this.createMemoryFromModal.bind(this));
+        this.$createMemoryCancelBtn.click(this.closeCreateMemoryModal.bind(this));
+        this.$modalCloseCreateMemory.click(this.closeCreateMemoryModal.bind(this));
+        this.$createMemoryNameInput.keypress(function(e) {
+            if (e.which === 13) { // Enter key
+                e.preventDefault();
+                self.createMemoryFromModal();
+            }
+        });
+        this.$cancelExecutionOkBtn.click(this.confirmCancelExecutionOk.bind(this));
+        this.$cancelExecutionCancelBtn.click(this.closeCancelExecutionModal.bind(this));
+        this.$modalCloseCancelExecution.click(this.closeCancelExecutionModal.bind(this));
 
         // Page navigation
         $('[data-page]').click(function(e) {
@@ -180,6 +211,12 @@ class Dashboard {
             }
         });
 
+        this.$createMemoryModal.click(function(e) {
+            if ($(e.target).hasClass('modal')) {
+                self.closeCreateMemoryModal();
+            }
+        });
+
         // Collapsible sections
         $('.collapsible-header').click(function() {
             const $header = $(this);
@@ -204,6 +241,8 @@ class Dashboard {
                     self.closeEditMemoryModal();
                 } else if (self.$deleteMemoryModal.is(':visible')) {
                     self.closeDeleteMemoryModal();
+                } else if (self.$createMemoryModal.is(':visible')) {
+                    self.closeCreateMemoryModal();
                 }
             }
         });
@@ -213,6 +252,7 @@ class Dashboard {
             // Start on overview page
             self.loadConfigOverview();
             self.startConfigPolling();
+            self.startExecutionsPolling();
         });
     }
 
@@ -244,6 +284,7 @@ class Dashboard {
         if (page === 'overview') {
             this.loadConfigOverview();
             this.startConfigPolling();
+            this.startExecutionsPolling();
         } else if (page === 'logs') {
             this.loadLogs();
         } else if (page === 'stats') {
@@ -260,17 +301,25 @@ class Dashboard {
             clearInterval(this.configPollInterval);
             this.configPollInterval = null;
         }
+        if (this.executionsPollInterval) {
+            clearInterval(this.executionsPollInterval);
+            this.executionsPollInterval = null;
+        }
     }
 
     // ===== Config Overview Methods =====
 
     loadConfigOverview() {
+        if (this.waitingForPollingResult) {
+            console.log('Still waiting for previous config poll result, skipping this poll');
+            return;
+        }
+        this.waitingForPollingResult = true;
         let self = this;
         $.ajax({
             url: '/get_config_overview',
             type: 'GET',
             success: function(response) {
-                console.log('Config overview response:', response);
                 self.failureCount = 0;
                 self.configData = response;
                 self.jetbrainsMode = response.jetbrains_mode;
@@ -295,6 +344,9 @@ class Dashboard {
                 self.$availableToolsDisplay.html('<div class="error-message">Error loading tools</div>');
                 self.$availableModesDisplay.html('<div class="error-message">Error loading modes</div>');
                 self.$availableContextsDisplay.html('<div class="error-message">Error loading contexts</div>');
+            },
+            complete: function() {
+                self.waitingForPollingResult = false;
             }
         });
     }
@@ -302,6 +354,17 @@ class Dashboard {
     startConfigPolling() {
         // Poll every 2 seconds for config updates
         this.configPollInterval = setInterval(this.loadConfigOverview.bind(this), 2000);
+    }
+
+    startExecutionsPolling() {
+        // Poll every 1 second for executions (independent of config polling)
+        // This ensures stuck executions can still be cancelled even if config polling is blocked
+        this.loadExecutions();
+        this.loadLastExecution();
+        this.executionsPollInterval = setInterval(() => {
+            this.loadExecutions();
+            this.loadLastExecution();
+        }, 1000);
     }
 
     displayConfig(config) {
@@ -394,20 +457,25 @@ class Dashboard {
         html += '</div>';
         html += '</div>';
 
-        // Available memories - collapsible (only show if memories exist)
-        if (config.available_memories && config.available_memories.length > 0) {
+        // Available memories - collapsible (show if memories exist or if project exists)
+        if (config.active_project && config.active_project.name) {
             html += '<div style="margin-top: 20px;">';
             html += '<h3 class="collapsible-header" id="memories-header" style="font-size: 16px; margin: 0;">';
-            html += '<span>Available Memories (' + config.available_memories.length + ')</span>';
+            const memoryCount = (config.available_memories && config.available_memories.length) || 0;
+            html += '<span>Available Memories (' + memoryCount + ')</span>';
             html += '<span class="toggle-icon' + (wasMemoriesExpanded ? ' expanded' : '') + '">▼</span>';
             html += '</h3>';
             html += '<div class="collapsible-content memories-container" id="memories-content" style="' + (wasMemoriesExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
-            config.available_memories.forEach(function(memory) {
-                html += '<div class="memory-item removable" data-memory="' + memory + '">';
-                html += memory;
-                html += '<span class="memory-remove" data-memory="' + memory + '">&times;</span>';
-                html += '</div>';
-            });
+            if (config.available_memories && config.available_memories.length > 0) {
+                config.available_memories.forEach(function(memory) {
+                    html += '<div class="memory-item removable" data-memory="' + memory + '">';
+                    html += memory;
+                    html += '<span class="memory-remove" data-memory="' + memory + '">&times;</span>';
+                    html += '</div>';
+                });
+            }
+            // Add Create Memory button
+            html += '<button id="create-memory-btn" class="btn language-add-btn">+ Create Memory</button>';
             html += '</div>';
             html += '</div>';
         }
@@ -446,6 +514,9 @@ class Dashboard {
             const memoryName = $(this).data('memory');
             self.confirmDeleteMemory(memoryName);
         });
+
+        // Attach event handler for create memory button
+        $('#create-memory-btn').click(this.openCreateMemoryModal.bind(this));
 
         // Re-attach collapsible handler for the newly created tools header
         $('#tools-header').click(function() {
@@ -564,6 +635,279 @@ class Dashboard {
         this.$availableContextsDisplay.html(html);
     }
 
+    // ===== Executions Methods =====
+
+    loadExecutions() {
+        let self = this;
+        $.ajax({
+            url: '/queued_task_executions',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    self.displayActiveExecutionsQueue(response.queued_executions || []);
+                } else {
+                    console.error('Error loading executions:', response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading executions:', error);
+                self.$activeExecutionQueueDisplay.html('<div class="error-message">Error loading executions</div>');
+            }
+        });
+    }
+
+    loadLastExecution() {
+        let self = this;
+        $.ajax({
+            url: '/last_execution',
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    if (response.last_execution !== null && response.last_execution.logged) {
+                        self.displayLastExecution(response.last_execution);
+                    }
+                } else {
+                    console.error('Error loading last execution:', response.message);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading last execution:', error);
+                self.$lastExecutionDisplay.html('<div class="error-message">Error loading last execution</div>');
+            }
+        });
+    }
+
+    displayActiveExecutionsQueue(executions) {
+        if (!executions || executions.length === 0) {
+            return;
+        }
+
+        let html = '<div class="execution-list">';
+        let self = this;
+
+        executions.forEach(function(execution) {
+            const isRunning = execution.is_running;
+            const logged = execution.logged;
+
+            if (!logged) {
+                return; // Skip unlogged executions
+            }
+
+            let itemClass = 'execution-item';
+            if (isRunning) {
+                itemClass += ' running';
+            }
+
+            // Escape JSON for HTML attribute - replace single quotes and use HTML entities
+            const executionJson = JSON.stringify(execution).replace(/'/g, '&#39;');
+
+            html += '<div class="' + itemClass + '" data-task-id="' + execution.task_id + '" data-execution=\'' + executionJson + '\'>';
+
+            if (isRunning) {
+                html += '<div class="execution-spinner"></div>';
+            }
+
+            html += '<div class="execution-name">' + self.escapeHtml(execution.name) + '</div>';
+
+            if (isRunning) {
+                html += '<div class="execution-meta">#' + execution.task_id + '</div>';
+            } else {
+                html += '<div class="execution-meta">queued · #' + execution.task_id + '</div>';
+            }
+
+            html += '<button class="execution-cancel-btn" data-task-id="' + execution.task_id + '" data-is-running="' + isRunning + '">✕</button>';
+            html += '</div>';
+        });
+
+        html += '</div>';
+        this.$activeExecutionQueueDisplay.html(html);
+
+        // Attach event handlers for cancel buttons
+        $('.execution-cancel-btn').click(function(e) {
+            e.preventDefault();
+            console.log('Cancel button clicked');
+            const $item = $(this).closest('.execution-item');
+            console.log('Found item:', $item.length);
+            const executionDataStr = $item.attr('data-execution');
+            console.log('Execution data string:', executionDataStr);
+            if (executionDataStr) {
+                // Unescape HTML entities
+                const unescapedStr = executionDataStr.replace(/&#39;/g, "'");
+                const executionData = JSON.parse(unescapedStr);
+                console.log('Parsed execution data:', executionData);
+                self.confirmCancelExecution(executionData);
+            } else {
+                console.error('No execution data found on element');
+            }
+        });
+
+        // Update cancelled executions display
+        this.displayCancelledExecutions(executions);
+    }
+
+    displayLastExecution(execution) {
+        if (!execution) {
+            this.$lastExecutionDisplay.html('<div class="no-stats-message">No executions yet.</div>');
+            return;
+        }
+
+        const isSuccess = execution.finished_successfully;
+        let html = '<div class="last-execution-container' + (isSuccess ? '' : ' error') + '">';
+
+        html += '<div class="last-execution-icon-container">';
+        html += isSuccess ? '✓' : '✕';
+        html += '</div>';
+
+        html += '<div class="last-execution-body">';
+        html += '<div class="last-execution-status">' + (isSuccess ? 'Succeeded' : 'Failed') + '</div>';
+        html += '<div class="last-execution-name">' + this.escapeHtml(execution.name) + '</div>';
+        html += '</div>';
+
+        html += '<div class="execution-meta">#' + execution.task_id + '</div>';
+        html += '</div>';
+
+        this.$lastExecutionDisplay.html(html);
+    }
+
+    displayCancelledExecutions() {
+        let self = this;
+        const cancelledExecs = self.cancelledExecutions
+
+        if (cancelledExecs.length === 0) {
+            // Hide the cancelled executions section
+            $('.executions-section').eq(2).hide();
+            return;
+        }
+
+        // Show the cancelled executions section
+        $('.executions-section').eq(2).show();
+
+        let html = '<div class="execution-list">';
+
+        cancelledExecs.forEach(function(execution) {
+            const isAbandoned = execution.is_running;
+
+            html += '<div class="execution-item ' + (isAbandoned ? 'abandoned' : 'cancelled') + '">';
+            html += '<div class="execution-icon ' + (isAbandoned ? 'abandoned' : 'cancelled') + '">';
+            html += isAbandoned ? '!' : '✕';
+            html += '</div>';
+            html += '<div class="execution-name">' + self.escapeHtml(execution.name) + '</div>';
+            html += '<div class="execution-meta">' + (isAbandoned ? 'abandoned · ' : '') + '#' + execution.task_id + '</div>';
+            html += '</div>';
+        });
+
+        html += '</div>';
+        this.$cancelledExecutionsDisplay.html(html);
+    }
+
+    confirmCancelExecution(executionData) {
+        console.log('confirmCancelExecution called with:', executionData);
+        this.executionToCancel = executionData;
+
+        if (executionData.is_running) {
+            // Show modal for running executions
+            console.log('Showing modal for running execution');
+            this.$cancelExecutionModal.fadeIn(200);
+        } else {
+            // Directly cancel queued executions
+            console.log('Directly cancelling queued execution');
+            this.cancelExecution(executionData);
+        }
+    }
+
+    confirmCancelExecutionOk() {
+        if (this.executionToCancel) {
+            this.cancelExecution(this.executionToCancel);
+        }
+        this.closeCancelExecutionModal();
+    }
+
+    cancelExecution(executionData) {
+        const self = this;
+
+        console.log('cancelExecution called with full execution data:', executionData);
+        console.log('Attempting to cancel task:', executionData.task_id);
+
+        // Call backend API to cancel the task
+        $.ajax({
+            url: '/cancel_task_execution',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                task_id: executionData.task_id
+            }),
+            success: function(response) {
+                console.log('Cancel task response:', response);
+
+                if (response.status === 'error') {
+                    console.error('Backend returned error status:', response.message);
+                    alert('Error cancelling task: ' + response.message);
+                    return;
+                }
+
+                if (response.status === 'success') {
+                    if (response.was_cancelled) {
+                        console.log('Task ' + executionData.task_id + ' was successfully cancelled');
+                        // Add to cancelled list (only managed in JS, not persisted)
+                        const alreadyCancelled = self.cancelledExecutions.some(function(exec) {
+                            return exec.task_id === executionData.task_id;
+                        });
+                        if (!alreadyCancelled) {
+                            console.log('Adding execution to cancelled list:', executionData);
+                            self.cancelledExecutions.push(executionData);
+                            console.log('Cancelled executions array now contains:', self.cancelledExecutions);
+                        } else {
+                            console.log('Execution already in cancelled list');
+                        }
+                    } else {
+                        console.log('Task ' + executionData.task_id + ' could not be cancelled (may have already completed). ' + response.message );
+                    }
+                    // Refresh display regardless
+                    self.loadExecutions();
+                } else {
+                    console.error('Unexpected response status:', response.status);
+                    alert('Unexpected response from server');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('AJAX error cancelling task:');
+                console.error('  Status:', status);
+                console.error('  Error:', error);
+                console.error('  XHR:', xhr);
+                console.error('  Response:', xhr.responseText);
+
+                let errorMessage = error;
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMessage = xhr.responseJSON.message;
+                } else if (xhr.responseText) {
+                    errorMessage = xhr.responseText;
+                }
+
+                alert('Error cancelling task: ' + errorMessage);
+            }
+        });
+    }
+
+    closeCancelExecutionModal() {
+        this.$cancelExecutionModal.fadeOut(200);
+        this.executionToCancel = null;
+    }
+
+    escapeHtml(text) {
+        if (typeof text !== 'string') return text;
+
+        const patterns = {
+            '<': '&lt;',
+            '>': '&gt;',
+            '&': '&amp;',
+            '"': '&quot;',
+            "'": '&#x27;',
+            '`': '&#x60;'
+        };
+
+        return text.replace(/[<>&"'`]/g, match => patterns[match]);
+    }
+
     // ===== Logs Methods =====
 
     displayLogMessage(message) {
@@ -589,12 +933,34 @@ class Dashboard {
         document.title = activeProject ? `${activeProject} – Serena Dashboard` : 'Serena Dashboard';
     }
 
+    copyLogs() {
+        const logText = this.$logContainer.text();
+
+        if (!logText) {
+            alert('No logs to copy');
+            return;
+        }
+
+        // Use the Clipboard API to copy text
+        navigator.clipboard.writeText(logText).then(() => {
+            // Visual feedback - temporarily change icon to grey checkmark
+            const originalHtml = this.$copyLogsBtn.html();
+            const checkmarkSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="copy-logs-text">copy logs</span>';
+            this.$copyLogsBtn.html(checkmarkSvg);
+
+            setTimeout(() => {
+                this.$copyLogsBtn.html(originalHtml);
+            }, 1500);
+        }).catch(err => {
+            console.error('Failed to copy logs:', err);
+            alert('Failed to copy logs to clipboard');
+        });
+    }
+
     loadLogs() {
         console.log("Loading logs");
         let self = this;
 
-        // Disable button and show loading state
-        self.$loadButton.prop('disabled', true).text('Loading...');
         self.$errorContainer.empty();
 
         // Make API call
@@ -634,10 +1000,6 @@ class Dashboard {
                 console.error('Error loading logs:', error);
                 self.$errorContainer.html('<div class="error-message">Error loading logs: ' +
                     (xhr.responseJSON ? xhr.responseJSON.detail : error) + '</div>');
-            },
-            complete: function() {
-                // Re-enable button
-                self.$loadButton.prop('disabled', false).text('Reload Log');
             }
         });
     }
@@ -1149,7 +1511,7 @@ class Dashboard {
                     // Reload config to show updated language list
                     self.loadConfigOverview();
                 } else {
-                    alert('Error: ' + response.message);
+                    alert('Error removing language ' + language + ": " + response.message);
                 }
             },
             error: function(xhr, status, error) {
@@ -1232,7 +1594,7 @@ class Dashboard {
                 if (response.status === 'success') {
                     console.log("Language added successfully");
                 } else {
-                    alert('Error: ' + response.message);
+                    alert('Error adding language ' + selectedLanguage + ": " + response.message);
                     // Restore button visibility on error
                     $('#add-language-btn').show();
                     $('#add-language-spinner').hide();
@@ -1394,6 +1756,78 @@ class Dashboard {
             error: function(xhr, status, error) {
                 console.error('Error deleting memory:', error);
                 alert('Error deleting memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+            }
+        });
+    }
+
+    openCreateMemoryModal() {
+        // Set project name in modal
+        this.$createMemoryProjectName.text(this.activeProjectName || 'Unknown');
+
+        // Clear the input field
+        this.$createMemoryNameInput.val('');
+
+        // Show modal
+        this.$createMemoryModal.fadeIn(200);
+
+        // Focus on the input field
+        setTimeout(() => {
+            this.$createMemoryNameInput.focus();
+        }, 250);
+    }
+
+    closeCreateMemoryModal() {
+        this.$createMemoryModal.fadeOut(200);
+        this.$createMemoryNameInput.val('');
+        this.$createMemoryCreateBtn.prop('disabled', false).text('Create');
+    }
+
+    createMemoryFromModal() {
+        const memoryName = this.$createMemoryNameInput.val().trim();
+
+        if (!memoryName) {
+            alert('Please enter a memory name');
+            return;
+        }
+
+        // Validate memory name (alphanumeric and underscores only)
+        if (!/^[a-zA-Z0-9_]+$/.test(memoryName)) {
+            alert('Memory name can only contain letters, numbers, and underscores');
+            return;
+        }
+
+        const self = this;
+
+        // Disable button during request
+        self.$createMemoryCreateBtn.prop('disabled', true).text('Creating...');
+
+        $.ajax({
+            url: '/save_memory',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                memory_name: memoryName,
+                content: ''
+            }),
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Close the create modal
+                    self.closeCreateMemoryModal();
+                    // Reload config to show the new memory
+                    self.loadConfigOverview();
+                    // Open the edit modal for the newly created memory
+                    setTimeout(() => {
+                        self.openEditMemoryModal(memoryName);
+                    }, 500);
+                } else {
+                    alert('Error: ' + response.message);
+                    self.$createMemoryCreateBtn.prop('disabled', false).text('Create');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error creating memory:', error);
+                alert('Error creating memory: ' + (xhr.responseJSON ? xhr.responseJSON.message : error));
+                self.$createMemoryCreateBtn.prop('disabled', false).text('Create');
             }
         });
     }

@@ -286,8 +286,14 @@ class Tool(Component):
 
             return result
 
-        future = self.agent.issue_task(task, name=self.__class__.__name__)
-        return future.result(timeout=self.agent.serena_config.tool_timeout)
+        # execute the tool in the agent's task executor, with timeout
+        try:
+            task_exec = self.agent.issue_task(task, name=self.__class__.__name__)
+            return task_exec.result(timeout=self.agent.serena_config.tool_timeout)
+        except Exception as e:  # typically TimeoutError (other exceptions caught in task)
+            msg = f"Error: {e.__class__.__name__} - {e}"
+            log.error(msg)
+            return msg
 
 
 class EditedFileContext:
