@@ -262,8 +262,15 @@ class SerenaDashboardAPI:
             request_data = request.get_json()
             try:
                 request_cancel_task = RequestCancelTaskExecution.model_validate(request_data)
-                task_was_cancelled = self._agent.cancel_task(request_cancel_task.task_id)
-                return {"status": "success", "was_cancelled": task_was_cancelled}
+                for task in self._agent.get_current_tasks():
+                    if task.task_id == request_cancel_task.task_id:
+                        task.cancel()
+                        return {"status": "success", "was_cancelled": True}
+                return {
+                    "status": "success",
+                    "was_cancelled": False,
+                    "message": f"Task with id {request_data.get('task_id')} not found, maybe execution was already finished",
+                }
             except Exception as e:
                 return {"status": "error", "message": str(e), "was_cancelled": False}
 
