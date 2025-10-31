@@ -1,6 +1,20 @@
 # latest
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+
+* General:
+    * Major extensions to the dashboard, which now serves as a central web interface for Serena
+        * View current configuration
+        * View the executions, with the possibility to cancel running/scheduled executions
+        * View tool usage statistics
+        * View and create memories and edit the serena configuration file
+    * Various fixes related to indexing, special paths and determation of ignored paths
+    * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
+    * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
+
+* Client support:
+    * New mode `oaicompat-agent` and extensions in the openai tool compatibility, **permitting Serena to work with llama.cpp**
+
 * Tools:
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
 
@@ -23,13 +37,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
   * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
 
-* Client support:
-  * New mode `oaicompat-agent` and extensions in the openai tool compatibility, **permitting Serena to work with llama.cpp**
-
-* General:
-  * Various fixes related to indexing, special paths and determation of ignored paths
-  * Decreased `TOOL_DEFAULT_MAX_ANSWER_LENGTH` to be in accordance with (below) typical max-tokens configurations
-  * Allow passing language server specific settings through `ls_specific_settings` field (in `serena_config.yml`)
 
 # 0.1.4
 
