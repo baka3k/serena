@@ -8,7 +8,7 @@ class WriteMemoryTool(Tool):
     Writes a named memory (for future reference) to Serena's project-specific memory store.
     """
 
-    def apply(self, memory_name: str, content: str, max_answer_chars: int = -1) -> str:
+    def apply(self, memory_file_name: str, content: str, max_answer_chars: int = -1) -> str:
         """
         Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
         The memory name should be meaningful.
@@ -18,10 +18,11 @@ class WriteMemoryTool(Tool):
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if len(content) > max_answer_chars:
             raise ValueError(
-                f"Content for {memory_name} is too long. Max length is {max_answer_chars} characters. " + "Please make the content shorter."
+                f"Content for {memory_file_name} is too long. Max length is {max_answer_chars} characters. "
+                + "Please make the content shorter."
             )
 
-        return self.memories_manager.save_memory(memory_name, content)
+        return self.memories_manager.save_memory(memory_file_name, content)
 
 
 class ReadMemoryTool(Tool):
