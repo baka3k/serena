@@ -38,6 +38,59 @@
         </div>
     </nav>
 </header>
+
+<!-- Sponsor Banners -->
+<div class="sponsors-container">
+    <!-- Platinum Sponsors -->
+    <div class="platinum-sponsors-section">
+        <button class="sponsor-nav-btn sponsor-nav-left" id="platinum-prev" aria-label="Previous platinum sponsor">
+            ‹
+        </button>
+        <div class="platinum-banner" id="platinum-banner">
+            <div class="platinum-sponsor-slide active" data-sponsor="1">
+                <div class="sponsor-content">PLATINUM SPONSOR 1</div>
+            </div>
+            <div class="platinum-sponsor-slide" data-sponsor="2">
+                <div class="sponsor-content">PLATINUM SPONSOR 2</div>
+            </div>
+        </div>
+        <button class="sponsor-nav-btn sponsor-nav-right" id="platinum-next" aria-label="Next platinum sponsor">
+            ›
+        </button>
+    </div>
+
+    <!-- Gold Sponsors -->
+    <div class="gold-sponsors-section">
+        <button class="sponsor-nav-btn sponsor-nav-left gold-nav" id="gold-prev" aria-label="Previous gold sponsors">
+            ‹
+        </button>
+        <div class="gold-banner" id="gold-banner">
+            <div class="gold-sponsor-group active" data-group="1">
+                <div class="gold-sponsor-item">
+                    <div class="sponsor-content gold">GOLD SPONSOR 1</div>
+                </div>
+                <div class="gold-sponsor-item">
+                    <div class="sponsor-content gold">GOLD SPONSOR 2</div>
+                </div>
+            </div>
+            <div class="gold-sponsor-group" data-group="2">
+                <div class="gold-sponsor-item">
+                    <div class="sponsor-content gold">GOLD SPONSOR 3</div>
+                </div>
+                <div class="gold-sponsor-item">
+                    <div class="sponsor-content gold">GOLD SPONSOR 4</div>
+                </div>
+                <div class="gold-sponsor-item">
+                    <div class="sponsor-content gold">GOLD SPONSOR 5</div>
+                </div>
+            </div>
+        </div>
+        <button class="sponsor-nav-btn sponsor-nav-right gold-nav" id="gold-next" aria-label="Next gold sponsors">
+            ›
+        </button>
+    </div>
+</div>
+
 <div class="main">
     <!-- Overview Page (Landing) -->
     <div id="page-overview" class="page-view">
@@ -315,8 +368,99 @@
 </div>    <!-- End of Main -->
 
 <script>
+    // Sponsor Banner Rotation Manager
+    class SponsorRotation {
+        constructor() {
+            this.platinumIndex = 0;
+            this.goldIndex = 0;
+            this.platinumTimer = null;
+            this.goldTimer = null;
+            this.platinumInterval = 30000; // 30 seconds
+            this.goldInterval = 30000; // 30 seconds
+
+            this.init();
+        }
+
+        init() {
+            // Initialize platinum rotation
+            this.startPlatinumRotation();
+
+            // Initialize gold rotation
+            this.startGoldRotation();
+
+            // Setup manual navigation buttons
+            $('#platinum-prev').on('click', () => this.rotatePlatinum('prev'));
+            $('#platinum-next').on('click', () => this.rotatePlatinum('next'));
+            $('#gold-prev').on('click', () => this.rotateGold('prev'));
+            $('#gold-next').on('click', () => this.rotateGold('next'));
+        }
+
+        startPlatinumRotation() {
+            const self = this;
+            this.platinumTimer = setInterval(() => {
+                self.rotatePlatinum('next');
+            }, this.platinumInterval);
+        }
+
+        startGoldRotation() {
+            const self = this;
+            this.goldTimer = setInterval(() => {
+                self.rotateGold('next');
+            }, this.goldInterval);
+        }
+
+        rotatePlatinum(direction) {
+            const $slides = $('.platinum-sponsor-slide');
+            const total = $slides.length;
+
+            if (total === 0) return;
+
+            // Remove active class from current slide
+            $slides.eq(this.platinumIndex).removeClass('active');
+
+            // Calculate next index
+            if (direction === 'next') {
+                this.platinumIndex = (this.platinumIndex + 1) % total;
+            } else {
+                this.platinumIndex = (this.platinumIndex - 1 + total) % total;
+            }
+
+            // Add active class to new slide
+            $slides.eq(this.platinumIndex).addClass('active');
+
+            // Reset timer
+            clearInterval(this.platinumTimer);
+            this.startPlatinumRotation();
+        }
+
+        rotateGold(direction) {
+            const $groups = $('.gold-sponsor-group');
+            const total = $groups.length;
+
+            if (total === 0) return;
+
+            // Remove active class from current group
+            $groups.eq(this.goldIndex).removeClass('active');
+
+            // Calculate next index
+            if (direction === 'next') {
+                this.goldIndex = (this.goldIndex + 1) % total;
+            } else {
+                this.goldIndex = (this.goldIndex - 1 + total) % total;
+            }
+
+            // Add active class to new group
+            $groups.eq(this.goldIndex).addClass('active');
+
+            // Reset timer
+            clearInterval(this.goldTimer);
+            this.startGoldRotation();
+        }
+    }
+
     $(document).ready(function () {
         const dashboard = new Dashboard();
+        const sponsorRotation = new SponsorRotation();
     });
 </script>
 </body>

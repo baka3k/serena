@@ -9,19 +9,20 @@ from pprint import pprint
 from serena.agent import SerenaAgent
 from serena.config.serena_config import SerenaConfig
 from serena.constants import REPO_ROOT
-from serena.tools import FindFileTool, FindReferencingSymbolsTool, GetSymbolsOverviewTool, SearchForPatternTool
+from serena.tools import FindFileTool, FindReferencingSymbolsTool, GetSymbolsOverviewTool, SearchForPatternTool, JetBrainsFindSymbolTool
 
 if __name__ == "__main__":
-    agent = SerenaAgent(project=REPO_ROOT, serena_config=SerenaConfig(gui_log_window_enabled=False, web_dashboard=True))
+    agent = SerenaAgent(project=REPO_ROOT)
 
     # apply a tool
+    find_symbol_tool = agent.get_tool(JetBrainsFindSymbolTool)
     find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
     find_file_tool = agent.get_tool(FindFileTool)
     search_pattern_tool = agent.get_tool(SearchForPatternTool)
     overview_tool = agent.get_tool(GetSymbolsOverviewTool)
 
     result = agent.execute_task(
-        lambda: overview_tool.apply_ex(relative_file_path="src/solidlsp/ls.py"),
+        lambda: find_symbol_tool.apply("displayBasicStats"),
     )
     pprint(json.loads(result))
     # input("Press Enter to continue...")
