@@ -20,6 +20,25 @@
     <div class="logo-container">
         <img id="serena-logo" src="serena-logs.png" alt="Serena">
     </div>
+
+    <!-- Platinum Sponsors in Header -->
+    <div class="platinum-sponsors-section header-sponsor">
+        <button class="sponsor-nav-btn sponsor-nav-left" id="platinum-prev" aria-label="Previous platinum sponsor">
+            ‹
+        </button>
+        <div class="platinum-banner" id="platinum-banner">
+            <div class="platinum-sponsor-slide active" data-sponsor="1">
+                <div class="sponsor-content">PLATINUM SPONSOR 1</div>
+            </div>
+            <div class="platinum-sponsor-slide" data-sponsor="2">
+                <div class="sponsor-content">PLATINUM SPONSOR 2</div>
+            </div>
+        </div>
+        <button class="sponsor-nav-btn sponsor-nav-right" id="platinum-next" aria-label="Next platinum sponsor">
+            ›
+        </button>
+    </div>
+
     <nav class="header-nav">
         <button id="theme-toggle" class="theme-toggle">
             <span id="theme-icon">🌙</span>
@@ -39,63 +58,13 @@
     </nav>
 </header>
 
-<!-- Sponsor Banners -->
-<div class="sponsors-container">
-    <!-- Platinum Sponsors -->
-    <div class="platinum-sponsors-section">
-        <button class="sponsor-nav-btn sponsor-nav-left" id="platinum-prev" aria-label="Previous platinum sponsor">
-            ‹
-        </button>
-        <div class="platinum-banner" id="platinum-banner">
-            <div class="platinum-sponsor-slide active" data-sponsor="1">
-                <div class="sponsor-content">PLATINUM SPONSOR 1</div>
-            </div>
-            <div class="platinum-sponsor-slide" data-sponsor="2">
-                <div class="sponsor-content">PLATINUM SPONSOR 2</div>
-            </div>
-        </div>
-        <button class="sponsor-nav-btn sponsor-nav-right" id="platinum-next" aria-label="Next platinum sponsor">
-            ›
-        </button>
-    </div>
-
-    <!-- Gold Sponsors -->
-    <div class="gold-sponsors-section">
-        <button class="sponsor-nav-btn sponsor-nav-left gold-nav" id="gold-prev" aria-label="Previous gold sponsors">
-            ‹
-        </button>
-        <div class="gold-banner" id="gold-banner">
-            <div class="gold-sponsor-group active" data-group="1">
-                <div class="gold-sponsor-item">
-                    <div class="sponsor-content gold">GOLD SPONSOR 1</div>
-                </div>
-                <div class="gold-sponsor-item">
-                    <div class="sponsor-content gold">GOLD SPONSOR 2</div>
-                </div>
-            </div>
-            <div class="gold-sponsor-group" data-group="2">
-                <div class="gold-sponsor-item">
-                    <div class="sponsor-content gold">GOLD SPONSOR 3</div>
-                </div>
-                <div class="gold-sponsor-item">
-                    <div class="sponsor-content gold">GOLD SPONSOR 4</div>
-                </div>
-                <div class="gold-sponsor-item">
-                    <div class="sponsor-content gold">GOLD SPONSOR 5</div>
-                </div>
-            </div>
-        </div>
-        <button class="sponsor-nav-btn sponsor-nav-right gold-nav" id="gold-next" aria-label="Next gold sponsors">
-            ›
-        </button>
-    </div>
-</div>
 
 <div class="main">
     <!-- Overview Page (Landing) -->
     <div id="page-overview" class="page-view">
         <div class="overview-container">
             <div class="overview-left">
+
                 <section class="config-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h2 style="margin: 0;">Current Configuration</h2>
@@ -173,6 +142,33 @@
                     <div id="available-contexts-display" class="collapsible-content" style="display:none">
                         <div class="loading">Loading contexts...</div>
                     </div>
+                </section>
+
+                <!-- Gold Sponsors -->
+                <section class="gold-sponsors-section">
+                    <button class="sponsor-nav-btn sponsor-nav-left gold-nav" id="gold-prev" aria-label="Previous gold sponsor">
+                        ‹
+                    </button>
+                    <div class="gold-banner" id="gold-banner">
+                        <div class="gold-sponsor-slide active" data-sponsor="1">
+                            <div class="sponsor-content gold">GOLD SPONSOR 1</div>
+                        </div>
+                        <div class="gold-sponsor-slide" data-sponsor="2">
+                            <div class="sponsor-content gold">GOLD SPONSOR 2</div>
+                        </div>
+                        <div class="gold-sponsor-slide" data-sponsor="3">
+                            <div class="sponsor-content gold">GOLD SPONSOR 3</div>
+                        </div>
+                        <div class="gold-sponsor-slide" data-sponsor="4">
+                            <div class="sponsor-content gold">GOLD SPONSOR 4</div>
+                        </div>
+                        <div class="gold-sponsor-slide" data-sponsor="5">
+                            <div class="sponsor-content gold">GOLD SPONSOR 5</div>
+                        </div>
+                    </div>
+                    <button class="sponsor-nav-btn sponsor-nav-right gold-nav" id="gold-next" aria-label="Next gold sponsor">
+                        ›
+                    </button>
                 </section>
             </div>
         </div>

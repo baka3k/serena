@@ -243,6 +243,9 @@ class Dashboard {
         // Initialize theme
         this.initializeTheme();
 
+        // Initialize sponsor rotation
+        this.initializeSponsorRotation();
+
         // Add ESC key handler for closing modals
         $(document).keydown(function (e) {
             if (e.key === 'Escape' || e.keyCode === 27) {
@@ -1830,5 +1833,115 @@ class Dashboard {
 
         // Close menu
         self.$menuDropdown.hide();
+    }
+
+    // ===== Sponsor Rotation Methods =====
+
+    initializeSponsorRotation() {
+        const self = this;
+
+        // Platinum sponsor rotation
+        this.platinumCurrentIndex = 0;
+        this.platinumInterval = null;
+
+        $('#platinum-prev').click(function() {
+            self.rotatePlatinumSponsor('prev');
+        });
+
+        $('#platinum-next').click(function() {
+            self.rotatePlatinumSponsor('next');
+        });
+
+        // Start automatic platinum rotation
+        this.startPlatinumRotation();
+
+        // Gold sponsor rotation
+        this.goldCurrentIndex = 0;
+        this.goldInterval = null;
+
+        $('#gold-prev').click(function() {
+            self.rotateGoldSponsor('prev');
+        });
+
+        $('#gold-next').click(function() {
+            self.rotateGoldSponsor('next');
+        });
+
+        // Start automatic gold rotation
+        this.startGoldRotation();
+    }
+
+    rotatePlatinumSponsor(direction) {
+        const $slides = $('.platinum-sponsor-slide');
+        const totalSlides = $slides.length;
+
+        if (totalSlides === 0) return;
+
+        // Remove active class from current slide
+        $slides.eq(this.platinumCurrentIndex).removeClass('active');
+
+        // Calculate new index
+        if (direction === 'next') {
+            this.platinumCurrentIndex = (this.platinumCurrentIndex + 1) % totalSlides;
+        } else {
+            this.platinumCurrentIndex = (this.platinumCurrentIndex - 1 + totalSlides) % totalSlides;
+        }
+
+        // Add active class to new slide
+        $slides.eq(this.platinumCurrentIndex).addClass('active');
+
+        // Reset auto-rotation timer
+        this.startPlatinumRotation();
+    }
+
+    startPlatinumRotation() {
+        const self = this;
+
+        // Clear existing interval
+        if (this.platinumInterval) {
+            clearInterval(this.platinumInterval);
+        }
+
+        // Start new interval (30 seconds)
+        this.platinumInterval = setInterval(function() {
+            self.rotatePlatinumSponsor('next');
+        }, 30000);
+    }
+
+    rotateGoldSponsor(direction) {
+        const $slides = $('.gold-sponsor-slide');
+        const totalSlides = $slides.length;
+
+        if (totalSlides === 0) return;
+
+        // Remove active class from current slide
+        $slides.eq(this.goldCurrentIndex).removeClass('active');
+
+        // Calculate new index
+        if (direction === 'next') {
+            this.goldCurrentIndex = (this.goldCurrentIndex + 1) % totalSlides;
+        } else {
+            this.goldCurrentIndex = (this.goldCurrentIndex - 1 + totalSlides) % totalSlides;
+        }
+
+        // Add active class to new slide
+        $slides.eq(this.goldCurrentIndex).addClass('active');
+
+        // Reset auto-rotation timer
+        this.startGoldRotation();
+    }
+
+    startGoldRotation() {
+        const self = this;
+
+        // Clear existing interval
+        if (this.goldInterval) {
+            clearInterval(this.goldInterval);
+        }
+
+        // Start new interval (30 seconds)
+        this.goldInterval = setInterval(function() {
+            self.rotateGoldSponsor('next');
+        }, 30000);
     }
 }
