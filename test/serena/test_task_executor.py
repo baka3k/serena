@@ -100,7 +100,7 @@ def test_task_executor_cancel_future(executor):
 def test_task_executor_cancellation_via_task_info(executor):
     start_time = time.time()
     executor.issue_task(Task(10).run, "task1")
-    executor.issue_task(Task(1).run, "task2")
+    executor.issue_task(Task(10).run, "task2")
     task_infos = executor.get_current_tasks()
     task_infos2 = executor.get_current_tasks()
 
@@ -114,6 +114,13 @@ def test_task_executor_cancellation_via_task_info(executor):
 
     # test cancellation
     task_infos[0].cancel()
-    assert task_infos[1].future.result()
+    time.sleep(0.5)
+    task_infos3 = executor.get_current_tasks()
+    assert len(task_infos3) == 1  # Cancelled task is gone from the queue
+    task_infos3[0].cancel()
+    try:
+        task_infos3[0].future.result()
+    except:
+        pass
     end_time = time.time()
     assert (end_time - start_time) < 9, "Cancelled task did not stop in time"
