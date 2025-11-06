@@ -53,8 +53,15 @@ body {
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+#frame {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 25px;
+    padding-top: 0;
+}
+
 .main {
-    padding: 20px;
+    padding-top: 25px;
 }
 
 .header {
@@ -257,7 +264,7 @@ body {
 }
 
 .page-view {
-    max-width: 1600px;
+    /*max-width: 1600px;*/
     margin: 0 auto;
 }
 
