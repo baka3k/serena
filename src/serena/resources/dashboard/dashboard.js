@@ -1905,7 +1905,7 @@ class Dashboard {
         // Start new interval (30 seconds)
         this.platinumInterval = setInterval(function() {
             self.rotatePlatinumSponsor('next');
-        }, 30000);
+        }, 5000);
     }
 
     rotateGoldSponsor(direction) {
@@ -1942,6 +1942,6 @@ class Dashboard {
         // Start new interval (30 seconds)
         this.goldInterval = setInterval(function() {
             self.rotateGoldSponsor('next');
-        }, 30000);
+        }, 5000);
     }
 }

@@ -17,26 +17,24 @@
 
 <body>
 <header class="header">
-    <div class="logo-container">
-        <img id="serena-logo" src="serena-logs.png" alt="Serena">
-    </div>
+    <div class="header-left">
 
-    <!-- Platinum Sponsors in Header -->
-    <div class="platinum-sponsors-section header-sponsor">
-        <button class="sponsor-nav-btn sponsor-nav-left" id="platinum-prev" aria-label="Previous platinum sponsor">
-            ‹
-        </button>
-        <div class="platinum-banner" id="platinum-banner">
-            <div class="platinum-sponsor-slide active" data-sponsor="1">
-                <img src="PlatinumBannerStretched.png" alt="Platinum Sponsor" class="sponsor-image">
+        <div class="logo-container">
+            <img id="serena-logo" src="serena-logs.png" alt="Serena">
+        </div>
+
+        <!-- Platinum Sponsors in Header -->
+        <div class="header-sponsor">
+            <div class="platinum-sponsor-slide active">
+                <img src="oraios-ai-ad-banner.png" alt="Platinum Sponsor" class="sponsor-image">
             </div>
-            <div class="platinum-sponsor-slide" data-sponsor="2">
-                <img src="PlatinumBannerStretched.png" alt="Platinum Sponsor" class="sponsor-image">
+            <div class="platinum-sponsor-slide">
+                <img src="oraios-software-ad-banner.png" alt="Platinum Sponsor" class="sponsor-image">
+            </div>
+            <div class="platinum-sponsor-slide">
+                <img src="businesswoman_billboard_v2.gif" alt="Platinum Sponsor" class="sponsor-image">
             </div>
         </div>
-        <button class="sponsor-nav-btn sponsor-nav-right" id="platinum-next" aria-label="Next platinum sponsor">
-            ›
-        </button>
     </div>
 
     <nav class="header-nav">
@@ -146,29 +144,12 @@
 
                 <!-- Gold Sponsors -->
                 <section class="gold-sponsors-section">
-                    <button class="sponsor-nav-btn sponsor-nav-left gold-nav" id="gold-prev" aria-label="Previous gold sponsor">
-                        ‹
-                    </button>
-                    <div class="gold-banner" id="gold-banner">
-                        <div class="gold-sponsor-slide active" data-sponsor="1">
-                            <img src="GoldBannerStretched.png" alt="Gold Sponsor" class="sponsor-image">
-                        </div>
-                        <div class="gold-sponsor-slide" data-sponsor="2">
-                            <img src="GoldBannerStretched.png" alt="Gold Sponsor" class="sponsor-image">
-                        </div>
-                        <div class="gold-sponsor-slide" data-sponsor="3">
-                            <img src="GoldBannerStretched.png" alt="Gold Sponsor" class="sponsor-image">
-                        </div>
-                        <div class="gold-sponsor-slide" data-sponsor="4">
-                            <img src="GoldBannerStretched.png" alt="Gold Sponsor" class="sponsor-image">
-                        </div>
-                        <div class="gold-sponsor-slide" data-sponsor="5">
-                            <img src="GoldBannerStretched.png" alt="Gold Sponsor" class="sponsor-image">
-                        </div>
+                    <div class="gold-sponsor-slide active" data-sponsor="1">
+                        <img src="oraios-software-ad-banner.png" alt="Gold Sponsor" class="sponsor-image">
                     </div>
-                    <button class="sponsor-nav-btn sponsor-nav-right gold-nav" id="gold-next" aria-label="Next gold sponsor">
-                        ›
-                    </button>
+                    <div class="gold-sponsor-slide" data-sponsor="2">
+                        <img src="oraios-ai-ad-banner.png" alt="Gold Sponsor" class="sponsor-image">
+                    </div>
                 </section>
             </div>
         </div>
@@ -371,8 +352,8 @@
             this.goldIndex = 0;
             this.platinumTimer = null;
             this.goldTimer = null;
-            this.platinumInterval = 30000; // 30 seconds
-            this.goldInterval = 30000; // 30 seconds
+            this.platinumInterval = 5000;
+            this.goldInterval = 5000;
 
             this.init();
         }
@@ -383,12 +364,6 @@
 
             // Initialize gold rotation
             this.startGoldRotation();
-
-            // Setup manual navigation buttons
-            $('#platinum-prev').on('click', () => this.rotatePlatinum('prev'));
-            $('#platinum-next').on('click', () => this.rotatePlatinum('next'));
-            $('#gold-prev').on('click', () => this.rotateGold('prev'));
-            $('#gold-next').on('click', () => this.rotateGold('next'));
         }
 
         startPlatinumRotation() {
