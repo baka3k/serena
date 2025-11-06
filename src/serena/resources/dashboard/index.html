@@ -16,13 +16,22 @@
 </head>
 
 <body>
+<div id="frame">
 <header class="header">
-    <div class="logo-container">
-        <img id="serena-logo" src="serena-logs.png" alt="Serena">
+    <div class="header-left">
+
+        <div class="logo-container">
+            <img id="serena-logo" src="serena-logs.png" alt="Serena">
+        </div>
+
+        <!-- Platinum Sponsors in Header -->
+        <div id="platinum-sponsors" class="header-sponsor">
+        </div>
     </div>
+
     <nav class="header-nav">
         <button id="theme-toggle" class="theme-toggle">
-            <span id="theme-icon">🌙</span>
+            <span id="theme-icon" style="height: 21px">🌙</span>
             <span id="theme-text">Dark</span>
         </button>
         <button id="menu-toggle" class="menu-button">
@@ -38,11 +47,14 @@
         </div>
     </nav>
 </header>
+
+
 <div class="main">
     <!-- Overview Page (Landing) -->
     <div id="page-overview" class="page-view">
         <div class="overview-container">
             <div class="overview-left">
+
                 <section class="config-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h2 style="margin: 0;">Current Configuration</h2>
@@ -120,6 +132,10 @@
                     <div id="available-contexts-display" class="collapsible-content" style="display:none">
                         <div class="loading">Loading contexts...</div>
                     </div>
+                </section>
+
+                <!-- Gold Sponsors -->
+                <section id="gold-sponsors" class="gold-sponsors-section">
                 </section>
             </div>
         </div>
@@ -319,6 +335,7 @@
         const dashboard = new Dashboard();
     });
 </script>
+</div> <!-- End of Frame -->
 </body>
 
 </html>

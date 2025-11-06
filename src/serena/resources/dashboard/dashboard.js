@@ -40,6 +40,123 @@ class LogMessage {
     };
 }
 
+class SponsorRotation {
+    constructor() {
+        this.platinumIndex = 0;
+        this.goldIndex = 0;
+        this.platinumTimer = null;
+        this.goldTimer = null;
+        this.platinumInterval = 5000;
+        this.goldInterval = 5000;
+
+        this.init();
+    }
+
+    init() {
+        let self = this;
+        this.loadSponsors(function() {
+            self.startPlatinumRotation();
+            self.startGoldRotation();
+        });
+    }
+
+    loadSponsors(onSuccess) {
+        $.ajax({
+            url: 'https://oraios-software.de/serena-sponsors/manifest.php',
+            type: 'GET',
+            success: function (response) {
+                console.log('Sponsors loaded:', response);
+
+                function fillSponsors($container, sponsors, className) {
+                    $.each(sponsors, function (index, sponsor) {
+                        let $img = $('<img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image">');
+                        let $anchor = $('<a href="' + sponsor.link + '" target="_blank"></a>');
+                        $anchor.append($img);
+                        let $sponsor = $('<div class="' + className + '-slide" data-sponsor="' + (index + 1) + '"></div>');
+                        $sponsor.append($anchor);
+                        if (index === 0) {
+                            $sponsor.addClass('active');
+                        }
+                        if (sponsor.border) {
+                            $img.addClass('sponsor-border');
+                        }
+                        $container.append($sponsor);
+                    });
+                }
+
+                fillSponsors($('#gold-sponsors'), response.gold, 'gold-sponsor');
+                fillSponsors($('#platinum-sponsors'), response.platinum, 'platinum-sponsor');
+                onSuccess();
+            },
+            error: function (xhr, status, error) {
+                console.error('Error loading sponsors:', error);
+            }
+        });
+    }
+
+    startPlatinumRotation() {
+        const self = this;
+        this.platinumTimer = setInterval(() => {
+            self.rotatePlatinum('next');
+        }, this.platinumInterval);
+    }
+
+    startGoldRotation() {
+        const self = this;
+        this.goldTimer = setInterval(() => {
+            self.rotateGold('next');
+        }, this.goldInterval);
+    }
+
+    rotatePlatinum(direction) {
+        const $slides = $('.platinum-sponsor-slide');
+        const total = $slides.length;
+
+        if (total === 0) return;
+
+        // Remove active class from current slide
+        $slides.eq(this.platinumIndex).removeClass('active');
+
+        // Calculate next index
+        if (direction === 'next') {
+            this.platinumIndex = (this.platinumIndex + 1) % total;
+        } else {
+            this.platinumIndex = (this.platinumIndex - 1 + total) % total;
+        }
+
+        // Add active class to new slide
+        $slides.eq(this.platinumIndex).addClass('active');
+
+        // Reset timer
+        clearInterval(this.platinumTimer);
+        this.startPlatinumRotation();
+    }
+
+    rotateGold(direction) {
+        const $groups = $('.gold-sponsor-slide');
+        const total = $groups.length;
+
+        if (total === 0) return;
+
+        // Remove active class from current group
+        $groups.eq(this.goldIndex).removeClass('active');
+
+        // Calculate next index
+        if (direction === 'next') {
+            this.goldIndex = (this.goldIndex + 1) % total;
+        } else {
+            this.goldIndex = (this.goldIndex - 1 + total) % total;
+        }
+
+        // Add active class to new group
+        $groups.eq(this.goldIndex).addClass('active');
+
+        // Reset timer
+        clearInterval(this.goldTimer);
+        this.startGoldRotation();
+    }
+}
+
 class Dashboard {
     constructor() {
         let self = this;
@@ -243,6 +360,9 @@ class Dashboard {
         // Initialize theme
         this.initializeTheme();
 
+        // Initialize sponsor rotation
+        //this.sponsorRotation = new SponsorRotation();
+
         // Add ESC key handler for closing modals
         $(document).keydown(function (e) {
             if (e.key === 'Escape' || e.keyCode === 27) {
@@ -331,7 +451,9 @@ class Dashboard {
         console.log('Polling for config overview...');
         let self = this;
         $.ajax({
-            url: '/get_config_overview', type: 'GET', success: function (response) {
+            url: '/get_config_overview',
+            type: 'GET',
+            success: function (response) {
                 self.failureCount = 0;
 
                 // Check if the config data has actually changed
