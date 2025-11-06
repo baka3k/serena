@@ -53,8 +53,41 @@ class SponsorRotation {
     }
 
     init() {
-        this.startPlatinumRotation();
-        this.startGoldRotation();
+        let self = this;
+        this.loadSponsors(function() {
+            self.startPlatinumRotation();
+            self.startGoldRotation();
+        });
+    }
+
+    loadSponsors(onSuccess) {
+        $.ajax({
+            url: 'https://v32155.1blu.de/serena-sponsors/manifest.php',
+            type: 'GET',
+            success: function (response) {
+                console.log('Sponsors loaded:', response);
+                let $goldContainer = $('#gold-sponsors');
+                $.each(response.gold, function (index, sponsor) {
+                    let $sponsor = $('<div class="gold-sponsor-slide" data-sponsor="' + (index + 1) + '"><img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image"></div>');
+                    if (index === 0) {
+                        $sponsor.addClass('active');
+                    }
+                    $goldContainer.append($sponsor);
+                });
+                let $platinumContainer = $('#platinum-sponsors');
+                $.each(response.platinum, function (index, sponsor) {
+                    let $sponsor = $('<div class="platinum-sponsor-slide" data-sponsor="' + (index + 1) + '"><img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image"></div>');
+                    if (index === 0) {
+                        $sponsor.addClass('active');
+                    }
+                    $platinumContainer.append($sponsor);
+                });
+                onSuccess();
+            },
+            error: function (xhr, status, error) {
+                console.error('Error loading sponsors:', error);
+            }
+        });
     }
 
     startPlatinumRotation() {
@@ -414,7 +447,9 @@ class Dashboard {
         console.log('Polling for config overview...');
         let self = this;
         $.ajax({
-            url: '/get_config_overview', type: 'GET', success: function (response) {
+            url: '/get_config_overview',
+            type: 'GET',
+            success: function (response) {
                 self.failureCount = 0;
 
                 // Check if the config data has actually changed
