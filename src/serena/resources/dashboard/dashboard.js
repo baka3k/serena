@@ -62,7 +62,7 @@ class SponsorRotation {
 
     loadSponsors(onSuccess) {
         $.ajax({
-            url: 'https://v32155.1blu.de/serena-sponsors/manifest.php',
+            url: 'https://oraios-software.de/serena-sponsors/manifest.php',
             type: 'GET',
             success: function (response) {
                 console.log('Sponsors loaded:', response);
