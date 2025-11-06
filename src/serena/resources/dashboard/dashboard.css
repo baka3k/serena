@@ -58,6 +58,7 @@ body {
     margin: 0 auto;
     padding: 25px;
     padding-top: 0;
+    min-width: 1280px;
 }
 
 .main {
