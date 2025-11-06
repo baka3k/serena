@@ -66,22 +66,19 @@ class SponsorRotation {
             type: 'GET',
             success: function (response) {
                 console.log('Sponsors loaded:', response);
-                let $goldContainer = $('#gold-sponsors');
-                $.each(response.gold, function (index, sponsor) {
-                    let $sponsor = $('<div class="gold-sponsor-slide" data-sponsor="' + (index + 1) + '"><img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image"></div>');
-                    if (index === 0) {
-                        $sponsor.addClass('active');
-                    }
-                    $goldContainer.append($sponsor);
-                });
-                let $platinumContainer = $('#platinum-sponsors');
-                $.each(response.platinum, function (index, sponsor) {
-                    let $sponsor = $('<div class="platinum-sponsor-slide" data-sponsor="' + (index + 1) + '"><img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image"></div>');
-                    if (index === 0) {
-                        $sponsor.addClass('active');
-                    }
-                    $platinumContainer.append($sponsor);
-                });
+
+                function fillSponsors($container, sponsors, className) {
+                    $.each(sponsors, function (index, sponsor) {
+                        let $sponsor = $('<div class="' + className + '-slide" data-sponsor="' + (index + 1) + '"><img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image"></div>');
+                        if (index === 0) {
+                            $sponsor.addClass('active');
+                        }
+                        $container.append($sponsor);
+                    });
+                }
+
+                fillSponsors($('#gold-sponsors'), response.gold, 'gold-sponsor');
+                fillSponsors($('#platinum-sponsors'), response.platinum, 'platinum-sponsor');
                 onSuccess();
             },
             error: function (xhr, status, error) {
