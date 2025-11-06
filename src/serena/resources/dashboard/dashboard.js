@@ -69,7 +69,11 @@ class SponsorRotation {
 
                 function fillSponsors($container, sponsors, className) {
                     $.each(sponsors, function (index, sponsor) {
-                        let $sponsor = $('<div class="' + className + '-slide" data-sponsor="' + (index + 1) + '"><img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image"></div>');
+                        let $img = $('<img src="' + sponsor.image + '" alt="' + sponsor.alt + '" class="sponsor-image">');
+                        let $anchor = $('<a href="' + sponsor.link + '" target="_blank"></a>');
+                        $anchor.append($img);
+                        let $sponsor = $('<div class="' + className + '-slide" data-sponsor="' + (index + 1) + '"></div>');
+                        $sponsor.append($anchor);
                         if (index === 0) {
                             $sponsor.addClass('active');
                         }
