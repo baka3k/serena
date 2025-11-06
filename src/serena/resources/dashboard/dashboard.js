@@ -77,6 +77,9 @@ class SponsorRotation {
                         if (index === 0) {
                             $sponsor.addClass('active');
                         }
+                        if (sponsor.border) {
+                            $img.addClass('sponsor-border');
+                        }
                         $container.append($sponsor);
                     });
                 }
