@@ -41,7 +41,7 @@ These allow for a high degree of customization to best suit your workflow and th
 
 #### Contexts
 
-A context defines the general environment in which Serena is operating.
+A **context** defines the general environment in which Serena is operating.
 It influences the initial system prompt and the set of available tools.
 A context is set at startup when launching Serena (e.g., via CLI options for an MCP server or in the agent script) and cannot be changed during an active session.
 
@@ -57,6 +57,16 @@ Note that for cases where parameter lists are specified (e.g. Claude Desktop), y
 
 If you are using a local server (such as Llama.cpp) which requires you to use OpenAI-compatible tool descriptions, use context `oaicompat-agent` instead of `agent`.
 
+You can manage contexts using the `context` command,
+
+    <serena> context --help
+    <serena> context list
+    <serena> context create <context-name>
+    <serena> context edit <context-name>
+    <serena> context delete <context-name>
+
+where `<serena>` is [your way of running Serena](020_running).
+
 #### Modes
 
 Modes further refine Serena's behavior for specific types of tasks or interaction styles. Multiple modes can be active simultaneously, allowing you to combine their effects. Modes influence the system prompt and can also alter the set of available tools by excluding certain ones.
@@ -70,8 +80,20 @@ Examples of built-in modes include:
 * `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session.
 * `onboarding`: (Usually triggered automatically) Focuses on the project onboarding process.
 
-Modes can be set at startup (similar to contexts) but can also be _switched dynamically_ during a session. You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "switch to planning and one-shot modes").
+Modes can be set at startup (similar to contexts) but can also be _switched dynamically_ during a session. 
+You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "Switch to planning and one-shot modes").
 
 When launching Serena, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
 
-:warning: **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
+:warning: **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
+Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
+
+You can manage contexts using the `mode` command,
+
+    <serena> mode --help
+    <serena> mode list
+    <serena> mode create <mode-name>
+    <serena> mode edit <mode-name>
+    <serena> mode delete <mode-name>
+
+where `<serena>` is [your way of running Serena](020_running).

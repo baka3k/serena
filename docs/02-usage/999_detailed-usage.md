@@ -30,27 +30,6 @@ allowing all analysis and exploration capabilities.
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.
 
-#### Customization
-
-You can create your own contexts and modes to precisely tailor Serena to your needs in two ways:
-
-* You can use Serena's CLI to manage modes and contexts. Check out
-
-    ```shell
-    uvx --from git+https://github.com/oraios/serena serena mode --help
-    ```
-
-  and
-
-    ```shell
-    uvx --from git+https://github.com/oraios/serena serena context --help
-    ```
-
-  _NOTE_: Custom contexts/modes are simply YAML files in `<home>/.serena`, they are automatically registered and available for use by their name (filename without the `.yml` extension). If you don't want to use Serena's CLI, you can create and manage them in any way you see fit.
-* **Using external YAML files**: When starting Serena, you can also provide an absolute path to a custom `.yml` file for a context or mode.
-
-This customization allows for deep integration and adaptation of Serena to specific project requirements or personal preferences.
-
 ### Prepare Your Project
 
 #### Structure Your Codebase
