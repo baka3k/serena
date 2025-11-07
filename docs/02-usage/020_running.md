@@ -1,12 +1,13 @@
 ## Running Serena
 
 Serena is a command-line tool with a variety of sub-commands.
-The main command is `start-mcp-server`, which starts the MCP server that
-provides Serena's functionality to LLM clients via the Model Context Protocol (MCP).
+This section describes
+ * varies ways of running Serena
+ * how to run and configure the most important command, i.e. starting the MCP server
+ * other useful commands.
 
 ### Ways of Running Serena
 
-There are several ways to run Serena, depending on your preferences and setup.
 In the following, we will refer to the command used to run Serena as `<serena>`,
 which you should replace with the appropriate command based on your chosen method.
 
