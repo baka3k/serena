@@ -30,48 +30,6 @@ allowing all analysis and exploration capabilities.
 In general, be sure to back up your work and use a version control system in order to avoid
 losing any work.
 
-### Modes and Contexts
-
-Serena's behavior and toolset can be adjusted using contexts and modes.
-These allow for a high degree of customization to best suit your workflow and the environment Serena is operating in.
-
-#### Contexts
-
-A context defines the general environment in which Serena is operating.
-It influences the initial system prompt and the set of available tools.
-A context is set at startup when launching Serena (e.g., via CLI options for an MCP server or in the agent script) and cannot be changed during an active session.
-
-Serena comes with pre-defined contexts:
-
-* `desktop-app`: Tailored for use with desktop applications like Claude Desktop. This is the default.
-* `agent`: Designed for scenarios where Serena acts as a more autonomous agent, for example, when used with Agno.
-* `ide-assistant`: Optimized for integration into IDEs like VSCode, Cursor, or Cline, focusing on in-editor coding assistance.
-  Choose the context that best matches the type of integration you are using.
-
-When launching Serena, specify the context using `--context <context-name>`.
-Note that for cases where parameter lists are specified (e.g. Claude Desktop), you must add two parameters to the list.
-
-If you are using a local server (such as Llama.cpp) which requires you to use OpenAI-compatible tool descriptions, use context `oaicompat-agent` instead of `agent`.
-
-#### Modes
-
-Modes further refine Serena's behavior for specific types of tasks or interaction styles. Multiple modes can be active simultaneously, allowing you to combine their effects. Modes influence the system prompt and can also alter the set of available tools by excluding certain ones.
-
-Examples of built-in modes include:
-
-* `planning`: Focuses Serena on planning and analysis tasks.
-* `editing`: Optimizes Serena for direct code modification tasks.
-* `interactive`: Suitable for a conversational, back-and-forth interaction style.
-* `one-shot`: Configures Serena for tasks that should be completed in a single response, often used with `planning` for generating reports or initial plans.
-* `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session.
-* `onboarding`: (Usually triggered automatically) Focuses on the project onboarding process.
-
-Modes can be set at startup (similar to contexts) but can also be _switched dynamically_ during a session. You can instruct the LLM to use the `switch_modes` tool to activate a different set of modes (e.g., "switch to planning and one-shot modes").
-
-When launching Serena, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
-
-:warning: **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). Serena currently does not prevent incompatible combinations; it is up to the user to choose sensible mode configurations.
-
 #### Customization
 
 You can create your own contexts and modes to precisely tailor Serena to your needs in two ways:
@@ -92,29 +50,6 @@ You can create your own contexts and modes to precisely tailor Serena to your ne
 * **Using external YAML files**: When starting Serena, you can also provide an absolute path to a custom `.yml` file for a context or mode.
 
 This customization allows for deep integration and adaptation of Serena to specific project requirements or personal preferences.
-
-### Onboarding and Memories
-
-By default, Serena will perform an **onboarding process** when
-it is started for the first time for a project.
-The goal of the onboarding is for Serena to get familiar with the project
-and to store memories, which it can then draw upon in future interactions.
-If an LLM should fail to complete the onboarding and does not actually write the
-respective memories to disk, you may need to ask it to do so explicitly.
-
-The onboarding will usually read a lot of content from the project, thus filling
-up the context. It can therefore be advisable to switch to another conversation
-once the onboarding is complete.
-After the onboarding, we recommend that you have a quick look at the memories and,
-if necessary, edit them or add additional ones.
-
-**Memories** are files stored in `.serena/memories/` in the project directory,
-which the agent can choose to read in subsequent interactions.
-Feel free to read and adjust them as needed; you can also add new ones manually.
-Every file in the `.serena/memories/` directory is a memory file.
-Whenever Serena starts working on a project, the list of memories is
-provided, and the agent can decide to read them.
-We found that memories can significantly improve the user experience with Serena.
 
 ### Prepare Your Project
 
