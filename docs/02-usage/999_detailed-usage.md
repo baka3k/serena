@@ -72,28 +72,6 @@ Moreover, Serena is instructed to be frugal with context
 but we found that Claude is not always very good in being frugal (Gemini seemed better at it).
 You can explicitly instruct it to not read the bodies if you know that it's not needed.
 
-### Serena's Logs: The Dashboard and GUI Tool
-
-Serena provides two convenient ways of accessing the logs of the current session:
-
-* via the **web-based dashboard** (enabled by default)
-
-  This is supported on all platforms.
-  By default, it will be accessible at `http://localhost:24282/dashboard/index.html`,
-  but a higher port may be used if the default port is unavailable/multiple instances are running.
-
-* via the **GUI tool** (disabled by default)
-
-  This is mainly supported on Windows, but it may also work on Linux; macOS is unsupported.
-
-Both can be enabled, configured or disabled in Serena's configuration file (`serena_config.yml`, see above).
-If enabled, they will automatically be opened as soon as the Serena agent/MCP server is started.
-The web dashboard will display usage statistics of Serena's tools if you set  `record_tool_usage_stats: True` in your config.
-
-In addition to viewing logs, both tools allow to shut down the Serena agent.
-This function is provided, because clients like Claude Desktop may fail to terminate the MCP server subprocess
-when they themselves are closed.
-
 ### Serena and GIT worktrees
 [git-worktree](https://git-scm.com/docs/git-worktree) can be an excellent way to parallelize your work. More on this in [Anthropic: Run parallel Claude Code sessions with Git worktrees](https://docs.claude.com/en/docs/claude-code/common-workflows#run-parallel-claude-code-sessions-with-git-worktrees).
 
