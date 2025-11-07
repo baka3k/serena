@@ -43,8 +43,8 @@ In general, Serena can be integrated with an LLM in several ways:
     * IDEs like VSCode, Cursor or IntelliJ,
     * Extensions like Cline or Roo Code
     * Local clients like [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp), [Jan](https://jan.ai/docs/mcp-examples/browser/browserbase#enable-mcp), [Agno](https://docs.agno.com/introduction/playground) and others
-* by using [mcpo to connect it to ChatGPT](docs/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling via OpenAPI.
-* by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/custom_agent.md).
+* by using [mcpo to connect it to ChatGPT](docs/03-special-guides/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling via OpenAPI.
+* by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/03-special-guides/custom_agent.md).
   Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
 
 ### Serena in Action
@@ -188,7 +188,7 @@ Serena can be used in various ways, below you will find instructions for selecte
 
 * For coding with Claude, we recommend using Serena through [Claude Code](#claude-code) or [Claude Desktop](#claude-desktop). You can also use Serena in most other [terminal-based clients](#other-terminal-based-clients).
 * If you want a GUI experience outside an IDE, you can use one of the many [local GUIs](#local-guis-and-frameworks) that support MCP servers.
-  You can also connect Serena to many web clients (including ChatGPT) using [mcpo](docs/serena_on_chatgpt.md).
+  You can also connect Serena to many web clients (including ChatGPT) using [mcpo](docs/03-special-guides/serena_on_chatgpt.md).
 * If you want to use Serena integrated in your IDE, see the section on [other MCP clients](#other-mcp-clients---cline-roo-code-cursor-windsurf-etc).
 * You can use Serena as a library for building your own applications. We try to keep the public API stable, but you should still
   expect breaking changes and pin Serena to a fixed version if you use it as a dependency.
