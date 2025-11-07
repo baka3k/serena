@@ -1,33 +1,68 @@
 ## The Project Workflow
 
-### Project Activation & Indexing
+Serena uses a project-based workflow.
+A **project** is simply a directory on your filesystem that contains code and other files
+that you want Serena to work with.
 
-If you are mostly working with the same project, you can configure to always activate it at startup
-by passing `--project <path_or_name>` to the `start-mcp-server` command in your client's MCP config.
-This is especially useful for clients which configure MCP servers on a per-project basis, like Claude Code.
+Assuming that you have project you want to work with (which may initially be empty),
+setting up a project with Serena typically involves the following steps:
 
-Otherwise, the recommended way is to just ask the LLM to activate a project by providing it an absolute path to, or,
-in case the project was activated in the past, by its name. The default project name is the directory name.
+1. **Project creation**: Configuring project settings for Serena (and indexing the project, if desired)
+2. **Project activation**: Making Serena aware of the project you want to work with
+3. **Onboarding**: Getting Serena familiar with the project (creating memories)
+4. **Working on coding tasks**: Using Serena to help you with actual coding tasks in the project
 
-* "Activate the project /path/to/my_project"
-* "Activate the project my_project"
+### Project Creation & Indexing
 
-All projects that have been activated will be automatically added to your `serena_config.yml`, and for each
-project, the file `.serena/project.yml` will be generated. You can adjust the latter, e.g., by changing the name
-(which you refer to during the activation) or other options. Make sure to not have two different projects with the
-same name.
+You can create a project either  
+ * implicitly, by just activating a directory as a project while already in a conversation; this will use default settings for your project (skip to the next section).
+ * explicitly, using the project creation command, or
 
-ℹ️ For larger projects, we recommend that you index your project to accelerate Serena's tools; otherwise the first
-tool application may be very slow.
-To do so, run this from the project directory (or pass the path to the project as an argument):
+#### Explicit Project Creation
 
-```shell
-uvx --from git+https://github.com/oraios/serena serena project index
-```
+To explicitly create a project, use the following command while in the project directory:
 
-(or use the `--directory` command version).
+    <serena> project generate-yml [options]
 
-### Onboarding and Memories
+For instance, when using `uvx`, run
+
+    uvx --from git+https://github.com/oraios/serena serena project generate-yml [options]
+
+ * For an empty project, you will need to specify the programming language
+   (e.g., `--language python`). 
+ * For an existing project, the main programming language will be detected automatically,
+   but you can choose to explicitly specify multiple languages by passing the `--language` parameter
+   multiple times (e.g. `--language python --language typescript`).
+
+After creation, you can adjust the project settings in the generated `.serena/project.yml` file.
+
+#### Indexing
+
+Especially for larger project, it is advisable to index the project after creation (in order to avoid
+delays during MCP server startup or the first tool application):
+
+While in the project directory, run this command:
+   
+    <serena> project index
+
+Indexing has to be called only once. During regular usage, Serena will automatically update the index whenever files change.
+
+### Project Activation
+   
+Project activation makes Serena aware of the project you want to work with.
+You can either choose to do this
+ * while in a conversation, by telling the model to activate a project, e.g.,
+       
+      * "Activate the project /path/to/my_project" (for first-time activation with auto-creation)
+      * "Activate the project my_project"
+   
+   Note that this option requires the `activate_project` tool to be active (which it isn't in context `ide-assistant` where t.        
+
+ * when the MCP server starts, by passing the project path or name as a command-line argument
+   (e.g. when working on a fixed project in `ide-assistant` mode): `--project <path|name>`
+
+
+### Onboarding & Memories
 
 By default, Serena will perform an **onboarding process** when
 it is started for the first time for a project.
