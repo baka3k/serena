@@ -123,6 +123,7 @@ and then configure your client to connect to `http://localhost:9121/mcp`.
 
 ℹ️ Note that while SSE transport is also supported, its use is discouraged.
 
+(mcp-args)=
 #### MCP Server Command-Line Arguments
 
 The Serena MCP server supports a wide range of additional command-line options.

@@ -1,5 +1,11 @@
 ## Configuring Your MCP Client
 
+In the following, we provide default configurations for popular MCP-enabled clients.
+
+Depending on your needs, you might want to customize Serena's behaviour by 
+  * [adding command-line arguments](mcp-args)
+  * [adjusting configuration](050_configuration).
+
 ### Claude Code
 
 Serena is a great way to make Claude Code both cheaper and more powerful!
@@ -7,37 +13,38 @@ Serena is a great way to make Claude Code both cheaper and more powerful!
 From your project directory, add serena with a command like this,
 
 ```shell
-claude mcp add serena -- <serena-mcp-server> --context ide-assistant --project "$(pwd)"
+claude mcp add serena -- <serena> start-mcp-server --context ide-assistant --project "$(pwd)"
 ```
 
-where `<serena-mcp-server>` is your way of [running the Serena MCP server](#running-the-serena-mcp-server).
-For example, when using `uvx`, you would run
+where `<serena>` is [your way of running Serena](020_running).  
+For example, when using `uvx`, the above command becomes
 
 ```shell
 claude mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --context ide-assistant --project "$(pwd)"
 ```
 
-ℹ️ Serena comes with an instruction text, and Claude needs to read it to properly use Serena's tools.
-As of version `v1.0.52`, claude code reads the instructions of the MCP server, so this **is handled automatically**.
-If you are using an older version, or if Claude fails to read the instructions, you can ask it explicitly
-to "read Serena's initial instructions" or run `/mcp__serena__initial_instructions` to load the instruction text.
-If you want to make use of that, you will have to enable the corresponding tool explicitly by adding `initial_instructions` to the `included_optional_tools`
-in your config.
-Note that you may have to make Claude read the instructions when you start a new conversation and after any compacting operation to ensure Claude remains properly configured to use Serena's tools.
+Note:
+  * We use the `ide-assistant` context to disable unnecessary tools (avoiding duplication
+    with Claude Code's built-in capabilities).
+  * We specify the current directory as the project directory with `--project "$(pwd)"`, such 
+    that Serena is configured to work on the current project from the get-go, following 
+    Claude Code's mode of operation.
+    
+Be sure to use at least `v1.0.52` of Claude Code (as earlier versions do not read MCP server system prompts upon startup). 
 
 ### Codex
 
 Serena works with OpenAI's Codex CLI out of the box, but you have to use the `codex` context for it to work properly. (The technical reason is that Codex doesn't fully support the MCP specifications, so some massaging of tools is required.).
 
-Unlike Claude Code, in Codex you add an MCP server globally and not per project. Add the following to
-`~/.codex/config.toml` (create the file if it does not exist):
+Add a [run command](020_running) to `~/.codex/config.toml` to configure Serena for all Codex sessions;
+create the file if it does not exist.
+For example, when using `uvx`, add the following section:
 
 ```toml
 [mcp_servers.serena]
 command = "uvx"
 args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "codex"]
 ```
-
 After codex has started, you need to activate the project, which you can do by saying:
 
 "Activate the current dir as project using serena"
@@ -46,28 +53,21 @@ After codex has started, you need to activate the project, which you can do by s
 
 That's it! Have a look at `~/.codex/log/codex-tui.log` to see if any errors occurred.
 
-The Serena dashboard will run if you have not disabled it in the configuration, but due to Codex's sandboxing the webbrowser
+Serena's dashboard will run if you have not disabled it in the configuration, but due to Codex's sandboxing, the web browser
 may not open automatically. You can open it manually by going to `http://localhost:24282/dashboard/index.html` (or a higher port, if
 that was already taken).
 
 > Codex will often show the tools as `failed` even though they are successfully executed. This is not a problem, seems to be a bug in Codex. Despite the error message, everything works as expected.
 
-### Other Terminal-Based Clients
-
-There are many terminal-based coding assistants that support MCP servers, such as [Codex](https://github.com/openai/codex?tab=readme-ov-file#model-context-protocol-mcp),
-[Gemini-CLI](https://github.com/google-gemini/gemini-cli), [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder),
-[rovodev](https://community.atlassian.com/forums/Rovo-for-Software-Teams-Beta/Introducing-Rovo-Dev-CLI-AI-Powered-Development-in-your-terminal/ba-p/3043623),
-the [OpenHands CLI](https://docs.all-hands.dev/usage/how-to/cli-mode) and [opencode](https://github.com/sst/opencode).
-
-They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
-by writing your own context, modes or prompts to adjust it to your workflow, to other MCP servers you are using, and to
-the client's internal capabilities.
-
 ### Claude Desktop
 
-For [Claude Desktop](https://claude.ai/download) (available for Windows and macOS), go to File / Settings / Developer / MCP Servers / Edit Config,
+On Windows and macOS there are official [Claude Desktop applications by Anthropic](https://claude.ai/download), for Linux there is an [open-source
+community version](https://github.com/aaddrick/claude-desktop-debian).
+
+To configure MCP server settings, go to File / Settings / Developer / MCP Servers / Edit Config,
 which will let you open the JSON file `claude_desktop_config.json`.
-Add the `serena` MCP server configuration, using a [run command](#running-the-serena-mcp-server) depending on your setup.
+
+Add the `serena` MCP server configuration, using a [run command](020_running.md) depending on your setup.
 
 * local installation:
 
@@ -113,42 +113,46 @@ If you are using paths containing backslashes for paths on Windows
 
 That's it! Save the config and then restart Claude Desktop. You are ready for activating your first project.
 
-ℹ️ You can further customize the run command using additional arguments (see [above](#command-line-arguments)).
-
-Note: on Windows and macOS there are official Claude Desktop applications by Anthropic, for Linux there is an [open-source
-community version](https://github.com/aaddrick/claude-desktop-debian).
-
 ⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.
-
-⚠️ Some clients may leave behind zombie processes. You will have to find and terminate them manually then.
-With Serena, you can activate the [dashboard](#serenas-logs-the-dashboard-and-gui-tool) to prevent unnoted processes and also use the dashboard
-for shutting down Serena.
 
 After restarting, you should see Serena's tools in your chat interface (notice the small hammer icon).
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
-### MCP Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
+### Other Clients
 
-Being an MCP Server, Serena can be included in any MCP Client. The same configuration as above,
-perhaps with small client-specific modifications, should work. Most of the popular
-existing coding assistants (IDE extensions or VSCode-like IDEs) support connections
-to MCP Servers. It is **recommended to use the `ide-assistant` context** for these integrations by adding `"--context", "ide-assistant"` to the `args` in your MCP client's configuration. Including Serena generally boosts their performance
-by providing them tools for symbolic operations.
+#### Terminal-Based Clients
 
-In this case, the billing for the usage continues to be controlled by the client of your choice
-(unlike with the Claude Desktop client). But you may still want to use Serena through such an approach,
-e.g., for one of the following reasons:
+There are many terminal-based coding assistants that support MCP servers, such as
 
-1. You are already using a coding assistant (say Cline or Cursor) and just want to make it more powerful.
-2. You are on Linux and don't want to use the [community-created Claude Desktop](https://github.com/aaddrick/claude-desktop-debian).
-3. You want tighter integration of Serena into your IDE and don't mind paying for that.
+ * [Gemini-CLI](https://github.com/google-gemini/gemini-cli), 
+ * [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder),
+ * [rovodev](https://community.atlassian.com/forums/Rovo-for-Software-Teams-Beta/Introducing-Rovo-Dev-CLI-AI-Powered-Development-in-your-terminal/ba-p/3043623),
+ * [OpenHands CLI](https://docs.all-hands.dev/usage/how-to/cli-mode) and
+ * [opencode](https://github.com/sst/opencode).
 
-### Local GUIs and Frameworks
+They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
+by writing your own context, modes or prompts to adjust it to the client's respective internal capabilities (and your general worflow).
 
-Over the last months, several technologies have emerged that allow you to run a powerful local GUI
-and connect it to an MCP server. They will work with Serena out of the box.
-Some of the leading open source GUI technologies offering this are
-[Jan](https://jan.ai/docs/mcp), [OpenHands](https://github.com/All-Hands-AI/OpenHands/),
-[OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp) and [Agno](https://docs.agno.com/introduction/playground).
-They allow combining Serena with almost any LLM (including locally running ones) and offer various other integrations.
+#### MCP-Enabled IDEs and Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
+
+Being an MCP Server, Serena can be included in any MCP Client. Most of the popular
+existing coding assistants (e.g. IDE extensions) and AI-enabled IDEs themselves support connections
+to MCP Servers. Serena generally boosts performance by providing efficient tools for symbolic operations.
+
+We generally **recommend to use the `ide-assistant` context** for these integrations by adding the arguments `--context ide-assistant` 
+in order to reduce tool duplication.
+
+#### Local GUIs and Agent Frameworks
+
+Over the last months, several technologies have emerged that allow you to run a local GUI client
+and connect it to an MCP server. The respective applications will typically work with Serena out of the box.
+Some of the leading open source GUI applications are
+
+  * [Jan](https://jan.ai/docs/mcp), 
+  * [OpenHands](https://github.com/All-Hands-AI/OpenHands/),
+  * [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp) and 
+  * [Agno](https://docs.agno.com/introduction/playground).
+
+These applications allow to combine Serena with almost any LLM (including locally running ones) 
+and offer various other integrations.
