@@ -10,26 +10,6 @@ The use of all tools is generally recommended, as this allows Serena to provide 
 Only by executing shell commands (in particular, tests) can Serena identify and correct mistakes
 autonomously.
 
-#### Shell Execution and Editing Tools
-
-Many clients have their own shell execution tool, and by default Serena's shell tool will be disabled in them
-(e.g., when using the `ide-assistant` or `codex` context). However, when using Serena through something like
-Claude Desktop or ChatGPT, it is recommended to enable Serena's `execute_shell_command` tool to allow
-agentic behavior.
-
-It should be noted that the `execute_shell_command` tool allows for arbitrary code execution.
-When using Serena as an MCP Server, clients will typically ask the user for permission
-before executing a tool, so as long as the user inspects execution parameters beforehand,
-this should not be a problem.
-However, if you have concerns, you can choose to disable certain commands in your project's configuration file.
-If you only want to use Serena purely for analyzing code and suggesting implementations
-without modifying the codebase, you can enable read-only mode by setting `read_only: true` in your project configuration file.
-This will automatically disable all editing tools and prevent any modifications to your codebase while still
-allowing all analysis and exploration capabilities.
-
-In general, be sure to back up your work and use a version control system in order to avoid
-losing any work.
-
 ### Prepare Your Project
 
 #### Structure Your Codebase
