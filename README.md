@@ -22,12 +22,10 @@ Instead, it can use code-centric tools like `find_symbol`, `find_referencing_sym
   <a href="lessons_learned.md"><img src="https://img.shields.io/badge/Lessons-Learned-7c4700?style=flat&logo=readthedocs&logoColor=white&labelColor=7c4700" alt="Lessons Learned" /></a>
 </p>
 
-### LLM Integration
+## LLM Integration
 
-Serena provides the necessary [tools](#list-of-tools) for coding workflows, but an LLM is required to do the actual work,
+Serena provides the necessary [tools](https://oraios.github.io/serena/01-about/035_tools.html) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.
-
-For example, **supercharge the performance of Claude Code** with a [one-line shell command](#claude-code).
 
 In general, Serena can be integrated with an LLM in several ways:
 
@@ -42,7 +40,7 @@ In general, Serena can be integrated with an LLM in several ways:
 * by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/03-special-guides/custom_agent.md).
   Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
 
-### Serena in Action
+## Serena in Action
 
 #### Demonstration 1: Efficient Operation in Claude Code
 
@@ -75,31 +73,6 @@ AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Haskell, J
 > [!IMPORTANT]
 > Some languages require additional dependencies to be installed; see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
-> [!TIP]
-> Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
-> see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).
-
-### Community Feedback
-
-Most users report that Serena has strong positive effects on the results of their coding agents, even when used within
-very capable agents like Claude Code. Serena is often described to be a [game changer](https://www.reddit.com/r/ClaudeAI/comments/1lfsdll/try_out_serena_mcp_thank_me_later/), providing an enormous [productivity boost](https://www.reddit.com/r/ClaudeCode/comments/1mguoia/absolutely_insane_improvement_of_claude_code).
-
-Serena excels at navigating and manipulating complex codebases, providing tools that support precise code retrieval and editing in the presence of large, strongly structured codebases.
-However, when dealing with tasks that involve only very few/small files, you may not benefit from including Serena on top of your existing coding agent. 
-In particular, when writing code from scratch, Serena will not provide much value initially, as the more complex structures that Serena handles more gracefully than simplistic, file-based approaches are yet to be created.
-
-Several videos and blog posts have talked about Serena:
-
-* YouTube:
-    * [AI Labs](https://www.youtube.com/watch?v=wYWyJNs1HVk&t=1s)
-    * [Yo Van Eyck](https://www.youtube.com/watch?v=UqfxuQKuMo8&t=45s)
-    * [JeredBlu](https://www.youtube.com/watch?v=fzPnM3ySmjE&t=32s)
-
-* Blog posts:
-    * [Serena's Design Principles](https://medium.com/@souradip1000/deconstructing-serenas-mcp-powered-semantic-code-understanding-architecture-75802515d116)
-    * [Serena with Claude Code (in Japanese)](https://blog.lai.so/serena/)
-    * [Turning Claude Code into a Development Powerhouse](https://robertmarshall.dev/blog/turning-claude-code-into-a-development-powerhouse/)
-
 ## Quick Start
 
 Serena is managed with **uv**. If you don’t already have it installed, you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/).
@@ -118,6 +91,27 @@ To get started as quickly as possible, you can directly enable the Serena MCP se
 ## User Guide
 
 Please refer to the [user guide](https://oraios.github.io/serena/) for detailed instructions on how to use Serena effectively.
+
+## Community Feedback
+
+Most users report that Serena has strong positive effects on the results of their coding agents, even when used within
+very capable agents like Claude Code. Serena is often described to be a [game changer](https://www.reddit.com/r/ClaudeAI/comments/1lfsdll/try_out_serena_mcp_thank_me_later/), providing an enormous [productivity boost](https://www.reddit.com/r/ClaudeCode/comments/1mguoia/absolutely_insane_improvement_of_claude_code).
+
+Serena excels at navigating and manipulating complex codebases, providing tools that support precise code retrieval and editing in the presence of large, strongly structured codebases.
+However, when dealing with tasks that involve only very few/small files, you may not benefit from including Serena on top of your existing coding agent.
+In particular, when writing code from scratch, Serena will not provide much value initially, as the more complex structures that Serena handles more gracefully than simplistic, file-based approaches are yet to be created.
+
+Several videos and blog posts have talked about Serena:
+
+* YouTube:
+    * [AI Labs](https://www.youtube.com/watch?v=wYWyJNs1HVk&t=1s)
+    * [Yo Van Eyck](https://www.youtube.com/watch?v=UqfxuQKuMo8&t=45s)
+    * [JeredBlu](https://www.youtube.com/watch?v=fzPnM3ySmjE&t=32s)
+
+* Blog posts:
+    * [Serena's Design Principles](https://medium.com/@souradip1000/deconstructing-serenas-mcp-powered-semantic-code-understanding-architecture-75802515d116)
+    * [Serena with Claude Code (in Japanese)](https://blog.lai.so/serena/)
+    * [Turning Claude Code into a Development Powerhouse](https://robertmarshall.dev/blog/turning-claude-code-into-a-development-powerhouse/)
 
 ## Acknowledgements
 
@@ -148,16 +142,12 @@ what it is today.
 We built Serena on top of multiple existing open-source technologies, the most important ones being:
 
 1. [multilspy](https://github.com/microsoft/multilspy).
-   A library which wraps language server implementations and adapts them for interaction via Python
-   and which provided the basis for our library Solid-LSP (src/solidlsp).
+   A library which wraps language server implementations and adapts them for interaction via Python.
+   It provided the basis for our library Solid-LSP (`src/solidlsp`).
    Solid-LSP provides pure synchronous LSP calls and extends the original library with the symbolic logic
    that Serena required.
 2. [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk)
-3. [Agno](https://github.com/agno-agi/agno) and
-   the associated [agent-ui](https://github.com/agno-agi/agent-ui),
-   which we use to allow Serena to work with any model, beyond the ones
-   supporting the MCP.
-4. All the language servers that we use through Solid-LSP.
+3. All the language servers that we use through Solid-LSP.
 
 Without these projects, Serena would not have been possible (or would have been significantly more difficult to build).
 
@@ -173,54 +163,3 @@ It is also relatively straightforward to add [support for a new programming lang
 
 We look forward to seeing what the community will come up with!
 For details on contributing, see [contributing guidelines](/CONTRIBUTING.md).
-
-## List of Tools
-
-Here is the list of Serena's default tools with a short description (output of `uv run serena tools list`):
-
-* `activate_project`: Activates a project based on the project name or path.
-* `check_onboarding_performed`: Checks whether project onboarding was already performed.
-* `create_text_file`: Creates/overwrites a file in the project directory.
-* `delete_memory`: Deletes a memory from Serena's project-specific memory store.
-* `execute_shell_command`: Executes a shell command.
-* `find_file`: Finds files in the given relative paths
-* `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
-* `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
-* `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
-* `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.
-* `insert_after_symbol`: Inserts content after the end of the definition of a given symbol.
-* `insert_before_symbol`: Inserts content before the beginning of the definition of a given symbol.
-* `list_dir`: Lists files and directories in the given directory (optionally with recursion).
-* `list_memories`: Lists memories in Serena's project-specific memory store.
-* `onboarding`: Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
-* `prepare_for_new_conversation`: Provides instructions for preparing for a new conversation (in order to continue with the necessary context).
-* `read_file`: Reads a file within the project directory.
-* `read_memory`: Reads the memory with the given name from Serena's project-specific memory store.
-* `rename_symbol`: Renames a symbol throughout the codebase using language server refactoring capabilities.
-* `replace_regex`: Replaces content in a file by using regular expressions.
-* `replace_symbol_body`: Replaces the full definition of a symbol.
-* `search_for_pattern`: Performs a search for a pattern in the project.
-* `think_about_collected_information`: Thinking tool for pondering the completeness of collected information.
-* `think_about_task_adherence`: Thinking tool for determining whether the agent is still on track with the current task.
-* `think_about_whether_you_are_done`: Thinking tool for determining whether the task is truly completed.
-* `write_memory`: Writes a named memory (for future reference) to Serena's project-specific memory store.
-
-There are several tools that are disabled by default, and have to be enabled explicitly, e.g., through the context or modes.
-Note that several of our default contexts do enable some of these tools. For example, the `desktop-app` context enables the `execute_shell_command` tool.
-
-The full list of optional tools is (output of `uv run serena tools list --only-optional`):
-
-* `delete_lines`: Deletes a range of lines within a file.
-* `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
-* `initial_instructions`: Gets the initial instructions for the current project.
-    Should only be used in settings where the system prompt cannot be set,
-    e.g. in clients you have no control over, like Claude Desktop.
-* `insert_at_line`: Inserts content at a given line in a file.
-* `jet_brains_find_referencing_symbols`: Finds symbols that reference the given symbol
-* `jet_brains_find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filtered by type).
-* `jet_brains_get_symbols_overview`: Retrieves an overview of the top-level symbols within a specified file
-* `remove_project`: Removes a project from the Serena configuration.
-* `replace_lines`: Replaces a range of lines within a file with new content.
-* `restart_language_server`: Restarts the language server, may be necessary when edits not through Serena happen.
-* `summarize_changes`: Provides instructions for summarizing the changes made to the codebase.
-* `switch_modes`: Activates modes by providing a list of their names
