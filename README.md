@@ -75,22 +75,29 @@ AL, Bash, C#, C/C++, Clojure, Dart, Elixir, Elm, Erlang, Fortran, Go, Haskell, J
 
 ## Quick Start
 
-Serena is managed with **uv**. If you don’t already have it installed, you will need to [install it](https://docs.astral.sh/uv/getting-started/installation/).
+**Prerequisites**. Serena is managed by *uv*. If you don’t already have it, you need to [install uv](https://docs.astral.sh/uv/getting-started/installation/) before proceeding.
 
-To get started as quickly as possible, you can directly enable the Serena MCP server in your client of choice (by following the links provided): 
+**Starting the MCP Server**. The easiest way to start the Serena MCP server is by running the latest version from GitHub using uvx.
+Issue this command to see available options:
 
-* For coding with Claude, we recommend using Serena through [Claude Code](https://oraios.github.io/serena/02-usage/030_clients.html#claude-code) or [Claude Desktop](#claude-desktop). You can also use Serena in [Codex](https://oraios.github.io/serena/02-usage/030_clients.html#codex) and a wide variety of [other clients](https://oraios.github.io/serena/02-usage/030_clients.html#other-clients).
-* If you want a GUI experience outside an IDE, you can use one of the many [local GUIs](https://oraios.github.io/serena/02-usage/030_clients.html#local-guis-and-agent-frameworks) that support MCP servers.
-  You can also connect Serena to many web clients (including ChatGPT) using [mcpo](https://oraios.github.io/serena/03-special-guides/serena_on_chatgpt.html).
-* If you want to integrate Serena with your IDE, see the section on [other MCP clients](https://oraios.github.io/serena/02-usage/030_clients.html#mcp-enabled-ides-and-coding-clients-cline-roo-code-cursor-windsurf-etc).
+```bash
+uvx --from git+https://github.com/oraios/serena serena start-mcp-server --help
+```
+
+**Configuring Your Client**. To connect Serena to your preferred MCP client, you typically need to [configure a launch command in your client](https://oraios.github.io/serena/02-usage/030_clients.html).
+Follow the link for specific instructions on how to set up Serena for Claude Code, Codex, Claude Desktop, MCP-enabled IDEs and other clients (such as local and web-based GUIs). 
 
 > [!TIP]
 > While getting started quickly is easy, Serena is a powerful toolkit with many configuration options.
-> We highly recommend reading through the [user guide](https://oraios.github.io/serena/) to get the most out of Serena.
+> We highly recommend reading through the [user guide](https://oraios.github.io/serena/02-usage/000_intro.html) to get the most out of Serena.
+> 
+> Specifically, we recommend to read about ...
+>   * [Serena's project-based workflow](https://oraios.github.io/serena/02-usage/040_workflow.html) and
+>   * [configuring Serena](https://oraios.github.io/serena/02-usage/050_configuration.html).
 
 ## User Guide
 
-Please refer to the [user guide](https://oraios.github.io/serena/) for detailed instructions on how to use Serena effectively.
+Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_intro.html) for detailed instructions on how to use Serena effectively.
 
 ## Community Feedback
 
