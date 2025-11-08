@@ -215,6 +215,9 @@ pylint.html
 # Cache is in .multilspy 
 **/.multilspy/**
 
+# temporary and backup files
+*.bak
+*.tmp
 tmp/
 
 .serena/
