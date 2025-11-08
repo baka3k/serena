@@ -41,6 +41,11 @@ Explore the CLI to see some of the customization options that serena provides (m
     uv run --directory /abs/path/to/serena serena
     ```
 
+:::{note}
+Adding the `--directory` option results in the working directory being set to the Serena directory.
+As a consequence, you will need to specify paths when using CLI commands that would otherwise operate on the current directory.
+:::
+
 (docker)=
 ### Using Docker (Experimental)
 
@@ -158,6 +163,61 @@ To get help on a specific command, run:
 
     <serena> <command> --help
 
+In general, add `--help` to any command or sub-command to get information about its usage and available options.
+
 Here are some examples of commands you might find useful:
 
-    # TODO
+```bash
+# get help about a sub-command
+<serena> tools list --help
+
+# list all available tools
+<serena> tools list --all
+
+# get detailed description of a specific tool
+<serena> tools description find_symbol
+
+# creating a new Serena project in the current directory 
+<serena> project generate-yml
+
+# indexing the project in the current directory
+<serena> project index
+
+# run a health check on the project in the current directory
+<serena> project health-check
+
+# check if a path is ignored by the project
+<serena> project is_ignored_path path/to/check
+
+# edit Serena's configuration file
+<serena> config edit
+
+# list available contexts
+<serena> context list
+
+# create a new context
+<serena> context create my-custom-context
+
+# edit a custom context
+<serena> context edit my-custom-context
+
+# list available modes
+<serena> mode list
+
+# create a new mode
+<serena> mode create my-custom-mode
+
+# edit a custom mode
+<serena> mode edit my-custom-mode
+
+# list available prompt definitions
+<serena> prompts list
+
+# create an override for internal prompts
+<serena> prompts create-override prompt-name
+
+# edit a prompt override
+<serena> prompts edit-override prompt-name
+```
+
+Explore the full set of commands and options using the CLI itself!
