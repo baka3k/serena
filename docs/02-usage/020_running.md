@@ -41,9 +41,10 @@ Explore the CLI to see some of the customization options that serena provides (m
     uv run --directory /abs/path/to/serena serena
     ```
 
+(docker)=
 #### Using Docker (Experimental)
 
-⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](DOCKER.md) for important caveats before using it.
+⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](https://github.com/oraios/serena/blob/main/DOCKER.md) for important caveats before using it.
 
 You can run the Serena MCP server directly via docker as follows,
 assuming that the projects you want to work on are all located in `/path/to/your/projects`:
@@ -60,7 +61,7 @@ Replace `/path/to/your/projects` with the absolute path to your projects directo
 
 Alternatively, use docker compose with the `compose.yml` file provided in the repository.
 
-See the [Docker documentation](DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
+See the [Docker documentation](https://github.com/oraios/serena/blob/main/DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
 
 #### Using Nix
 

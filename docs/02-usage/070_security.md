@@ -9,4 +9,4 @@ Therefore, to reduce the risk of unintended consequences when using Serena, it i
   * monitor tool executions carefully (e.g. via your MCP client, provided that it supports it),
   * consider enabling read-only mode for your project (set `read_only: True` in project.yml) if you only want to analyze code without modifying it,
   * restrict the set of allowed tools via the [configuration](050_configuration),
-  * use a sandboxed environment for running Serena (e.g. by [using Docker](020_running.md#using-docker-experimental)).
+  * use a sandboxed environment for running Serena (e.g. by [using Docker](docker)).

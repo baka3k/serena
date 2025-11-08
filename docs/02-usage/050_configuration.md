@@ -17,7 +17,7 @@ Serena is configured in four places:
 
    (or use the `--directory` command version).
 2. In the arguments passed to the `start-mcp-server` in your client's config (see below),
-   which will apply to all sessions started by the respective client. In particular, the [context](#contexts) parameter
+   which will apply to all sessions started by the respective client. In particular, the [context](contexts) parameter
    should be set appropriately for Serena to be best adjusted to existing tools and capabilities of your client.
    See for a detailed explanation. You can override all entries from the `serena_config.yml` through command line arguments.
 3. In the `.serena/project.yml` file within your project. This will hold project-level configuration that is used whenever

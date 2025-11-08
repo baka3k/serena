@@ -61,4 +61,4 @@ With Serena, we provide direct, out-of-the-box support for:
   (requires installation of ZLS - Zig Language Server)
 
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
-see Serena's [memory on that](.serena/memories/adding_new_language_support_guide.md).
+see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).

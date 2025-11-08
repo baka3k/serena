@@ -36,6 +36,7 @@ For instance, when using `uvx`, run
 
 After creation, you can adjust the project settings in the generated `.serena/project.yml` file.
 
+(indexing)=
 #### Indexing
 
 Especially for larger project, it is advisable to index the project after creation (in order to avoid

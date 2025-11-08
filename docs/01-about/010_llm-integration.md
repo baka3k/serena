@@ -13,5 +13,5 @@ In general, Serena can be integrated with an LLM in several ways:
     * Extensions like Cline or Roo Code
     * Local clients like [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp), [Jan](https://jan.ai/docs/mcp-examples/browser/browserbase#enable-mcp), [Agno](https://docs.agno.com/introduction/playground) and others
 * by using [mcpo to connect it to ChatGPT](../03-special-guides/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling via OpenAPI.
-* by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/custom_agent.md).
+* by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](../03-special-guides/custom_agent).
   Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.
