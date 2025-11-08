@@ -1,9 +1,7 @@
 ## LLM Integration
 
-Serena provides the necessary [tools](#list-of-tools) for coding workflows, but an LLM is required to do the actual work,
+Serena provides the necessary [tools](035_tools) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.
-
-For example, **supercharge the performance of Claude Code** with a [one-line shell command](#claude-code).
 
 In general, Serena can be integrated with an LLM in several ways:
 
@@ -14,6 +12,6 @@ In general, Serena can be integrated with an LLM in several ways:
     * IDEs like VSCode, Cursor or IntelliJ,
     * Extensions like Cline or Roo Code
     * Local clients like [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp), [Jan](https://jan.ai/docs/mcp-examples/browser/browserbase#enable-mcp), [Agno](https://docs.agno.com/introduction/playground) and others
-* by using [mcpo to connect it to ChatGPT](docs/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling via OpenAPI.
+* by using [mcpo to connect it to ChatGPT](../03-special-guides/serena_on_chatgpt.md) or other clients that don't support MCP but do support tool calling via OpenAPI.
 * by incorporating Serena's tools into an agent framework of your choice, as illustrated [here](docs/custom_agent.md).
   Serena's tool implementation is decoupled from the framework-specific code and can thus easily be adapted to any agent framework.

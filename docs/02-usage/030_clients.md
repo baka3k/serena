@@ -132,7 +132,7 @@ There are many terminal-based coding assistants that support MCP servers, such a
  * [opencode](https://github.com/sst/opencode).
 
 They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
-by writing your own context, modes or prompts to adjust it to the client's respective internal capabilities (and your general worflow).
+by writing your own context, modes or prompts to adjust it to the client's respective internal capabilities (and your general workflow).
 
 #### MCP-Enabled IDEs and Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
 

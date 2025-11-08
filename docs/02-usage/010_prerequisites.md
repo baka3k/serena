@@ -1,6 +1,6 @@
 ## Prerequisites
 
-### uv
+### Package Manager: uv
 
 Serena is managed by `uv`.
 If you do not have it yet, install it following the instructions [here](https://docs.astral.sh/uv/getting-started/installation/).

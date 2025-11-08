@@ -33,7 +33,7 @@ class Intelephense(SolidLanguageServer):
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         # For PHP projects, we should ignore:
-        # - vendor: third-party dependencies managed by Composer
+        # - vendor: third-party dependencies <managed by Composer
         # - node_modules: if the project has JavaScript components
         # - cache: commonly used for caching
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules", "vendor", "cache"]

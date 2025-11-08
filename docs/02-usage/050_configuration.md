@@ -39,6 +39,7 @@ want to use Serena.
 Serena's behavior and toolset can be adjusted using contexts and modes.
 These allow for a high degree of customization to best suit your workflow and the environment Serena is operating in.
 
+(contexts)=
 #### Contexts
 
 A **context** defines the general environment in which Serena is operating.
@@ -67,6 +68,7 @@ You can manage contexts using the `context` command,
 
 where `<serena>` is [your way of running Serena](020_running).
 
+(modes)=
 #### Modes
 
 Modes further refine Serena's behavior for specific types of tasks or interaction styles. Multiple modes can be active simultaneously, allowing you to combine their effects. Modes influence the system prompt and can also alter the set of available tools by excluding certain ones.

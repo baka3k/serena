@@ -84,3 +84,48 @@ Every file in the `.serena/memories/` directory is a memory file.
 Whenever Serena starts working on a project, the list of memories is
 provided, and the agent can decide to read them.
 We found that memories can significantly improve the user experience with Serena.
+
+
+### Preparing Your Project
+
+When using Serena to work on your project, it can be helpful to follow a few best practices.
+
+#### Structure Your Codebase
+
+Serena uses the code structure for finding, reading and editing code. This means that it will
+work well with well-structured code but may perform poorly on fully unstructured one (like a "God class"
+with enormous, non-modular functions).
+
+Furthermore, for languages that are not statically typed, the use of type annotations (if supported) 
+are highly beneficial.
+
+#### Start from a Clean State
+
+It is best to start a code generation task from a clean git state. Not only will
+this make it easier for you to inspect the changes, but also the model itself will
+have a chance of seeing what it has changed by calling `git diff` and thereby
+correct itself or continue working in a followup conversation if needed.
+
+##### Use Platform-Native Line Endings
+
+**Important**: since Serena will write to files using the system-native line endings
+and it might want to look at the git diff, it is important to
+set `git config core.autocrlf` to `true` on Windows.
+With `git config core.autocrlf` set to `false` on Windows, you may end up with huge diffs
+due to line endings only. 
+It is generally a good idea to globally enable this git setting on Windows:
+
+```shell
+git config --global core.autocrlf true
+```
+
+##### Logging, Linting, and Automated Tests
+
+Serena can successfully complete tasks in an _agent loop_, where it iteratively
+acquires information, performs actions, and reflects on the results.
+However, Serena cannot use a debugger; it must rely on the results of program executions,
+linting results, and test results to assess the correctness of its actions.
+Therefore, software that is designed to meaningful interpretable outputs (e.g. log messages)
+and that has a good test coverage is much easier to work with for Serena.
+
+We generally recommend to start an editing task from a state where all linting checks and tests pass.

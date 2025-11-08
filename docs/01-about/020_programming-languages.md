@@ -25,20 +25,20 @@ With Serena, we provide direct, out-of-the-box support for:
   (requires Elm compiler)
 * **Erlang**  
   (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls), experimental, might be slow or hang)
-* **Fortran**   
+* **Fortran**  
   (requires installation of fortls: `pip install fortls`)
-* **Go**   
+* **Go**  
   (requires installation of `gopls`)
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Java**  
   (_Note_: Uses quirky symbol names for methods that include the full method signature; this causes a variety of problems!)
-* **Javascript**
+* **JavaScript**
 * **Julia**
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
 * **Lua**
-* **Markdown**
+* **Markdown**  
   (must be explicitly specified via `--language markdown` when generating project config, primarily useful for documentation-heavy projects)
 * **Nix**  
   (requires nixd installation)
@@ -47,9 +47,9 @@ With Serena, we provide direct, out-of-the-box support for:
 * **PHP**  
   (uses Intelephense LSP; set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features)
 * **Python**
-* **R**   
+* **R**  
   (requires installation of the `languageserver` R package)
-* **Ruby**
+* **Ruby**  
   (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp), specify ruby_solargraph as your language to use the previous solargraph based implementation)
 * **Rust**  
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)

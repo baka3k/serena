@@ -18,5 +18,5 @@ Serena comes with built-in tools for monitoring and managing the current session
 
   This is mainly supported on Windows, but it may also work on Linux; macOS is unsupported.
 
-Both can be enabled, configured or disabled in Serena's [configuration](050_configuration) file (`serena_config.yml`).
+Both can be configured in Serena's [configuration](050_configuration) file (`serena_config.yml`).
 If enabled, they will automatically be opened as soon as the Serena agent/MCP server is started.
