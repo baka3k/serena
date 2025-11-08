@@ -1,6 +1,6 @@
-## Acknowledgements
+# Acknowledgements
 
-### Sponsors
+## Sponsors
 
 We are very grateful to our [sponsors](https://github.com/sponsors/oraios), who help us drive Serena's development. 
 The core team (the founders of [Oraios AI](https://oraios-ai.de/)) put in a lot of work in order to turn Serena into a useful open source project.
@@ -13,13 +13,13 @@ If you find this project useful to your work, or would like to accelerate the de
 We are proud to announce that the Visual Studio Code team, together with Microsoft’s Open Source Programs Office and GitHub Open Source
 have decided to sponsor Serena with a one-time contribution!
 
-### Community Contributions
+## Community Contributions
 
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
 
-### Technologies
+## Technologies
 
 We built Serena on top of multiple existing open-source technologies, the most important ones being:
 

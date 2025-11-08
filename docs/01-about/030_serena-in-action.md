@@ -1,12 +1,12 @@
-## Serena in Action
+# Serena in Action
 
-### Demonstration 1: Efficient Operation in Claude Code
+## Demonstration 1: Efficient Operation in Claude Code
 
 A demonstration of Serena efficiently retrieving and editing code within Claude Code, thereby saving tokens and time. Efficient operations are not only useful for saving costs, but also for generally improving the generated code's quality. This effect may be less pronounced in very small projects, but often becomes of crucial importance in larger ones.
 
 https://github.com/user-attachments/assets/ab78ebe0-f77d-43cc-879a-cc399efefd87
 
-### Demonstration 2: Serena in Claude Desktop
+## Demonstration 2: Serena in Claude Desktop
 
 A demonstration of Serena implementing a small feature for itself (a better log GUI) with Claude Desktop.
 Note how Serena's tools enable Claude to find and edit the right symbols.

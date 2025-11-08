@@ -1,11 +1,11 @@
-## Comparison with Other Coding Agents
+# Comparison with Other Coding Agents
 
 To our knowledge, Serena is the first fully-featured coding agent where the
 entire functionality is made available through an MCP server, 
 thus not requiring additional API keys or subscriptions if access to an LLM
 is already available through an MCP-compatible client.
 
-### Subscription-Based Coding Agents
+## Subscription-Based Coding Agents
 
 Many prominent subscription-based coding agents are parts of IDEs like
 Windsurf, Cursor and VSCode.
@@ -26,7 +26,7 @@ More technical differences are:
 * Serena is open-source and has a small codebase, so it can be easily extended
   and modified.
 
-### API-Based Coding Agents
+## API-Based Coding Agents
 
 An alternative to subscription-based agents are API-based agents like Claude
 Code, Cline, Aider, Roo Code and others, where the usage costs map directly
@@ -40,7 +40,7 @@ The main difference between Serena and other API-based agents is that Serena can
 also be used as an MCP server, thus not requiring
 an API key and bypassing the API costs.
 
-### Other MCP-Based Coding Agents
+## Other MCP-Based Coding Agents
 
 There are other MCP servers designed for coding, like [DesktopCommander](https://github.com/wonderwhy-er/DesktopCommanderMCP) and
 [codemcp](https://github.com/ezyang/codemcp).

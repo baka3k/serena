@@ -1,4 +1,4 @@
-## Security Considerations
+# Security Considerations
 
 As fundamental abilities for a coding agent, Serena contains tools for executing shell commands and modifying files.
 Therefore, if the respective tool calls are not monitored or restricted (and execution takes place in a sensitive environment), 

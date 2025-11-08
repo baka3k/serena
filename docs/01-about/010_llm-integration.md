@@ -1,4 +1,4 @@
-## LLM Integration
+# LLM Integration
 
 Serena provides the necessary [tools](035_tools) for coding workflows, but an LLM is required to do the actual work,
 orchestrating tool use.

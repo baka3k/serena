@@ -1,4 +1,4 @@
-## Configuration
+# Configuration
 
 Serena is very flexible in terms of configuration. While for most users, the default configurations will work,
 you can fully adjust it to your needs by editing a few yaml files. You can disable tools, change Serena's instructions
@@ -34,13 +34,13 @@ Serena is configured in four places:
 After the initial setup, continue with one of the sections below, depending on how you
 want to use Serena.
 
-### Modes and Contexts
+## Modes and Contexts
 
 Serena's behavior and toolset can be adjusted using contexts and modes.
 These allow for a high degree of customization to best suit your workflow and the environment Serena is operating in.
 
 (contexts)=
-#### Contexts
+### Contexts
 
 A **context** defines the general environment in which Serena is operating.
 It influences the initial system prompt and the set of available tools.
@@ -69,7 +69,7 @@ You can manage contexts using the `context` command,
 where `<serena>` is [your way of running Serena](020_running).
 
 (modes)=
-#### Modes
+### Modes
 
 Modes further refine Serena's behavior for specific types of tasks or interaction styles. Multiple modes can be active simultaneously, allowing you to combine their effects. Modes influence the system prompt and can also alter the set of available tools by excluding certain ones.
 

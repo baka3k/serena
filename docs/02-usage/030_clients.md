@@ -1,4 +1,4 @@
-## Configuring Your MCP Client
+# Configuring Your MCP Client
 
 In the following, we provide default configurations for popular MCP-enabled clients.
 
@@ -6,7 +6,7 @@ Depending on your needs, you might want to customize Serena's behaviour by
   * [adding command-line arguments](mcp-args)
   * [adjusting configuration](050_configuration).
 
-### Claude Code
+## Claude Code
 
 Serena is a great way to make Claude Code both cheaper and more powerful!
 
@@ -32,7 +32,7 @@ Note:
     
 Be sure to use at least `v1.0.52` of Claude Code (as earlier versions do not read MCP server system prompts upon startup). 
 
-### Codex
+## Codex
 
 Serena works with OpenAI's Codex CLI out of the box, but you have to use the `codex` context for it to work properly. (The technical reason is that Codex doesn't fully support the MCP specifications, so some massaging of tools is required.).
 
@@ -59,7 +59,7 @@ that was already taken).
 
 > Codex will often show the tools as `failed` even though they are successfully executed. This is not a problem, seems to be a bug in Codex. Despite the error message, everything works as expected.
 
-### Claude Desktop
+## Claude Desktop
 
 On Windows and macOS there are official [Claude Desktop applications by Anthropic](https://claude.ai/download), for Linux there is an [open-source
 community version](https://github.com/aaddrick/claude-desktop-debian).
@@ -119,9 +119,9 @@ After restarting, you should see Serena's tools in your chat interface (notice t
 
 For more information on MCP servers with Claude Desktop, see [the official quick start guide](https://modelcontextprotocol.io/quickstart/user).
 
-### Other Clients
+## Other Clients
 
-#### Terminal-Based Clients
+### Terminal-Based Clients
 
 There are many terminal-based coding assistants that support MCP servers, such as
 
@@ -134,7 +134,7 @@ There are many terminal-based coding assistants that support MCP servers, such a
 They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
 by writing your own context, modes or prompts to adjust it to the client's respective internal capabilities (and your general workflow).
 
-#### MCP-Enabled IDEs and Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
+### MCP-Enabled IDEs and Coding Clients (Cline, Roo-Code, Cursor, Windsurf, etc.)
 
 Being an MCP Server, Serena can be included in any MCP Client. Most of the popular
 existing coding assistants (e.g. IDE extensions) and AI-enabled IDEs themselves support connections
@@ -143,7 +143,7 @@ to MCP Servers. Serena generally boosts performance by providing efficient tools
 We generally **recommend to use the `ide-assistant` context** for these integrations by adding the arguments `--context ide-assistant` 
 in order to reduce tool duplication.
 
-#### Local GUIs and Agent Frameworks
+### Local GUIs and Agent Frameworks
 
 Over the last months, several technologies have emerged that allow you to run a local GUI client
 and connect it to an MCP server. The respective applications will typically work with Serena out of the box.

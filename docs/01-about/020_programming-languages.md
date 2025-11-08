@@ -1,4 +1,4 @@
-## Language Support
+# Language Support
 
 Serena's semantic code analysis capabilities build on **language servers** using the widely implemented
 language server protocol (LSP). The LSP provides a set of versatile code querying

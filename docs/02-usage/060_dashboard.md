@@ -1,4 +1,4 @@
-## The Dashboard and GUI Tool
+# The Dashboard and GUI Tool
 
 Serena comes with built-in tools for monitoring and managing the current session:
 

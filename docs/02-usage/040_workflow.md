@@ -1,4 +1,4 @@
-## The Project Workflow
+# The Project Workflow
 
 Serena uses a project-based workflow.
 A **project** is simply a directory on your filesystem that contains code and other files
@@ -12,13 +12,13 @@ setting up a project with Serena typically involves the following steps:
 3. **Onboarding**: Getting Serena familiar with the project (creating memories)
 4. **Working on coding tasks**: Using Serena to help you with actual coding tasks in the project
 
-### Project Creation & Indexing
+## Project Creation & Indexing
 
 You can create a project either  
  * implicitly, by just activating a directory as a project while already in a conversation; this will use default settings for your project (skip to the next section).
  * explicitly, using the project creation command, or
 
-#### Explicit Project Creation
+### Explicit Project Creation
 
 To explicitly create a project, use the following command while in the project directory:
 
@@ -37,7 +37,7 @@ For instance, when using `uvx`, run
 After creation, you can adjust the project settings in the generated `.serena/project.yml` file.
 
 (indexing)=
-#### Indexing
+### Indexing
 
 Especially for larger project, it is advisable to index the project after creation (in order to avoid
 delays during MCP server startup or the first tool application):
@@ -48,7 +48,7 @@ While in the project directory, run this command:
 
 Indexing has to be called only once. During regular usage, Serena will automatically update the index whenever files change.
 
-### Project Activation
+## Project Activation
    
 Project activation makes Serena aware of the project you want to work with.
 You can either choose to do this
@@ -63,7 +63,7 @@ You can either choose to do this
    (e.g. when working on a fixed project in `ide-assistant` mode): `--project <path|name>`
 
 
-### Onboarding & Memories
+## Onboarding & Memories
 
 By default, Serena will perform an **onboarding process** when
 it is started for the first time for a project.
@@ -87,11 +87,11 @@ provided, and the agent can decide to read them.
 We found that memories can significantly improve the user experience with Serena.
 
 
-### Preparing Your Project
+## Preparing Your Project
 
 When using Serena to work on your project, it can be helpful to follow a few best practices.
 
-#### Structure Your Codebase
+### Structure Your Codebase
 
 Serena uses the code structure for finding, reading and editing code. This means that it will
 work well with well-structured code but may perform poorly on fully unstructured one (like a "God class"
@@ -100,14 +100,14 @@ with enormous, non-modular functions).
 Furthermore, for languages that are not statically typed, the use of type annotations (if supported) 
 are highly beneficial.
 
-#### Start from a Clean State
+### Start from a Clean State
 
 It is best to start a code generation task from a clean git state. Not only will
 this make it easier for you to inspect the changes, but also the model itself will
 have a chance of seeing what it has changed by calling `git diff` and thereby
 correct itself or continue working in a followup conversation if needed.
 
-##### Use Platform-Native Line Endings
+### Use Platform-Native Line Endings
 
 **Important**: since Serena will write to files using the system-native line endings
 and it might want to look at the git diff, it is important to
@@ -120,7 +120,7 @@ It is generally a good idea to globally enable this git setting on Windows:
 git config --global core.autocrlf true
 ```
 
-##### Logging, Linting, and Automated Tests
+### Logging, Linting, and Automated Tests
 
 Serena can successfully complete tasks in an _agent loop_, where it iteratively
 acquires information, performs actions, and reflects on the results.

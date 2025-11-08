@@ -1,4 +1,4 @@
-## List of Tools
+# List of Tools
 
 Find the full list of Serena's tools below (output of `<serena> tools list --all`).
 
