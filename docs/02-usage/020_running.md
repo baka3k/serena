@@ -44,7 +44,9 @@ Explore the CLI to see some of the customization options that serena provides (m
 (docker)=
 ### Using Docker (Experimental)
 
-⚠️ Docker support is currently experimental with several limitations. Please read the [Docker documentation](https://github.com/oraios/serena/blob/main/DOCKER.md) for important caveats before using it.
+:::{warning}
+Docker support is currently experimental with several limitations. 
+:::
 
 You can run the Serena MCP server directly via docker as follows,
 assuming that the projects you want to work on are all located in `/path/to/your/projects`:
@@ -61,7 +63,7 @@ Replace `/path/to/your/projects` with the absolute path to your projects directo
 
 Alternatively, use docker compose with the `compose.yml` file provided in the repository.
 
-See the [Docker documentation](https://github.com/oraios/serena/blob/main/DOCKER.md) for detailed setup instructions, configuration options, and known limitations.
+See our [Docker Setup](https://github.com/oraios/serena/blob/main/DOCKER.md) documentation for more detailed setup instructions, configuration options, and known limitations.
 
 ### Using Nix
 
@@ -88,6 +90,13 @@ The typical usage involves the client (e.g. Claude Code, Codex or Cursor) runnin
 the MCP server as a subprocess and using the process' stdin/stdout streams to communicate with it.
 In order to launch the server, the client thus needs to be provided with the command to run the MCP server.
 
+:::{note}
+MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
+necessarily has to be started by the client in order for communication to take place via the server's standard input/output streams.
+In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and
+therefore needs to be configured with a launch command.
+:::
+
 Communication over stdio is the default for the Serena MCP server, so in the simplest
 case, you can simply run the `start-mcp-server` command without any additional options.
  
@@ -96,14 +105,9 @@ case, you can simply run the `start-mcp-server` command without any additional o
 For example, to run the server in stdio mode via `uvx`, you would run:
 
     uvx --from git+https://github.com/oraios/serena serena start-mcp-server 
-
-ℹ️ See the section ["Configuring Your MCP Client"](030_clients) for information on how to configure your MCP client (e.g. Claude Code, Codex, Cursor, etc.)
-to connect to the Serena MCP server.
-
-ℹ️ Note that MCP servers which use stdio as a protocol are somewhat unusual as far as client/server architectures go, as the server
-necessarily has to be started by the client in order for communication to take place via the server's standard input/output stream.
-In other words, you do not need to start the server yourself. The client application (e.g. Claude Desktop) takes care of this and
-therefore needs to be configured with a launch command.
+ 
+See the section ["Configuring Your MCP Client"](030_clients) for specific information on how to configure your MCP client (e.g. Claude Code, Codex, Cursor, etc.)
+to use such a launch command.
 
 ### Streamable HTTP Mode
 
@@ -122,7 +126,7 @@ you would run
 
 and then configure your client to connect to `http://localhost:9121/mcp`.
 
-ℹ️ Note that while SSE transport is also supported, its use is discouraged.
+Note that while the legacy SSE transport is also supported (via `--transport sse` with corresponding /sse endpoint), its use is discouraged.
 
 (mcp-args)=
 ### MCP Server Command-Line Arguments

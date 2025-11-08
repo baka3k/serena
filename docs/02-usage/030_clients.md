@@ -113,7 +113,9 @@ If you are using paths containing backslashes for paths on Windows
 
 That's it! Save the config and then restart Claude Desktop. You are ready for activating your first project.
 
-⚠️ Be sure to fully quit the Claude Desktop application, as closing Claude will just minimize it to the system tray – at least on Windows.
+:::{attention}
+Be sure to fully quit the Claude Desktop application via File / Exit, as regularly closing the application will just minimize it.
+:::
 
 After restarting, you should see Serena's tools in your chat interface (notice the small hammer icon).
 
