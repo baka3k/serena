@@ -105,8 +105,8 @@ sphinx:
     master_doc: "01-about/000_intro.md"
     html_theme_options:
       logo:
-        image_light: _static/images/serena-logo.svg
-        image_dark: _static/images/serena-logo-dark-mode.svg
+        image_light: ../resources/serena-logo.svg
+        image_dark: ../resources/serena-logo-dark-mode.svg
     autodoc_typehints_format: "short"
     autodoc_member_order: "bysource"
     autoclass_content: "both"
