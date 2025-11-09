@@ -188,6 +188,9 @@ class SerenaAgent:
                 process = multiprocessing.Process(target=self._open_dashboard, args=(dashboard_url,))
                 process.start()
                 process.join(timeout=1)
+            # inform the GUI window (if any)
+            if self._gui_log_viewer is not None:
+                self._gui_log_viewer.set_dashboard_url(dashboard_url)
 
     def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
         """
