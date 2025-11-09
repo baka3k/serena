@@ -639,7 +639,7 @@ class Dashboard {
             html += '<div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">';
             html += '<div style="flex: 1; padding: 10px; background: var(--bg-secondary); border-radius: 4px; font-size: 13px; border: 1px solid var(--border-color);">';
             html += '<span style="color: var(--text-muted);">📖</span> ';
-            html += '<a href="https://github.com/oraios/serena#configuration" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
+            html += '<a href="https://oraios.github.io/serena/02-usage/050_configuration.html" target="_blank" rel="noopener noreferrer" style="color: var(--btn-primary); text-decoration: none; font-weight: 500;">View Configuration Guide</a>';
             html += '</div>';
             html += '<button id="edit-serena-config-btn" class="btn language-add-btn" style="white-space: nowrap; padding: 10px; ">Edit Global Serena Config</button>';
             html += '</div>';
