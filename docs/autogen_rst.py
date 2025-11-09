@@ -6,8 +6,8 @@ from typing import Optional, List
 
 log = logging.getLogger(os.path.basename(__file__))
 
-TOP_LEVEL_PACKAGE = "sensai"
-PROJECT_NAME = "sensAI"
+TOP_LEVEL_PACKAGE = "serena"
+PROJECT_NAME = "Serena"
 
 def module_template(module_qualname: str):
     module_name = module_qualname.split(".")[-1]
