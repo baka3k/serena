@@ -150,6 +150,11 @@ class SerenaDashboardAPI:
             return send_from_directory(SERENA_DASHBOARD_DIR, "index.html")
 
         # API routes
+
+        @self._app.route("/heartbeat", methods=["GET"])
+        def get_heartbeat() -> dict[str, Any]:
+            return {"status": "alive"}
+
         @self._app.route("/get_log_messages", methods=["POST"])
         def get_log_messages() -> dict[str, Any]:
             request_data = request.get_json()

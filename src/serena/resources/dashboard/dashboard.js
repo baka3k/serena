@@ -188,7 +188,7 @@ class Dashboard {
         this.pollInterval = null;
         this.configPollInterval = null;
         this.executionsPollInterval = null;
-        this.failureCount = 0;
+        this.heartbeatFailureCount = 0;
 
         // jQuery elements
         this.$logContainer = $('#log-container');
@@ -387,6 +387,27 @@ class Dashboard {
             self.startConfigPolling();
             self.startExecutionsPolling();
         });
+        // Initialize heartbeat interval
+        setInterval(this.heartbeat.bind(this), 250);
+    }
+
+    heartbeat() {
+        let self = this;
+        $.ajax({
+            url: '/heartbeat',
+            type: 'GET',
+            success: function (response) {
+                self.heartbeatFailureCount = 0;
+            },
+            error: function (xhr, status, error) {
+                self.heartbeatFailureCount++;
+                console.error('Heartbeat failure; count = ', self.heartbeatFailureCount);
+                if (self.heartbeatFailureCount >= 1) {
+                    console.log('Server appears to be down, closing tab');
+                    window.close();
+                }
+            },
+        });
     }
 
     toggleMenu() {
@@ -454,8 +475,6 @@ class Dashboard {
             url: '/get_config_overview',
             type: 'GET',
             success: function (response) {
-                self.failureCount = 0;
-
                 // Check if the config data has actually changed
                 const currentConfigJson = JSON.stringify(response);
                 const hasChanged = self.lastConfigDataJson !== currentConfigJson;
@@ -477,11 +496,6 @@ class Dashboard {
                 }
             }, error: function (xhr, status, error) {
                 console.error('Error loading config overview:', error);
-                self.failureCount++;
-                if (self.failureCount >= 3) {
-                    console.log('Server appears to be down, closing tab');
-                    window.close();
-                }
                 self.$configDisplay.html('<div class="error-message">Error loading configuration</div>');
                 self.$basicStatsDisplay.html('<div class="error-message">Error loading stats</div>');
                 self.$projectsDisplay.html('<div class="error-message">Error loading projects</div>');
@@ -1141,10 +1155,13 @@ class Dashboard {
         let self = this;
         console.log("Polling logs", this.currentMaxIdx);
         $.ajax({
-            url: '/get_log_messages', type: 'POST', contentType: 'application/json', data: JSON.stringify({
+            url: '/get_log_messages',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
                 start_idx: self.currentMaxIdx + 1
-            }), success: function (response) {
-                self.failureCount = 0;
+            }),
+            success: function (response) {
                 // Only append new messages if we have any
                 if (response.messages && response.messages.length > 0) {
                     let wasAtBottom = false;
@@ -1174,13 +1191,6 @@ class Dashboard {
 
                 // Update window title with active project
                 self.updateTitle(response.active_project);
-            }, error: function (xhr, status, error) {
-                console.error('Error polling for new logs:', error);
-                self.failureCount++;
-                if (self.failureCount >= 3) {
-                    console.log('Server appears to be down, closing tab');
-                    window.close();
-                }
             }
         });
     }
