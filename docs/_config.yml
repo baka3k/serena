@@ -11,7 +11,6 @@
 title                       : Serena Documentation  # The title of the book. Will be placed in the left navbar.
 author                      : Oraios AI & Oraios Software  # The author of the book
 copyright                   : "2025 by Serena contributors"  # Copyright year to be placed in the footer
-logo                        : ../resources/serena-logo.svg   # A path to the book logo
 # Patterns to skip when building the book. Can be glob-style (e.g. "*skip.ipynb")
 exclude_patterns            : ['**.ipynb_checkpoints', '.DS_Store', 'Thumbs.db', '_build', 'jupyter_execute', '.jupyter_cache', '.pytest_cache', 'docs/autogen_rst.py', 'docs/create_toc.py']
 # Auto-exclude files not in the toc
@@ -59,11 +58,8 @@ html:
   use_multitoc_numbering    : true   # Continuous numbering across parts/chapters
   use_darkmode_button       : false
   extra_footer              : ""
-  google_analytics_id       : ""  # A GA id that can be used to track book views.
   home_page_in_navbar       : true  # Whether to include your home page in the left Navigation Bar
   baseurl                   : "https://oraios.github.io/serena/"
-  analytics:
-
   comments:
     hypothesis              : false
     utterances              : false
@@ -105,6 +101,10 @@ sphinx:
   recursive_update          : false # A boolean indicating whether to overwrite the Sphinx config (true) or recursively update (false)
   config                    :   # key-value pairs to directly over-ride the Sphinx configuration
     master_doc: "01-about/000_intro.md"
+    html_theme_options:
+      logo:
+        image_light: _static/images/serena-logo.svg
+        image_dark: _static/images/serena-logo-dark-mode.svg
     autodoc_typehints_format: "short"
     autodoc_member_order: "bysource"
     autoclass_content: "both"
