@@ -200,6 +200,7 @@ pylint.html
 /*.yml
 !*.template.yml
 /agent-ui
+/test/**/.serena
 
 # dynamic LS installations
 /src/multilspy/language_servers/*/static
@@ -220,7 +221,6 @@ pylint.html
 *.tmp
 tmp/
 
-.serena/
 .vscode/
 
 # Claude settings
