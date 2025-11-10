@@ -1,6 +1,6 @@
 import json
 
-from serena.tools import Tool
+from serena.tools import ReplaceRegexTool, Tool
 
 
 class WriteMemoryTool(Tool):
@@ -64,3 +64,26 @@ class DeleteMemoryTool(Tool):
         or no longer relevant for the project.
         """
         return self.memories_manager.delete_memory(memory_file_name)
+
+
+class EditMemoryTool(Tool):
+    def apply(
+        self,
+        memory_file_name: str,
+        regex: str,
+        repl: str,
+    ) -> str:
+        r"""
+        Replaces content matching a regular expression in a memory.
+
+        :param memory_file_name: the name of the memory
+        :param regex: a Python-style regular expression (flags DOTALL and MULTILINE enabled, i.e.
+            '.' matches all characters, multi-line matching is enabled).
+            Apply the usual escaping as needed for reserved characters in Python-style regex.
+        :param repl: the string to replace the matched content with, which may contain
+            backreferences like \1, \2, etc. for groups matched by the regex.
+            Insert new content verbatim, except for backslashes, which have to be escaped.
+        """
+        replace_regex_tool = self.agent.get_tool(ReplaceRegexTool)
+        rel_path = self.memories_manager.get_memory_file_path(memory_file_name).relative_to(self.get_project_root())
+        return replace_regex_tool.replace_regex(str(rel_path), regex, repl, require_not_ignored=False)

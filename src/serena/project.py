@@ -26,21 +26,21 @@ class MemoriesManager:
         self._memory_dir.mkdir(parents=True, exist_ok=True)
         self._encoding = SERENA_FILE_ENCODING
 
-    def _get_memory_file_path(self, name: str) -> Path:
+    def get_memory_file_path(self, name: str) -> Path:
         # strip all .md from the name. Models tend to get confused, sometimes passing the .md extension and sometimes not.
         name = name.replace(".md", "")
         filename = f"{name}.md"
         return self._memory_dir / filename
 
     def load_memory(self, name: str) -> str:
-        memory_file_path = self._get_memory_file_path(name)
+        memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
         with open(memory_file_path, encoding=self._encoding) as f:
             return f.read()
 
     def save_memory(self, name: str, content: str) -> str:
-        memory_file_path = self._get_memory_file_path(name)
+        memory_file_path = self.get_memory_file_path(name)
         with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(content)
         return f"Memory {name} written."
@@ -49,7 +49,7 @@ class MemoriesManager:
         return [f.name.replace(".md", "") for f in self._memory_dir.iterdir() if f.is_file()]
 
     def delete_memory(self, name: str) -> str:
-        memory_file_path = self._get_memory_file_path(name)
+        memory_file_path = self.get_memory_file_path(name)
         memory_file_path.unlink()
         return f"Memory {name} deleted."
 
