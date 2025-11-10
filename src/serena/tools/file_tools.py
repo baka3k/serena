@@ -195,7 +195,23 @@ class ReplaceRegexTool(Tool, ToolMarkerCanEdit):
             If this is set to False and the regex matches multiple occurrences, an error will be returned
             (and you may retry with a revised, more specific regex).
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        return self.replace_regex(
+            relative_path, regex, repl, allow_multiple_occurrences=allow_multiple_occurrences, require_not_ignored=True
+        )
+
+    def replace_regex(
+        self,
+        relative_path: str,
+        regex: str,
+        repl: str,
+        allow_multiple_occurrences: bool = False,
+        require_not_ignored: bool = True,
+    ) -> str:
+        """
+        Performs the regex replacement, with additional options not exposed in the tool.
+        This function can be used internally by other tools.
+        """
+        self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
         with EditedFileContext(relative_path, self.agent) as context:
             original_content = context.get_original_content()
             updated_content, n = re.subn(regex, repl, original_content, flags=re.DOTALL | re.MULTILINE)
