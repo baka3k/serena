@@ -17,6 +17,12 @@ class _VariableDeclaration:
     initializer: str | None = None
 
 
+@dataclass
+class _CallExpression:
+    callee: str
+    arguments: list[str]
+
+
 class CppLosslessSemanticTreeAdapter(LosslessSemanticTreeAdapter):
     """
     Adapter that emits an OpenRewrite-style LST for C++ symbols.
@@ -218,6 +224,16 @@ class CppLosslessSemanticTreeAdapter(LosslessSemanticTreeAdapter):
             nodes.append(node)
             body_edges.append(decl_id)
 
+        call_nodes, call_bindings = self._build_call_nodes(
+            body,
+            symbol_table=symbol_table,
+            node_id_counter=node_id_counter,
+        )
+        if call_nodes:
+            nodes.extend(call_nodes)
+            bindings.extend(call_bindings)
+            body_edges.extend([node["id"] for node in call_nodes if node["kind"] == "CallExpr"])
+
         return_expr = self._parse_return_expression(body)
         if return_expr is not None:
             expr_id, expr_nodes, expr_bindings = self._build_expression_graph(
@@ -283,6 +299,92 @@ class CppLosslessSemanticTreeAdapter(LosslessSemanticTreeAdapter):
         if match:
             return match.group("expr").strip()
         return None
+
+    def _build_call_nodes(
+        self,
+        body: str,
+        symbol_table: dict[str, str],
+        node_id_counter: Counter[str],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+        call_nodes: list[dict[str, Any]] = []
+        bindings: list[dict[str, str]] = []
+        for call in self._parse_call_expressions(body):
+            argument_ids = []
+            argument_nodes: list[dict[str, Any]] = []
+            for arg in call.arguments:
+                arg_id, arg_nodes, arg_bindings = self._build_expression_graph(arg, symbol_table, node_id_counter)
+                argument_ids.append(arg_id)
+                argument_nodes.extend(arg_nodes)
+                bindings.extend(arg_bindings)
+            call_nodes.extend(argument_nodes)
+            call_id = self._next_node_id("n_call", node_id_counter)
+            edge_map = {"arguments": argument_ids} if argument_ids else {}
+            call_nodes.append(
+                {
+                    "id": call_id,
+                    "kind": "CallExpr",
+                    "callee": call.callee,
+                    "edges": edge_map,
+                }
+            )
+        return call_nodes, bindings
+
+    def _parse_call_expressions(self, body: str) -> list[_CallExpression]:
+        statements = self._split_statements(body)
+        result: list[_CallExpression] = []
+        control_keywords = ("if", "while", "for", "switch", "return")
+        for statement in statements:
+            stripped = statement.strip()
+            if not stripped.endswith(";"):
+                continue
+            if "(" not in stripped or ")" not in stripped:
+                continue
+            lowered = stripped.lower()
+            if any(
+                lowered.startswith(f"{kw} ")
+                or lowered.startswith(f"{kw}(")
+                for kw in control_keywords
+            ):
+                continue
+            match = re.match(r"(?P<callee>[A-Za-z_][\w:->\.]*)\s*\((?P<args>.*)\)\s*;$", stripped)
+            if not match:
+                continue
+            callee = match.group("callee")
+            arg_text = match.group("args").strip()
+            args = self._split_arguments(arg_text) if arg_text else []
+            result.append(_CallExpression(callee=callee, arguments=args))
+        return result
+
+    def _split_statements(self, body: str) -> list[str]:
+        statements: list[str] = []
+        for line in body.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("//"):
+                continue
+            if stripped.endswith(";"):
+                statements.append(stripped)
+        return statements
+
+    def _split_arguments(self, arg_text: str) -> list[str]:
+        args: list[str] = []
+        depth = 0
+        current = []
+        for ch in arg_text:
+            if ch == "," and depth == 0:
+                token = "".join(current).strip()
+                if token:
+                    args.append(token)
+                current = []
+                continue
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth = max(0, depth - 1)
+            current.append(ch)
+        token = "".join(current).strip()
+        if token:
+            args.append(token)
+        return args
 
     def _build_expression_graph(
         self,
