@@ -14,7 +14,7 @@ Note that in most configurations, only a subset of these tools will be enabled s
 * `find_referencing_symbols`: Finds symbols that reference the symbol at the given location (optionally filtered by type).
 * `find_symbol`: Performs a global (or local) search for symbols with/containing a given name/substring (optionally filter
   ed by type).
-* `generate_lossless_semantic_tree`: Builds a JSON lossless semantic tree for a given symbol (including optional verbatim source code for each node).
+* `generate_lossless_semantic_tree`: Builds a JSON lossless semantic tree for a given symbol (C++ currently emits an OpenRewrite-style IR; other languages fall back to Serena's structural tree).
 * `get_current_config`: Prints the current configuration of the agent, including the active and available projects, tools,
   contexts, and modes.
 * `get_symbols_overview`: Gets an overview of the top-level symbols defined in a given file.

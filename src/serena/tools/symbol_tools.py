@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from copy import copy
 from typing import Any
 
+from serena.lst import LosslessSemanticTreeAdapterRegistry, LosslessSymbolContext
 from serena.tools import (
     SUCCESS_RESULT,
     Tool,
@@ -267,17 +268,39 @@ class GenerateLosslessSemanticTreeTool(Tool, ToolMarkerSymbolicRead):
             )
 
         language_server = symbol_retriever.get_language_server(relative_path)
-        file_cache: dict[str, str] = {}
-        lst_root = self._build_lst(
+        encoding = self.project.project_config.encoding
+        file_content = FileUtils.read_file(file_path, encoding)
+        location = candidates[0].symbol_root.get("location") or {}
+        range_info = location.get("range")
+        selection_range = candidates[0].symbol_root.get("selectionRange")
+
+        adapter = None
+        if range_info is not None:
+            adapter = LosslessSemanticTreeAdapterRegistry().get_adapter(language_server.language)
+        if adapter:
+            context = LosslessSymbolContext(
+                name=candidates[0].name,
+                name_path=candidates[0].get_name_path(),
+                kind=candidates[0].kind,
+                relative_path=relative_path,
+                range=range_info,
+                selection_range=selection_range,
+                language=language_server.language,
+            )
+            lst_dict = adapter.build(context, file_content, include_source_text=include_source, max_depth=max_depth)
+            return self._limit_length(json.dumps(lst_dict), max_answer_chars)
+
+        legacy_cache: dict[str, str] = {relative_path: file_content}
+        lst_root = self._build_legacy_symbol_tree(
             symbol=candidates[0],
             include_source=include_source,
             remaining_depth=max_depth,
-            file_cache=file_cache,
+            file_cache=legacy_cache,
         )
         result = {"language": language_server.language.value, "root": lst_root}
         return self._limit_length(json.dumps(result), max_answer_chars)
 
-    def _build_lst(self, symbol, include_source: bool, remaining_depth: int, file_cache: dict[str, str]) -> dict[str, Any]:
+    def _build_legacy_symbol_tree(self, symbol, include_source: bool, remaining_depth: int, file_cache: dict[str, str]) -> dict[str, Any]:
         node: dict[str, Any] = {
             "name": symbol.name,
             "kind": symbol.kind,
@@ -304,7 +327,7 @@ class GenerateLosslessSemanticTreeTool(Tool, ToolMarkerSymbolicRead):
         else:
             next_depth = remaining_depth - 1 if remaining_depth > 0 else remaining_depth
             node["children"] = [
-                self._build_lst(child, include_source=include_source, remaining_depth=next_depth, file_cache=file_cache)
+                self._build_legacy_symbol_tree(child, include_source=include_source, remaining_depth=next_depth, file_cache=file_cache)
                 for child in symbol.iter_children()
             ]
 
