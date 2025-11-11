@@ -273,7 +273,11 @@ class ProjectConfig(ToolInclusionDefinition, ToStringMixin):
                 language = Language(language_str)
                 languages.append(language)
             except ValueError as e:
-                raise ValueError(f"Invalid language: {data['language']}.\nValid language_strings are: {[l.value for l in Language]}") from e
+                raise ValueError(
+                    f"Invalid language value '{language_str}' in project configuration "
+                    f"for '{data.get('project_name', '<unknown>')}'. "
+                    f"Valid language strings are: {[l.value for l in Language]}"
+                ) from e
 
         return cls(
             project_name=data["project_name"],

@@ -58,6 +58,7 @@ excluded_tools: []
 initial_prompt: ""
 
 project_name: "serena"
+language: python
 languages:
 - python
 - typescript

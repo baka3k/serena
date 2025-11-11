@@ -17,6 +17,7 @@ from serena.tools import (
 )
 from serena.tools.tools_base import ToolMarkerOptional
 from solidlsp.ls_types import SymbolKind
+from solidlsp.ls_utils import FileUtils, InvalidTextLocationError, TextUtils
 
 
 def _sanitize_symbol_dict(symbol_dict: dict[str, Any]) -> dict[str, Any]:
@@ -212,6 +213,128 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             reference_dicts.append(ref_dict)
         result = json.dumps(reference_dicts)
         return self._limit_length(result, max_answer_chars)
+
+
+class GenerateLosslessSemanticTreeTool(Tool, ToolMarkerSymbolicRead):
+    """
+    Generates a lossless semantic tree (LST) rooted at a given symbol. The LST mirrors the symbol hierarchy exposed by the
+    language server and optionally embeds the exact source code for each node, making it suitable for downstream MCP
+    clients that need structure- and text-accurate representations (for example, for C++ classes or functions).
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        name_path: str,
+        include_source: bool = True,
+        max_depth: int = -1,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Build a lossless semantic tree rooted at the symbol referenced by `name_path`.
+
+        :param relative_path: File path (relative to the project root) that contains the target symbol.
+        :param name_path: Name path of the symbol (same semantics as `find_symbol`). Use slashes to disambiguate nested definitions.
+        :param include_source: Whether to embed the exact source snippet for each node.
+        :param max_depth: Maximum descendant depth to include (-1 keeps the entire subtree, 0 returns only the requested symbol).
+        :param max_answer_chars: Optional limit for the serialized JSON result (-1 uses Serena's default cap).
+        :return: JSON string containing `{ "language": "...", "root": { ... } }`.
+        """
+        if max_depth < -1:
+            raise ValueError(f"max_depth must be -1 or a non-negative integer, got {max_depth}")
+
+        file_path = os.path.join(self.project.project_root, relative_path)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File {relative_path} does not exist in the active project.")
+
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        symbols = symbol_retriever.find_by_name(
+            name_path=name_path,
+            substring_matching=False,
+            within_relative_path=relative_path,
+        )
+        candidates = [symbol for symbol in symbols if symbol.relative_path == relative_path or symbol.relative_path is None]
+        if not candidates:
+            raise ValueError(
+                f"No symbol matching '{name_path}' found in {relative_path}. "
+                "Use `get_symbols_overview` or `find_symbol` to inspect available symbols."
+            )
+        if len(candidates) > 1:
+            candidate_paths = sorted({symbol.get_name_path() for symbol in candidates})
+            raise ValueError(
+                f"Ambiguous symbol selection for '{name_path}' in {relative_path}. "
+                f"Provide a more specific `name_path`. Candidates: {candidate_paths}"
+            )
+
+        language_server = symbol_retriever.get_language_server(relative_path)
+        file_cache: dict[str, str] = {}
+        lst_root = self._build_lst(
+            symbol=candidates[0],
+            include_source=include_source,
+            remaining_depth=max_depth,
+            file_cache=file_cache,
+        )
+        result = {"language": language_server.language.value, "root": lst_root}
+        return self._limit_length(json.dumps(result), max_answer_chars)
+
+    def _build_lst(self, symbol, include_source: bool, remaining_depth: int, file_cache: dict[str, str]) -> dict[str, Any]:
+        node: dict[str, Any] = {
+            "name": symbol.name,
+            "kind": symbol.kind,
+            "name_path": symbol.get_name_path(),
+        }
+
+        location = symbol.symbol_root.get("location") or {}
+        selection_range = symbol.symbol_root.get("selectionRange")
+        symbol_relative_path = symbol.relative_path or location.get("relativePath")
+        if symbol_relative_path:
+            node["relative_path"] = symbol_relative_path
+
+        if selection_range:
+            node["selection_range"] = self._normalize_range(selection_range)
+        range_info = location.get("range")
+        if range_info:
+            node["range"] = self._normalize_range(range_info)
+
+        if include_source and range_info and symbol_relative_path:
+            node["source"] = self._extract_source(symbol_relative_path, range_info, file_cache)
+
+        if remaining_depth == 0:
+            node["children"] = []
+        else:
+            next_depth = remaining_depth - 1 if remaining_depth > 0 else remaining_depth
+            node["children"] = [
+                self._build_lst(child, include_source=include_source, remaining_depth=next_depth, file_cache=file_cache)
+                for child in symbol.iter_children()
+            ]
+
+        return node
+
+    @staticmethod
+    def _normalize_range(range_dict: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "start": {"line": range_dict["start"]["line"], "character": range_dict["start"]["character"]},
+            "end": {"line": range_dict["end"]["line"], "character": range_dict["end"]["character"]},
+        }
+
+    def _extract_source(self, relative_path: str, range_dict: dict[str, Any], file_cache: dict[str, str]) -> str:
+        if relative_path not in file_cache:
+            abs_path = os.path.join(self.project.project_root, relative_path)
+            file_cache[relative_path] = FileUtils.read_file(abs_path, self.project.project_config.encoding)
+        content = file_cache[relative_path]
+
+        start = range_dict["start"]
+        end = range_dict["end"]
+        try:
+            start_index = TextUtils.get_index_from_line_col(content, start["line"], start["character"])
+            end_index = TextUtils.get_index_from_line_col(content, end["line"], end["character"])
+        except InvalidTextLocationError as e:
+            raise ValueError(
+                f"Symbol range {range_dict} is invalid for file {relative_path}; "
+                "please reload or re-index the project so the language server stays in sync."
+            ) from e
+
+        return content[start_index:end_index]
 
 
 class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):

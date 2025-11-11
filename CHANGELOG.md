@@ -17,6 +17,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Tools:
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
+  * Added `GenerateLosslessSemanticTreeTool` to export JSON LSTs (structure + exact source) for symbols, enabling advanced MCP workflows such as inspecting C++ classes/functions without re-reading files.
 
 * Language support:
 
