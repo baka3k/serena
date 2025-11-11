@@ -24,5 +24,9 @@ excluded_tools:
   - replace_regex
 
 
-tool_description_overrides: {}
-
+tool_description_overrides:
+  generate_lossless_semantic_tree: |
+    Builds a lossless semantic tree (LST) for a symbol. Pass the file via `relative_path` (relative to the project root)
+    and the qualified symbol via `name_path` (use slashes for nesting, e.g. `MyClass/MyFunc`). Set `include_source` (default true)
+    to embed the exact source span and `max_depth` to limit the subtree (-1 keeps everything). Use this whenever the user asks
+    for an LST/IR representation (e.g., OpenRewrite-style) instead of reading files manually.
